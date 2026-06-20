@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "description": "Exclude static assets from Cloudflare Pages Functions invocation",
+  "include": ["/*"],
+  "exclude": [
+    "/favicon.ico",
+    "/favicon.svg",
+    "/assets/*",
+    "/robots.txt",
+    "/sitemap.xml",
+    "/_headers",
+    "/_redirects"
+  ]
+}

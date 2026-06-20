@@ -1,0 +1,14 @@
+# Cloudflare Pages redirects (evaluated at the edge, before Functions)
+# See: https://developers.cloudflare.com/pages/configuration/redirects/
+
+# ── Static assets – serve directly ──────────────────────────────
+/favicon.ico       /favicon.svg       200
+/favicon.svg       /favicon.svg       200
+/robots.txt        /robots.txt        200
+/sitemap.xml       /sitemap.xml       200
+
+# Build output assets (hashed filenames)
+/assets/*          /assets/:splat     200
+
+# SPA fallback – every unmatched route serves index.html
+/*                 /index.html        200
