@@ -1,14 +1,8 @@
-# Cloudflare Pages redirects (evaluated at the edge, before Functions)
+# Edge-level redirects (processed BEFORE _worker.js)
 # See: https://developers.cloudflare.com/pages/configuration/redirects/
+#
+# WARNING: Do NOT add SPA fallback here (/* /index.html 200).
+# The _worker.js handles SPA routing. A catch-all rewrite in _redirects
+# would intercept /auth/callback and /api/* before the Worker sees them.
 
-# ── Static assets – serve directly ──────────────────────────────
-/favicon.ico       /favicon.svg       200
-/favicon.svg       /favicon.svg       200
-/robots.txt        /robots.txt        200
-/sitemap.xml       /sitemap.xml       200
-
-# Build output assets (hashed filenames)
-/assets/*          /assets/:splat     200
-
-# SPA fallback – every unmatched route serves index.html
-/*                 /index.html        200
+/favicon.ico  /favicon.svg  301

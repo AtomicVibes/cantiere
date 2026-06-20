@@ -1,96 +1,64 @@
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
-
-const ASSET_EXT = /\.(js|css|png|jpg|jpeg|gif|ico|svg|webp|avif|woff2?|ttf|eot|otf|pdf|txt|xml|json|map)$/i;
-const ASSET_PATHS = new Set([
-  '/favicon.ico', '/favicon.svg', '/robots.txt', '/sitemap.xml',
-  '/_headers', '/_redirects',
-]);
-
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const { pathname } = url;
-
-    const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || SUPABASE_URL;
-    const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || SUPABASE_ANON_KEY;
+    const pathname = url.pathname;
 
     try {
       if (pathname === '/auth/callback') {
-        return handleAuthCallback(request, url, supabaseUrl, supabaseAnonKey);
+        return handleAuthCallback(request, url, env);
       }
 
       if (pathname.startsWith('/api/')) {
-        return proxyApi(request, url, env);
+        return handleApi(request, url, env);
       }
 
-      const asset = await env.ASSETS.fetch(request);
-      if (asset.status !== 404) {
-        return asset;
-      }
-
-      return env.ASSETS.fetch(new Request(`${url.origin}/index.html`, request));
+      return serveStaticOrSpa(request, url, env);
     } catch (err) {
-      console.error(JSON.stringify({
-        level: 'error',
-        event: 'unhandled_error',
-        path: pathname,
-        error: err.message,
-        stack: err?.stack,
-      }));
-
-      if (pathname === '/favicon.ico' || pathname === '/favicon.svg') {
-        return new Response(null, { status: 204 });
-      }
-
-      return new Response('Internal Server Error', { status: 500 });
+      return handleError(err, pathname);
     }
   },
 };
 
-async function handleAuthCallback(request, url, supabaseUrl, supabaseAnonKey) {
-  const code = url.searchParams.get('code');
-  const nextParam = url.searchParams.get('next') || '/';
+async function serveStaticOrSpa(request, url, env) {
+  const response = await env.ASSETS.fetch(request);
+  if (response.status !== 404) {
+    return response;
+  }
 
+  return env.ASSETS.fetch(new Request(`${url.origin}/index.html`, request));
+}
+
+async function handleAuthCallback(request, url, env) {
+  const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
+  const supabaseKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
+
+  const code = url.searchParams.get('code');
   if (!code) {
     return Response.redirect(new URL('/login?error=missing_code', url.origin), 302);
   }
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing Supabase credentials in environment');
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing Supabase credentials');
   }
 
-  const tokenResponse = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=authorization_code`, {
+  const tokenRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=authorization_code`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: supabaseAnonKey,
-    },
-    body: JSON.stringify({
-      code,
-      redirect_to: url.origin + '/auth/callback',
-    }),
+    headers: { 'Content-Type': 'application/json', apikey: supabaseKey },
+    body: JSON.stringify({ code, redirect_to: url.origin + '/auth/callback' }),
   });
 
-  if (!tokenResponse.ok) {
-    const errorBody = await tokenResponse.text();
-    throw new Error(`Token exchange failed: ${tokenResponse.status} ${errorBody}`);
+  if (!tokenRes.ok) {
+    throw new Error(`Token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`);
   }
 
-  const tokens = await tokenResponse.json();
-
-  console.log(JSON.stringify({
-    level: 'info', event: 'auth_callback_success',
-    user: tokens.user?.id || tokens.user?.email || 'unknown',
-  }));
-
-  const response = Response.redirect(new URL(nextParam, url.origin), 302);
+  const tokens = await tokenRes.json();
+  const next = url.searchParams.get('next') || '/';
+  const response = Response.redirect(new URL(next, url.origin), 302);
 
   response.headers.append(
     'Set-Cookie',
     `sb-access-token=${tokens.access_token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${tokens.expires_in || 3600}`
   );
-
   if (tokens.refresh_token) {
     response.headers.append(
       'Set-Cookie',
@@ -101,13 +69,22 @@ async function handleAuthCallback(request, url, supabaseUrl, supabaseAnonKey) {
   return response;
 }
 
-async function proxyApi(request, url, env) {
-  console.log(JSON.stringify({
-    level: 'debug', event: 'api_proxy',
-    path: url.pathname, method: request.method,
-  }));
+async function handleApi(request, url, env) {
   return new Response(JSON.stringify({ error: 'Not implemented' }), {
     status: 501,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+function handleError(err, pathname) {
+  console.error(JSON.stringify({
+    level: 'error', event: 'unhandled_error',
+    path: pathname, error: err.message,
+  }));
+
+  if (pathname === '/favicon.ico' || pathname === '/favicon.svg') {
+    return new Response(null, { status: 204 });
+  }
+
+  return new Response('Internal Server Error', { status: 500 });
 }
