@@ -29,3 +29,6 @@ dist-ssr
 
 .env
 .vite
+
+# Cloudflare Wrangler local state
+.wrangler/
