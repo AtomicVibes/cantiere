@@ -96,8 +96,8 @@ serve(async (req) => {
     );
 
     if (inviteError) {
-      console.error('inviteUserByEmail failed', inviteError);
-      return respond({ error: 'Failed to send invitation. Please try again.', detail: inviteError.message }, 400);
+      console.error('DEBUG - Admin API Error:', JSON.stringify(inviteError, null, 2));
+      return respond({ error: 'Invitation failed', detail: inviteError.message }, 400);
     }
 
     return respond({ user: inviteData.user });
