@@ -37,6 +37,7 @@ export default function Clients() {
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [friendlyError, setFriendlyError] = useState('');
   const queryClient = useQueryClient();
 
   const { data: roles = [] } = useQuery({
@@ -101,6 +102,7 @@ export default function Clients() {
 
   const openEdit = (client) => {
     setEditClient(client);
+    setFriendlyError('');
     setForm({
       name: client.name || '', company_name: client.company_name || '', email: client.email || '',
       phone: client.phone || '', address: client.address || '', zip_code: client.zip_code || '',
@@ -137,7 +139,7 @@ export default function Clients() {
           toast.success('Invite sent!');
         } catch (inviteErr) {
           setSaving(false);
-          toast.error(inviteErr.message);
+          setFriendlyError(inviteErr.message);
           return;
         }
       }
@@ -218,9 +220,14 @@ export default function Clients() {
         )}
       </div>
 
-      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); if (!v) setEditClient(null); }}>
+      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); setFriendlyError(''); if (!v) setEditClient(null); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle className="font-heading">{editClient ? t('editClient') : t('addClient')}</DialogTitle></DialogHeader>
+          {friendlyError && (
+            <div className="bg-destructive/10 text-destructive text-sm rounded-lg px-4 py-3 border border-destructive/20">
+              {friendlyError}
+            </div>
+          )}
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required /></div>
