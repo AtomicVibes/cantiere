@@ -200,7 +200,19 @@ const resources = {
       video: 'Video',
       audioNote: 'Audio Note',
       cadFile: 'CAD File',
-      report: 'Report'
+      report: 'Report',
+      logs: {
+        auditLogs: 'Audit Logs',
+        time: 'Time',
+        date: 'Date',
+        action: 'Action',
+        document: 'Document',
+        message: 'Message',
+        fileUpload: 'File Upload',
+        projectCreate: 'Project Created',
+        memberAdd: 'Member Added',
+        invoiceCreate: 'Invoice Created'
+      }
     }
   },
   ar: {
@@ -400,7 +412,19 @@ const resources = {
       video: 'فيديو',
       audioNote: 'ملاحظة صوتية',
       cadFile: 'ملف CAD',
-      report: 'تقرير'
+      report: 'تقرير',
+      logs: {
+        auditLogs: 'سجلات التدقيق',
+        time: 'الوقت',
+        date: 'التاريخ',
+        action: 'الإجراء',
+        document: 'المستند',
+        message: 'الرسالة',
+        fileUpload: 'رفع ملف',
+        projectCreate: 'تم إنشاء المشروع',
+        memberAdd: 'تمت إضافة العضو',
+        invoiceCreate: 'تم إنشاء الفاتورة'
+      }
     }
   },
   fr: {
@@ -600,7 +624,19 @@ const resources = {
       video: 'Vidéo',
       audioNote: 'Note audio',
       cadFile: 'Fichier CAO',
-      report: 'Rapport'
+      report: 'Rapport',
+      logs: {
+        auditLogs: 'Journaux d\'audit',
+        time: 'Heure',
+        date: 'Date',
+        action: 'Action',
+        document: 'Document',
+        message: 'Message',
+        fileUpload: 'Téléchargement de fichier',
+        projectCreate: 'Projet créé',
+        memberAdd: 'Membre ajouté',
+        invoiceCreate: 'Facture créée'
+      }
     }
   },
   it: {
@@ -800,7 +836,19 @@ const resources = {
       video: 'Video',
       audioNote: 'Nota audio',
       cadFile: 'File CAD',
-      report: 'Rapporto'
+      report: 'Rapporto',
+      logs: {
+        auditLogs: 'Registri di controllo',
+        time: 'Ora',
+        date: 'Data',
+        action: 'Azione',
+        document: 'Documento',
+        message: 'Messaggio',
+        fileUpload: 'Caricamento file',
+        projectCreate: 'Progetto creato',
+        memberAdd: 'Membro aggiunto',
+        invoiceCreate: 'Fattura creata'
+      }
     }
   }
 };
