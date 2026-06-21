@@ -126,7 +126,7 @@ export default function Finance() {
               <SelectTrigger className="w-36"><SelectValue placeholder={t('all')} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t('allStatuses')}</SelectItem>
-                {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                {statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
