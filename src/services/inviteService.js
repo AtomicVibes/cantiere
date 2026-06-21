@@ -1,13 +1,13 @@
-import { FunctionsHttpError } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 
 function extractError(err) {
-  if (err instanceof FunctionsHttpError) {
-    const ctx = err.context;
-    console.error(`[${err.name}]`, ctx?.detail || ctx);
+  const ctx = err?.context;
+  if (ctx) {
+    console.error(`[FunctionsHttpError]`, ctx?.detail || ctx);
     return ctx?.message || 'Something went wrong. Please try again.';
   }
   console.error('[FunctionError]', err);
-  return err.message || 'Something went wrong. Please try again.';
+  return err?.message || 'Something went wrong. Please try again.';
 }
 
 export async function inviteUserByEmail({ email, role_id, full_name, phone, job_title, department }) {
