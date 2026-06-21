@@ -6,7 +6,8 @@ export async function inviteUserByEmail({ email, role_id, full_name, phone, job_
   });
 
   if (error) {
-    throw new Error(error.message || error.error || 'Invite failed');
+    console.error('[invite-user]', error.detail || error);
+    throw new Error(error.message || 'Failed to send invitation. Please try again.');
   }
 
   return data;
@@ -18,7 +19,8 @@ export async function deleteUser(userId) {
   });
 
   if (error) {
-    throw new Error(error.message || error.error || 'Delete failed');
+    console.error('[delete-user]', error.detail || error);
+    throw new Error(error.message || 'Failed to delete user. Please try again.');
   }
 
   return data;

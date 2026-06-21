@@ -12,13 +12,20 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+function error(message, detail) {
+  return new Response(JSON.stringify({ message, detail }), {
+    status: 400,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+    return new Response(JSON.stringify({ message: 'Method not allowed' }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -27,14 +34,15 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new Error('Missing or invalid Authorization header');
+      return error('Authentication required', 'Missing or invalid Authorization header');
     }
 
     const token = authHeader.replace('Bearer ', '');
 
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
-      throw new Error('Unauthorized');
+      console.error('JWT validation failed', userError?.message);
+      return error('Session expired. Please log in again.', userError?.message || 'Invalid token');
     }
 
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -43,13 +51,25 @@ serve(async (req) => {
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile || !['super_admin', 'admin'].includes(profile.roles.name)) {
-      throw new Error('Forbidden: insufficient permissions');
+    if (profileError || !profile) {
+      return error('Your profile was not found.', profileError?.message);
+    }
+
+    if (!['super_admin', 'admin'].includes(profile.roles.name)) {
+      return error(
+        'You do not have permission to invite users.',
+        `User role '${profile.roles.name}' is not allowed. Required: super_admin or admin.`
+      );
     }
 
     const { email, role_id, full_name, phone, job_title, department } = await req.json();
-    if (!email || !role_id) {
-      throw new Error('email and role_id are required');
+
+    if (!email) {
+      return error('Email address is required.', 'Missing email field');
+    }
+
+    if (!role_id) {
+      return error('Please select a role for the new user.', 'Missing role_id field');
     }
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
@@ -61,7 +81,11 @@ serve(async (req) => {
     );
 
     if (inviteError) {
-      throw new Error(inviteError.message);
+      console.error('inviteUserByEmail failed', inviteError);
+      if (inviteError.message?.includes('already')) {
+        return error('This email is already registered.', inviteError.message);
+      }
+      return error('Failed to send invitation. Please try again.', inviteError.message);
     }
 
     return new Response(JSON.stringify({ user: inviteData.user }), {
@@ -69,9 +93,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err?.message || 'Unknown error' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error('Unexpected invite error', err);
+    return error('Something went wrong. Please try again.', err?.message || 'Unknown error');
   }
 });

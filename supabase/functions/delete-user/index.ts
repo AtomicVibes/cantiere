@@ -12,13 +12,20 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+function error(message, detail) {
+  return new Response(JSON.stringify({ message, detail }), {
+    status: 400,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+    return new Response(JSON.stringify({ message: 'Method not allowed' }), {
       status: 405,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -27,14 +34,15 @@ serve(async (req) => {
   try {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new Error('Missing or invalid Authorization header');
+      return error('Authentication required', 'Missing or invalid Authorization header');
     }
 
     const token = authHeader.replace('Bearer ', '');
 
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
-      throw new Error('Unauthorized');
+      console.error('JWT validation failed', userError?.message);
+      return error('Session expired. Please log in again.', userError?.message || 'Invalid token');
     }
 
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -43,17 +51,25 @@ serve(async (req) => {
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile || !['super_admin', 'admin'].includes(profile.roles.name)) {
-      throw new Error('Forbidden: insufficient permissions');
+    if (profileError || !profile) {
+      return error('Your profile was not found.', profileError?.message);
+    }
+
+    if (!['super_admin', 'admin'].includes(profile.roles.name)) {
+      return error(
+        'You do not have permission to delete users.',
+        `User role '${profile.roles.name}' is not allowed. Required: super_admin or admin.`
+      );
     }
 
     const { user_id } = await req.json();
+
     if (!user_id) {
-      throw new Error('user_id is required');
+      return error('User ID is required.', 'Missing user_id field');
     }
 
     if (user_id === user.id) {
-      throw new Error('Cannot delete yourself');
+      return error('You cannot delete your own account.', 'Self-deletion blocked');
     }
 
     const { error: deleteProfileError } = await supabaseAdmin
@@ -62,13 +78,15 @@ serve(async (req) => {
       .eq('id', user_id);
 
     if (deleteProfileError) {
-      throw new Error(`Failed to delete profile: ${deleteProfileError.message}`);
+      console.error('Profile deletion failed', deleteProfileError);
+      return error('Failed to remove user. Please try again.', deleteProfileError.message);
     }
 
     const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(user_id);
 
     if (deleteAuthError) {
-      throw new Error(`Failed to delete auth user: ${deleteAuthError.message}`);
+      console.error('Auth deletion failed', deleteAuthError);
+      return error('Failed to remove user. Please try again.', deleteAuthError.message);
     }
 
     return new Response(JSON.stringify({ success: true }), {
@@ -76,9 +94,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err?.message || 'Unknown error' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error('Unexpected delete error', err);
+    return error('Something went wrong. Please try again.', err?.message || 'Unknown error');
   }
 });
