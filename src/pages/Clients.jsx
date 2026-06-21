@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/services/supabase';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
@@ -12,10 +13,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2 } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
+import { inviteUserByEmail, deleteUser } from '@/services/inviteService';
 
 const emptyClient = { name: '', company_name: '', email: '', phone: '', address: '', zip_code: '', vat_number: '', notes: '', status: 'active' };
 
@@ -28,18 +35,51 @@ export default function Clients() {
   const [editClient, setEditClient] = useState(null);
   const [form, setForm] = useState(emptyClient);
   const [search, setSearch] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
 
+  const { data: roles = [] } = useQuery({
+    queryKey: ['roles'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('roles').select('id, name').order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    initialData: [],
+  });
+
+  const clientRoleId = roles.find(r => r.name === 'client')?.id;
+
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
-    queryFn: () => base44.entities.Client.list('-created_date'),
+    queryFn: async () => {
+      const { data: profiles, error } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, phone, roles:roles!profiles_role_id_fkey(name)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (profiles ?? [])
+        .filter(p => p.roles?.name === 'client')
+        .map(p => ({
+          id: p.id,
+          name: p.full_name || p.email || '',
+          email: p.email || '',
+          phone: p.phone || '',
+          company_name: '',
+          vat_number: '',
+          status: 'active',
+        }));
+    },
     initialData: [],
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Client.create(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    },
     onError: (err) => handleMutationError(err, t, toast),
   });
   const updateMutation = useMutation({
@@ -48,9 +88,15 @@ export default function Clients() {
     onError: (err) => handleMutationError(err, t, toast),
   });
   const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.Client.delete(id),
+    mutationFn: async (id) => {
+      await deleteUser(id);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
-    onError: (err) => handleMutationError(err, t, toast),
+    onError: (err) => {
+      if (!handleMutationError(err, t, toast)) {
+        toast.error(err.message);
+      }
+    },
   });
 
   const openEdit = (client) => {
@@ -70,8 +116,33 @@ export default function Clients() {
       return;
     }
     setSaving(true);
-    if (editClient) await updateMutation.mutateAsync({ id: editClient.id, data: form });
-    else await createMutation.mutateAsync(form);
+    if (editClient) {
+      await updateMutation.mutateAsync({ id: editClient.id, data: form });
+      if (form.email) {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ full_name: form.name, phone: form.phone })
+          .eq('id', editClient.id);
+        if (updateError) throw updateError;
+      }
+    } else {
+      if (form.email && clientRoleId) {
+        try {
+          await inviteUserByEmail({
+            email: form.email,
+            role_id: clientRoleId,
+            full_name: form.name,
+            phone: form.phone,
+          });
+          toast.success('Invite sent!');
+        } catch (inviteErr) {
+          setSaving(false);
+          toast.error(inviteErr.message);
+          return;
+        }
+      }
+      await createMutation.mutateAsync(form);
+    }
     setSaving(false);
     setShowForm(false);
     setEditClient(null);
@@ -135,7 +206,7 @@ export default function Clients() {
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(client)}><Pencil className="w-3.5 h-3.5" /></Button>
                         {canDelete && (
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(client.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(client.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                         )}
                       </div>
                     </TableCell>
@@ -172,6 +243,30 @@ export default function Clients() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete client</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this client from the system,
+              including their auth account and profile. They will lose all access.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) deleteMutation.mutate(deleteTarget);
+                setDeleteTarget(null);
+              }}
+            >
+              Yes, delete it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
