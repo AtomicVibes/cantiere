@@ -17,6 +17,7 @@ import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
+import { inviteUserByEmail } from '@/services/inviteService';
 
 const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active', role_id: '' };
 
@@ -99,10 +100,21 @@ export default function Teams() {
     }
     setSaving(true);
     const payload = { ...form };
+
     if (editMember) {
       delete payload.role_id;
       await updateMutation.mutateAsync({ id: editMember.id, data: payload });
     } else {
+      if (payload.role_id && payload.email) {
+        try {
+          await inviteUserByEmail(payload.email, payload.role_id);
+          toast.success('Invite sent!');
+        } catch (inviteErr) {
+          setSaving(false);
+          toast.error(inviteErr.message);
+          return;
+        }
+      }
       await createMutation.mutateAsync(payload);
     }
     setSaving(false);

@@ -1,0 +1,17 @@
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "auth", "storage"]
+
+[db]
+major_version = 15
+
+[auth]
+enabled = true
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+
+[functions]
+"invite-user" = {}
