@@ -22,16 +22,14 @@ export function useUserRole() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('role_id, roles!inner(name)')
+          .select('roles(name)')
           .eq('id', user.id)
           .single();
 
-        if (!cancelled) {
-          if (data?.roles?.name) {
-            setRole(data.roles.name);
-          } else {
-            setRole(user?.user_metadata?.role || null);
-          }
+        if (!cancelled && !error && data?.roles?.name) {
+          setRole(data.roles.name);
+        } else if (!cancelled) {
+          setRole(user?.user_metadata?.role || null);
         }
       } catch {
         if (!cancelled) {

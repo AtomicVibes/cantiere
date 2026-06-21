@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/services/supabase';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
@@ -17,11 +18,11 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 
-const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active' };
+const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active', role_id: '' };
 
 export default function Teams() {
   const { t } = useTranslation();
-  const { role } = useUserRole();
+  const { role, isSuperAdmin } = useUserRole();
   const canCreate = PERMISSIONS.canCreateTeamMember.includes(role);
   const canDelete = PERMISSIONS.canDeleteTeamMember.includes(role);
   const JOB_TITLES = [
@@ -47,6 +48,17 @@ export default function Teams() {
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
   const queryClient = useQueryClient();
+
+  const { data: roles = [] } = useQuery({
+    queryKey: ['roles'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('roles').select('id, name').order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    initialData: [],
+    enabled: isSuperAdmin,
+  });
 
   const { data: members = [] } = useQuery({
     queryKey: ['teamMembers'],
@@ -86,10 +98,12 @@ export default function Teams() {
       return;
     }
     setSaving(true);
+    const payload = { ...form };
     if (editMember) {
-      await updateMutation.mutateAsync({ id: editMember.id, data: form });
+      delete payload.role_id;
+      await updateMutation.mutateAsync({ id: editMember.id, data: payload });
     } else {
-      await createMutation.mutateAsync(form);
+      await createMutation.mutateAsync(payload);
     }
     setSaving(false);
     setShowForm(false);
@@ -168,6 +182,17 @@ export default function Teams() {
               </div>
               <div><Label>Department</Label><Input value={form.department} onChange={e => setForm({...form, department: e.target.value})} /></div>
             </div>
+            {isSuperAdmin && !editMember && (
+              <div>
+                <Label>Role</Label>
+                <Select value={form.role_id} onValueChange={v => setForm({...form, role_id: v})}>
+                  <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                  <SelectContent>
+                    {roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name.replace(/_/g, ' ')}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Status</Label>
               <Select value={form.status} onValueChange={v => setForm({...form, status: v})}>
