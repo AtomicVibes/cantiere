@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
+import { useUserRole } from '@/hooks/useUserRole';
 import { supabase } from '@/services/supabase';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import TopBar from '@/components/layout/TopBar';
 
 export default function Settings() {
   const { user } = useAuth();
+  const { role } = useUserRole();
   const { t, i18n } = useTranslation();
   const [profile, setProfile] = useState({
     phone: '',
@@ -153,7 +155,7 @@ export default function Settings() {
               </div>
               <div>
                 <Label>{t('role')}</Label>
-                <Input value={user?.user_metadata?.role?.replace(/_/g, ' ') || 'User'} disabled className="bg-muted capitalize" />
+                <Input value={role ? role.replace(/_/g, ' ') : 'User'} disabled className="bg-muted capitalize" />
               </div>
             </div>
           </div>
