@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 
-const INVITE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`;
+const INVITE_USER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`;
+const INVITE_CLIENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-client`;
 const DELETE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`;
 
 async function callFunction(url, payload) {
@@ -22,14 +23,18 @@ async function callFunction(url, payload) {
     let detail;
     try { detail = JSON.parse(text); } catch { detail = text; }
     console.error(`[${url.split('/').pop()}] ${res.status}`, { payload, response: detail });
-    throw new Error(detail?.message || `Request failed (${res.status})`);
+    throw new Error(detail?.error || `Request failed (${res.status})`);
   }
 
   return res.json();
 }
 
 export async function inviteUserByEmail({ email, role_id, full_name, phone, job_title, department }) {
-  return callFunction(INVITE_URL, { email, role_id, full_name, phone, job_title, department });
+  return callFunction(INVITE_USER_URL, { email, role_id, full_name, phone, job_title, department });
+}
+
+export async function inviteClientByEmail({ email, full_name, phone }) {
+  return callFunction(INVITE_CLIENT_URL, { email, full_name, phone });
 }
 
 export async function deleteUser(userId) {

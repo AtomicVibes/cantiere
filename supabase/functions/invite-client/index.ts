@@ -6,6 +6,8 @@ const supabaseServiceRoleKey = Deno.env.get("SB_SERVICE_ROLE_KEY")!;
 
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
+const CLIENT_ROLE_ID = "f3e7c0d7-d41f-486f-89fd-732d1c9cc200";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -35,24 +37,18 @@ serve(async (req) => {
     } catch {
       return respond({ error: 'Invalid request body.', detail: 'Failed to parse JSON' }, 400);
     }
-    console.log('invite-user body:', JSON.stringify(body));
+    console.log('invite-client body:', JSON.stringify(body));
 
-    const { email, role_id, full_name, phone, job_title, department } = body;
+    const { email, full_name, phone } = body;
 
     if (!email) {
       return respond({ error: 'Email address is required.', detail: 'Missing email field' }, 400);
     }
 
-    if (!role_id) {
-      return respond({ error: 'Please select a role for the new user.', detail: 'Missing role_id field' }, 400);
-    }
-
     const userMetadata = {
       full_name: full_name || '',
       phone: phone || '',
-      job_title: job_title || '',
-      department: department || '',
-      role_id,
+      role_id: CLIENT_ROLE_ID,
     };
 
     const authHeader = req.headers.get('Authorization');
@@ -80,7 +76,7 @@ serve(async (req) => {
 
     if (!['super_admin', 'admin'].includes(profile.roles.name)) {
       return respond(
-        { error: 'You do not have permission to invite users.', detail: `User role '${profile.roles.name}' is not allowed. Required: super_admin or admin.` },
+        { error: 'You do not have permission to invite clients.', detail: `User role '${profile.roles.name}' is not allowed. Required: super_admin or admin.` },
         400
       );
     }

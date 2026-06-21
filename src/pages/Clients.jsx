@@ -22,7 +22,7 @@ import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2 } from
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
-import { inviteUserByEmail, deleteUser } from '@/services/inviteService';
+import { inviteClientByEmail, deleteUser } from '@/services/inviteService';
 
 const emptyClient = { name: '', company_name: '', email: '', phone: '', address: '', zip_code: '', vat_number: '', notes: '', status: 'active' };
 
@@ -39,18 +39,6 @@ export default function Clients() {
   const [saving, setSaving] = useState(false);
   const [friendlyError, setFriendlyError] = useState('');
   const queryClient = useQueryClient();
-
-  const { data: roles = [] } = useQuery({
-    queryKey: ['roles'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('roles').select('id, name').order('name');
-      if (error) throw error;
-      return data ?? [];
-    },
-    initialData: [],
-  });
-
-  const clientRoleId = roles.find(r => r.name === 'client')?.id;
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
@@ -128,11 +116,10 @@ export default function Clients() {
         if (updateError) throw updateError;
       }
     } else {
-      if (form.email && clientRoleId) {
+      if (form.email) {
         try {
-          await inviteUserByEmail({
+          await inviteClientByEmail({
             email: form.email,
-            role_id: clientRoleId,
             full_name: form.name,
             phone: form.phone,
           });
