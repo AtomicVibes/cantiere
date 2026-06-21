@@ -88,6 +88,16 @@ export default function Settings() {
     }
 
     try {
+      const selectedLang = preferences.language;
+      const validLanguages = ['en', 'fr', 'it'];
+
+      if (!validLanguages.includes(selectedLang)) {
+        console.error('Invalid language code:', selectedLang);
+        toast.error('Invalid language selected');
+        setSaving(false);
+        return;
+      }
+
       await supabase.auth.updateUser({
         data: {
           phone: profile.phone,
@@ -100,12 +110,12 @@ export default function Settings() {
         .from('profiles')
         .upsert({
           id: authUser.id,
-          preferred_language: preferences.language,
+          preferred_language: selectedLang,
         });
 
       if (upsertError) throw upsertError;
 
-      await i18n.changeLanguage(preferences.language);
+      await i18n.changeLanguage(selectedLang);
 
       toast.success('Settings saved');
     } catch (error) {
