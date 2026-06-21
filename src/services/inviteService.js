@@ -29,12 +29,12 @@ async function callFunction(url, payload) {
   return res.json();
 }
 
-export async function inviteUserByEmail({ email, role_id, full_name, phone, job_title, department }) {
-  return callFunction(INVITE_USER_URL, { email, role_id, full_name, phone, job_title, department });
+export async function inviteUserByEmail({ email, role_id, full_name, phone, job_title, department, mode }) {
+  return callFunction(INVITE_USER_URL, { email, role_id, full_name, phone, job_title, department, mode });
 }
 
-export async function inviteClientByEmail({ email, full_name, phone }) {
-  return callFunction(INVITE_CLIENT_URL, { email, full_name, phone });
+export async function inviteClientByEmail({ email, full_name, phone, mode }) {
+  return callFunction(INVITE_CLIENT_URL, { email, full_name, phone, mode });
 }
 
 export async function deleteUser(userId) {

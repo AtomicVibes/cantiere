@@ -38,6 +38,7 @@ export default function Clients() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [friendlyError, setFriendlyError] = useState('');
+  const [inviteMode, setInviteMode] = useState('direct');
   const queryClient = useQueryClient();
 
   const { data: clients = [] } = useQuery({
@@ -118,12 +119,13 @@ export default function Clients() {
     } else {
       if (form.email) {
         try {
-          await inviteClientByEmail({
+          const { user } = await inviteClientByEmail({
             email: form.email,
             full_name: form.name,
             phone: form.phone,
+            mode: inviteMode,
           });
-          toast.success('Invite sent!');
+          toast.success(inviteMode === 'direct' ? `User created (${user?.email})` : 'Invite sent!');
         } catch (inviteErr) {
           setSaving(false);
           setFriendlyError(inviteErr.message);
@@ -152,7 +154,7 @@ export default function Clients() {
             <Input placeholder={t('searchClients')} value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
           {canCreate && (
-            <Button onClick={() => { setEditClient(null); setForm(emptyClient); setShowForm(true); }} className="gap-2">
+            <Button onClick={() => { setEditClient(null); setForm(emptyClient); setInviteMode('direct'); setShowForm(true); }} className="gap-2">
               <Plus className="w-4 h-4" /> {t('addClient')}
             </Button>
           )}
@@ -224,6 +226,19 @@ export default function Clients() {
               <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
               <div><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
             </div>
+            {!editClient && (
+              <div>
+                <Label>Provisioning</Label>
+                <select
+                  value={inviteMode}
+                  onChange={e => setInviteMode(e.target.value)}
+                  className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="direct">Direct Creation (no email)</option>
+                  <option value="invite">Send Invitation Email</option>
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
               <div><Label>ZIP Code</Label><Input value={form.zip_code} onChange={e => setForm({...form, zip_code: e.target.value})} /></div>

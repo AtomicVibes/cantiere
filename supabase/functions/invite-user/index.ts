@@ -37,7 +37,7 @@ serve(async (req) => {
     }
     console.log('invite-user body:', JSON.stringify(body));
 
-    const { email, role_id, full_name, phone, job_title, department } = body;
+    const { email, role_id, full_name, phone, job_title, department, mode } = body;
 
     if (!email) {
       return respond({ error: 'Email address is required.', detail: 'Missing email field' }, 400);
@@ -89,6 +89,23 @@ serve(async (req) => {
     const existing = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
     if (existing) {
       return respond({ error: 'This email has already been invited or registered.', detail: `Email ${email} already exists in auth.users` }, 400);
+    }
+
+    const isDirect = mode !== 'invite';
+
+    if (isDirect) {
+      const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: userMetadata,
+      });
+
+      if (createError) {
+        console.error('DEBUG - Admin API Error:', JSON.stringify(createError, null, 2));
+        return respond({ error: 'Failed to create user.', detail: createError.message }, 400);
+      }
+
+      return respond({ user: createData.user });
     }
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
