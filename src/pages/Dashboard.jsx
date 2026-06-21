@@ -11,6 +11,7 @@ import {
   Users, UserCircle, DollarSign, FileWarning
 } from 'lucide-react';
 import { listEntities } from '@/services/dataService';
+import { supabase } from '@/services/supabase';
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -25,8 +26,14 @@ export default function Dashboard() {
     initialData: [],
   });
   const { data: teamMembers = [] } = useQuery({
-    queryKey: ['teamMembers'],
-    queryFn: () => listEntities('team_members'),
+    queryKey: ['dashboardTeamMembers'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, roles:roles!profiles_role_id_fkey(name)');
+      if (error) throw error;
+      return (data ?? []).filter(p => p.roles?.name !== 'super_admin');
+    },
     initialData: [],
   });
   const { data: invoices = [] } = useQuery({
