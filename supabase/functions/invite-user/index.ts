@@ -32,6 +32,24 @@ serve(async (req) => {
   }
 
   try {
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return error('Invalid request body.', 'Failed to parse JSON');
+    }
+    console.log('invite-user body:', JSON.stringify(body));
+
+    const { email, role_id, full_name, phone, job_title, department } = body;
+
+    if (!email) {
+      return error('Email address is required.', 'Missing email field');
+    }
+
+    if (!role_id) {
+      return error('Please select a role for the new user.', 'Missing role_id field');
+    }
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return error('Authentication required', 'Missing or invalid Authorization header');
@@ -60,16 +78,6 @@ serve(async (req) => {
         'You do not have permission to invite users.',
         `User role '${profile.roles.name}' is not allowed. Required: super_admin or admin.`
       );
-    }
-
-    const { email, role_id, full_name, phone, job_title, department } = await req.json();
-
-    if (!email) {
-      return error('Email address is required.', 'Missing email field');
-    }
-
-    if (!role_id) {
-      return error('Please select a role for the new user.', 'Missing role_id field');
     }
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
