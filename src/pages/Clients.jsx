@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -15,6 +16,7 @@ import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2 } from
 const emptyClient = { name: '', company_name: '', email: '', phone: '', address: '', zip_code: '', vat_number: '', notes: '', status: 'active' };
 
 export default function Clients() {
+  const { t } = useTranslation();
   const [showForm, setShowForm] = useState(false);
   const [editClient, setEditClient] = useState(null);
   const [form, setForm] = useState(emptyClient);
@@ -68,30 +70,30 @@ export default function Clients() {
 
   return (
     <div>
-      <TopBar title="Clients" />
+      <TopBar title={t('clients')} />
       <div className="p-6 space-y-6">
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search clients..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+            <Input placeholder={t('searchClients')} value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
           <Button onClick={() => { setEditClient(null); setForm(emptyClient); setShowForm(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> Add Client
+            <Plus className="w-4 h-4" /> {t('addClient')}
           </Button>
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyState icon={UserCircle} title="No clients" description="Add your first client" actionLabel="Add Client" onAction={() => setShowForm(true)} />
+          <EmptyState icon={UserCircle} title={t('noClients')} description={t('addFirstClient')} actionLabel={t('addClient')} onAction={() => setShowForm(true)} />
         ) : (
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead>Name</TableHead>
-                  <TableHead className="hidden md:table-cell">Company</TableHead>
-                  <TableHead className="hidden md:table-cell">Contact</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-20">Actions</TableHead>
+                  <TableHead>{t('name')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('company')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('contact')}</TableHead>
+                  <TableHead>{t('status')}</TableHead>
+                  <TableHead className="w-20">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -129,7 +131,7 @@ export default function Clients() {
 
       <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); if (!v) setEditClient(null); }}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle className="font-heading">{editClient ? 'Edit Client' : 'Add Client'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-heading">{editClient ? t('editClient') : t('addClient')}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required /></div>
@@ -146,8 +148,8 @@ export default function Clients() {
             <div><Label>VAT Number</Label><Input value={form.vat_number} onChange={e => setForm({...form, vat_number: e.target.value})} /></div>
             <div><Label>Notes</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={3} /></div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving || !form.name}>{saving ? 'Saving...' : 'Save'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="submit" disabled={saving || !form.name}>{saving ? t('saving') : t('save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

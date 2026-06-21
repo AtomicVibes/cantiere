@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -12,26 +13,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
 
-const JOB_TITLES = [
-  { value: 'project_manager', label: 'Project Manager' },
-  { value: 'project_coordinator', label: 'Project Coordinator' },
-  { value: 'supervisor', label: 'Supervisor' },
-  { value: 'architect', label: 'Architect' },
-  { value: 'civil_engineer', label: 'Civil Engineer' },
-  { value: 'interior_designer', label: 'Interior Designer' },
-  { value: 'technician', label: 'Technician' },
-  { value: 'accountant', label: 'Accountant' },
-  { value: 'procurement_officer', label: 'Procurement Officer' },
-  { value: 'supplier', label: 'Supplier' },
-  { value: 'contractor', label: 'Contractor' },
-  { value: 'safety_officer', label: 'Safety Officer' },
-  { value: 'surveyor', label: 'Surveyor' },
-  { value: 'consultant', label: 'Consultant' },
-];
-
 const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active' };
 
 export default function Teams() {
+  const { t } = useTranslation();
+  const JOB_TITLES = [
+    { value: 'project_manager', label: t('supervisor') },
+    { value: 'project_coordinator', label: 'Project Coordinator' },
+    { value: 'supervisor', label: t('supervisor') },
+    { value: 'architect', label: t('architect') },
+    { value: 'civil_engineer', label: t('civilEngineer') },
+    { value: 'interior_designer', label: t('interiorDesigner') },
+    { value: 'technician', label: t('technician') },
+    { value: 'accountant', label: t('accountant') },
+    { value: 'procurement_officer', label: t('procurementOfficer') },
+    { value: 'supplier', label: t('supplier') },
+    { value: 'contractor', label: t('contractor') },
+    { value: 'safety_officer', label: 'Safety Officer' },
+    { value: 'surveyor', label: 'Surveyor' },
+    { value: 'consultant', label: 'Consultant' },
+  ];
   const [showForm, setShowForm] = useState(false);
   const [editMember, setEditMember] = useState(null);
   const [form, setForm] = useState(emptyMember);
@@ -88,13 +89,13 @@ export default function Teams() {
 
   return (
     <div>
-      <TopBar title="Teams" />
+      <TopBar title={t('teams')} />
       <div className="p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search team members..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+            <Input placeholder={t('searchMembers')} value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
           <div className="flex items-center gap-3">
             <ToggleGroup type="single" value={viewMode} onValueChange={v => v && setViewMode(v)} className="border border-border rounded-lg p-0.5">
@@ -106,14 +107,14 @@ export default function Teams() {
               </ToggleGroupItem>
             </ToggleGroup>
             <Button onClick={() => { setEditMember(null); setForm(emptyMember); setShowForm(true); }} className="gap-2">
-              <Plus className="w-4 h-4" /> Add Member
+              <Plus className="w-4 h-4" /> {t('addMember')}
             </Button>
           </div>
         </div>
 
         {/* Members */}
         {filtered.length === 0 ? (
-          <EmptyState icon={Users} title="No team members" description="Add your first team member" actionLabel="Add Member" onAction={() => setShowForm(true)} />
+          <EmptyState icon={Users} title={t('noTeamMembers')} description={t('addFirstTeamMember')} actionLabel={t('addMember')} onAction={() => setShowForm(true)} />
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(member => (
@@ -133,7 +134,7 @@ export default function Teams() {
       <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); if (!v) setEditMember(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="font-heading">{editMember ? 'Edit Member' : 'Add Member'}</DialogTitle>
+            <DialogTitle className="font-heading">{editMember ? t('editMember') : t('addMember')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div><Label>Full Name *</Label><Input value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required /></div>
@@ -163,8 +164,8 @@ export default function Teams() {
               </Select>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving || !form.full_name}>{saving ? 'Saving...' : 'Save'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="submit" disabled={saving || !form.full_name}>{saving ? t('saving') : t('save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

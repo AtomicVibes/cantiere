@@ -8,17 +8,18 @@ import {
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import Sidebar from './Sidebar';
-
-const bottomNav = [
-  { icon: LayoutDashboard, path: '/', label: 'Home' },
-  { icon: FolderKanban, path: '/projects', label: 'Projects' },
-  { icon: Users, path: '/teams', label: 'Teams' },
-  { icon: DollarSign, path: '/finance', label: 'Finance' },
-  { icon: Calendar, path: '/calendar', label: 'Calendar' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function MobileNav() {
+  const { t } = useTranslation();
   const location = useLocation();
+  const bottomNav = [
+    { icon: LayoutDashboard, path: '/', label: t('home') },
+    { icon: FolderKanban, path: '/projects', label: t('projects') },
+    { icon: Users, path: '/teams', label: t('teams') },
+    { icon: DollarSign, path: '/finance', label: t('finance') },
+    { icon: Calendar, path: '/calendar', label: t('calendar') },
+  ];
 
   return (
     <>

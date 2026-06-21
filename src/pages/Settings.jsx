@@ -13,7 +13,7 @@ import TopBar from '@/components/layout/TopBar';
 
 export default function Settings() {
   const { user } = useAuth();
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [profile, setProfile] = useState({
     phone: '',
     department: '',
@@ -88,7 +88,8 @@ export default function Settings() {
     }
 
     try {
-      const selectedLang = preferences.language;
+      const langCodeMap = { English: 'en', Français: 'fr', Italiano: 'it' };
+      const selectedLang = langCodeMap[preferences.language] || preferences.language;
       const validLanguages = ['en', 'fr', 'it'];
 
       if (!validLanguages.includes(selectedLang)) {
@@ -128,57 +129,57 @@ export default function Settings() {
 
   return (
     <div>
-      <TopBar title="Settings" />
+      <TopBar title={t('settings')} />
       <div className="p-6 max-w-3xl">
         <div className="space-y-6">
           <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold">Profile Information</h3>
+            <h3 className="font-heading font-semibold">{t('profileInformation')}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label>Full Name</Label>
+                <Label>{t('fullName')}</Label>
                 <Input value={user?.user_metadata?.full_name || ''} disabled className="bg-muted" />
               </div>
               <div>
-                <Label>Email</Label>
+                <Label>{t('email')}</Label>
                 <Input value={user?.email || ''} disabled className="bg-muted" />
               </div>
               <div>
-                <Label>Phone</Label>
+                <Label>{t('phone')}</Label>
                 <Input value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} />
               </div>
               <div>
-                <Label>Department</Label>
+                <Label>{t('department')}</Label>
                 <Input value={profile.department} onChange={e => setProfile({...profile, department: e.target.value})} />
               </div>
               <div>
-                <Label>Role</Label>
+                <Label>{t('role')}</Label>
                 <Input value={user?.user_metadata?.role?.replace(/_/g, ' ') || 'User'} disabled className="bg-muted capitalize" />
               </div>
             </div>
           </div>
 
           <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold">Appearance</h3>
+            <h3 className="font-heading font-semibold">{t('appearance')}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label>Theme</Label>
+                <Label>{t('theme')}</Label>
                 <Select value={preferences.theme} onValueChange={handleThemeChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
+                    <SelectItem value="light">{t('light')}</SelectItem>
+                    <SelectItem value="dark">{t('dark')}</SelectItem>
+                    <SelectItem value="system">{t('system')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>Language</Label>
+                <Label>{t('language')}</Label>
                 <Select value={preferences.language} onValueChange={handleLanguageChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="en">English</SelectItem>
-                    <SelectItem value="fr">Français</SelectItem>
-                    <SelectItem value="it">Italiano</SelectItem>
+                    <SelectItem value="en">{t('english')}</SelectItem>
+                    <SelectItem value="fr">{t('french')}</SelectItem>
+                    <SelectItem value="it">{t('italian')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -186,11 +187,11 @@ export default function Settings() {
           </div>
 
           <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold">Notification Preferences</h3>
+            <h3 className="font-heading font-semibold">{t('notificationPreferences')}</h3>
             <div className="flex items-center justify-between py-2">
               <div>
-                <p className="font-medium">Email Notifications</p>
-                <p className="text-sm text-muted-foreground">Receive email notifications for important updates</p>
+                <p className="font-medium">{t('emailNotifications')}</p>
+                <p className="text-sm text-muted-foreground">{t('emailNotificationsDesc')}</p>
               </div>
               <Switch
                 checked={preferences.email_notifications}
@@ -202,7 +203,7 @@ export default function Settings() {
 
         <div className="mt-6">
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? t('saving') : t('save')}
           </Button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -12,20 +13,20 @@ import { Badge } from '@/components/ui/badge';
 import { Search, FileText, Upload, ExternalLink, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
-const DOC_TYPES = [
-  { value: 'blueprint', label: 'Blueprint' },
-  { value: 'contract', label: 'Contract' },
-  { value: 'permit', label: 'Permit' },
-  { value: 'invoice', label: 'Invoice' },
-  { value: 'photo', label: 'Photo' },
-  { value: 'video', label: 'Video' },
-  { value: 'audio_note', label: 'Audio Note' },
-  { value: 'cad_file', label: 'CAD File' },
-  { value: 'report', label: 'Report' },
-  { value: 'other', label: 'Other' },
-];
-
 export default function Documents() {
+  const { t } = useTranslation();
+  const DOC_TYPES = [
+    { value: 'blueprint', label: t('blueprint') },
+    { value: 'contract', label: t('contract') },
+    { value: 'permit', label: t('permit') },
+    { value: 'invoice', label: t('invoice') },
+    { value: 'photo', label: t('photo') },
+    { value: 'video', label: t('video') },
+    { value: 'audio_note', label: t('audioNote') },
+    { value: 'cad_file', label: t('cadFile') },
+    { value: 'report', label: t('report') },
+    { value: 'other', label: t('other') },
+  ];
   const [showUpload, setShowUpload] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'other', notes: '' });
   const [file, setFile] = useState(null);
@@ -80,29 +81,29 @@ export default function Documents() {
 
   return (
     <div>
-      <TopBar title="Document Center" />
+      <TopBar title={t('documentCenter')} />
       <div className="p-6 space-y-6">
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="flex gap-3 flex-1">
             <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search documents..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+              <Input placeholder={t('searchDocuments')} value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
             </div>
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-36"><SelectValue placeholder="All types" /></SelectTrigger>
+              <SelectTrigger className="w-36"><SelectValue placeholder={t('all')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="all">{t('all')}</SelectItem>
                 {DOC_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <Button onClick={() => setShowUpload(true)} className="gap-2">
-            <Upload className="w-4 h-4" /> Upload Document
+            <Upload className="w-4 h-4" /> {t('uploadDocument')}
           </Button>
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyState icon={FileText} title="No documents" description="Upload your first document" actionLabel="Upload Document" onAction={() => setShowUpload(true)} />
+          <EmptyState icon={FileText} title={t('noDocuments')} description={t('uploadFirstDocument')} actionLabel={t('uploadDocument')} onAction={() => setShowUpload(true)} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(doc => (
@@ -135,7 +136,7 @@ export default function Documents() {
 
       <Dialog open={showUpload} onOpenChange={setShowUpload}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="font-heading">Upload Document</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-heading">{t('uploadDocument')}</DialogTitle></DialogHeader>
           <form onSubmit={handleUpload} className="space-y-4">
             <div><Label>Document Name *</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required /></div>
             <div>
@@ -151,8 +152,8 @@ export default function Documents() {
             </div>
             <div><Label>Notes</Label><Input value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowUpload(false)}>Cancel</Button>
-              <Button type="submit" disabled={uploading || !form.name}>{uploading ? 'Uploading...' : 'Upload'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowUpload(false)}>{t('cancel')}</Button>
+              <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : t('upload')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

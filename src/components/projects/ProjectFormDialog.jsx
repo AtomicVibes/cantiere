@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -17,34 +18,6 @@ import {
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 
-const TYPE_OPTIONS = [
-  { value: 'construction', label: 'Construction' },
-  { value: 'renovation', label: 'Renovation' },
-  { value: 'apartment_sale', label: 'Apartment Sale' },
-  { value: 'property_rental', label: 'Property Rental' },
-  { value: 'property_management', label: 'Property Mgmt' },
-  { value: 'consulting', label: 'Consulting' },
-  { value: 'land_acquisition', label: 'Land Acquisition' },
-  { value: 'architectural_study', label: 'Architectural Study' },
-  { value: 'investment', label: 'Investment' },
-  { value: 'other', label: 'Other' },
-];
-
-const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'planning', label: 'Planning' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'on_hold', label: 'On Hold' },
-  { value: 'completed', label: 'Completed' },
-];
-
-const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'critical', label: 'Critical' },
-];
-
 const defaultForm = {
   name: '',
   type: 'construction',
@@ -60,6 +33,32 @@ const defaultForm = {
 };
 
 export default function ProjectFormDialog({ open, onOpenChange, project, clients, onSave }) {
+  const { t } = useTranslation();
+  const TYPE_OPTIONS = [
+    { value: 'construction', label: t('construction') },
+    { value: 'renovation', label: t('renovation') },
+    { value: 'apartment_sale', label: t('apartmentSale') },
+    { value: 'property_rental', label: t('propertyRental') },
+    { value: 'property_management', label: t('propertyMgmt') },
+    { value: 'consulting', label: t('consulting') },
+    { value: 'land_acquisition', label: t('landAcquisition') },
+    { value: 'architectural_study', label: t('architecturalStudy') },
+    { value: 'investment', label: t('investment') },
+    { value: 'other', label: t('other') },
+  ];
+  const STATUS_OPTIONS = [
+    { value: 'draft', label: t('draft') },
+    { value: 'planning', label: t('planning') },
+    { value: 'in_progress', label: t('inProgress') },
+    { value: 'on_hold', label: t('onHold') },
+    { value: 'completed', label: t('completed') },
+  ];
+  const PRIORITY_OPTIONS = [
+    { value: 'low', label: t('low') },
+    { value: 'medium', label: t('medium') },
+    { value: 'high', label: t('high') },
+    { value: 'critical', label: t('critical') },
+  ];
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
   const isEditing = !!project;
@@ -114,17 +113,17 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? 'Edit Project' : 'New Project'}</DialogTitle>
+          <DialogTitle>{isEditing ? t('editProject') : t('createProject')}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Project Name</Label>
+            <Label htmlFor="name">{t('projectName')}</Label>
             <Input id="name" value={form.name} onChange={(e) => set('name')(e.target.value)} required />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="type">Type</Label>
+              <Label htmlFor="type">{t('projectType')}</Label>
               <Select value={form.type} onValueChange={set('type')}>
                 <SelectTrigger id="type">
                   <SelectValue />
@@ -137,13 +136,13 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="client">Client</Label>
+              <Label htmlFor="client">{t('client')}</Label>
               <Select value={form.client_id} onValueChange={set('client_id')}>
                 <SelectTrigger id="client">
-                  <SelectValue placeholder="None" />
+                  <SelectValue placeholder={t('none')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="none">{t('none')}</SelectItem>
                   {(clients ?? []).map((c) => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
@@ -154,7 +153,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="status">{t('status')}</Label>
               <Select value={form.status} onValueChange={set('status')}>
                 <SelectTrigger id="status">
                   <SelectValue />
@@ -167,7 +166,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="priority">Priority</Label>
+              <Label htmlFor="priority">{t('priority')}</Label>
               <Select value={form.priority} onValueChange={set('priority')}>
                 <SelectTrigger id="priority">
                   <SelectValue />
@@ -182,7 +181,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">{t('description')}</Label>
             <textarea
               id="description"
               value={form.description}
@@ -194,38 +193,38 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="start_date">Start Date</Label>
+              <Label htmlFor="start_date">{t('startDate')}</Label>
               <Input id="start_date" type="date" value={form.start_date} onChange={(e) => set('start_date')(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end_date">End Date</Label>
+              <Label htmlFor="end_date">{t('endDate')}</Label>
               <Input id="end_date" type="date" value={form.end_date} onChange={(e) => set('end_date')(e.target.value)} />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
+              <Label htmlFor="location">{t('location')}</Label>
               <Input id="location" value={form.location} onChange={(e) => set('location')(e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="budget">Budget (€)</Label>
+              <Label htmlFor="budget">{t('budgetEuro')}</Label>
               <Input id="budget" type="number" min="0" step="0.01" value={form.budget} onChange={(e) => set('budget')(e.target.value)} />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="progress">Progress (%)</Label>
+            <Label htmlFor="progress">{t('progressPercentage')}</Label>
             <Input id="progress" type="number" min="0" max="100" value={form.progress} onChange={(e) => set('progress')(e.target.value)} />
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button type="submit" disabled={saving}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {isEditing ? 'Save Changes' : 'Create Project'}
+              {isEditing ? t('saveChanges') : t('createProject')}
             </Button>
           </div>
         </form>

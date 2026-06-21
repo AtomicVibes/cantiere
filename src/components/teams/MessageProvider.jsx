@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import React, { useState, useRef, useEffect } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -5,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { MessageSquare, Mic, Send, Square } from 'lucide-react';
 
 export default function MessagePopover({ member }) {
+  const { t } = useTranslation();
   const [message, setMessage] = useState('');
   const [recording, setRecording] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(60);
@@ -46,13 +48,13 @@ export default function MessagePopover({ member }) {
       <PopoverTrigger asChild>
         <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
           <MessageSquare className="w-3.5 h-3.5" />
-          Message
+          {t('messageButton')}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-4 space-y-3" side="top">
-        <p className="text-sm font-semibold">Message {member.full_name?.split(' ')[0]}</p>
+        <p className="text-sm font-semibold">{t('messageButton')} {member.full_name?.split(' ')[0]}</p>
         <Textarea
-          placeholder="Type a quick message..."
+          placeholder={t('typeAMessage')}
           value={message}
           onChange={e => setMessage(e.target.value)}
           className="text-sm resize-none h-20"
@@ -65,13 +67,13 @@ export default function MessagePopover({ member }) {
             onClick={recording ? stopRecording : startRecording}
           >
             {recording ? (
-              <><Square className="w-3 h-3" /> Stop ({secondsLeft}s)</>
+              <><Square className="w-3 h-3" /> {t('stop')} ({secondsLeft}s)</>
             ) : (
-              <><Mic className="w-3 h-3" /> Record Voice</>
+              <><Mic className="w-3 h-3" /> {t('recordVoice')}</>
             )}
           </Button>
           <Button size="sm" className="gap-1.5 text-xs" onClick={handleSend} disabled={!message.trim()}>
-            <Send className="w-3 h-3" /> Send
+            <Send className="w-3 h-3" /> {t('send')}
           </Button>
         </div>
       </PopoverContent>

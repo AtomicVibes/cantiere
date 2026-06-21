@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -26,6 +27,7 @@ const PRIORITY_STYLES = {
 
 export default function Notifications() {
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications'],
@@ -48,11 +50,11 @@ export default function Notifications() {
 
   return (
     <div>
-      <TopBar title="Notifications" />
+      <TopBar title={t('notifications')} />
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-heading font-semibold">All Notifications</h2>
+            <h2 className="text-lg font-heading font-semibold">{t('notifications')}</h2>
             {unreadCount > 0 && (
               <Badge variant="secondary" className="bg-primary/10 text-primary">{unreadCount} unread</Badge>
             )}

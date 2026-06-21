@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import TopBar from '@/components/layout/TopBar';
 import StatCard from '@/components/dashboard/StatCard';
@@ -12,6 +13,7 @@ import {
 import { listEntities } from '@/services/dataService';
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => listEntities('projects'),
@@ -45,28 +47,28 @@ export default function Dashboard() {
 
   return (
     <div>
-      <TopBar title="Dashboard" />
+      <TopBar title={t('dashboard')} />
       <div className="p-6 space-y-6">
         {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Projects" value={projects.length} icon={FolderKanban} color="primary" />
-          <StatCard title="Active Projects" value={activeProjects.length} icon={Clock} color="blue" />
-          <StatCard title="Completed" value={completedProjects.length} icon={CheckCircle2} color="success" />
-          <StatCard title="Delayed" value={delayedProjects.length} icon={AlertTriangle} color="destructive" />
+          <StatCard title={t('totalProjects')} value={projects.length} icon={FolderKanban} color="primary" />
+          <StatCard title={t('activeProjects')} value={activeProjects.length} icon={Clock} color="blue" />
+          <StatCard title={t('completed')} value={completedProjects.length} icon={CheckCircle2} color="success" />
+          <StatCard title={t('delayed')} value={delayedProjects.length} icon={AlertTriangle} color="destructive" />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Team Members" value={teamMembers.length} icon={Users} color="violet" />
-          <StatCard title="Clients" value={clients.length} icon={UserCircle} color="blue" />
+          <StatCard title={t('teamMembers')} value={teamMembers.length} icon={Users} color="violet" />
+          <StatCard title={t('clients')} value={clients.length} icon={UserCircle} color="blue" />
           <StatCard
-            title="Revenue"
+            title={t('revenue')}
             value={`€${totalRevenue.toLocaleString()}`}
             icon={DollarSign}
             color="success"
           />
           <StatCard
-            title="Outstanding"
-            value={`${outstandingInvoices.length} invoices`}
+            title={t('outstanding')}
+            value={`${outstandingInvoices.length} ${t('invoices')}`}
             icon={FileWarning}
             color="warning"
           />

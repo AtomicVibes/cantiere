@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import TopBar from '@/components/layout/TopBar';
 import ProjectCard from '@/components/projects/ProjectCard';
@@ -11,6 +12,7 @@ import { Plus, Search, FolderKanban } from 'lucide-react';
 import { listEntities, createEntity, updateEntity } from '@/services/dataService';
 
 export default function Projects() {
+  const { t } = useTranslation();
   const [showForm, setShowForm] = useState(false);
   const [editProject, setEditProject] = useState(null);
   const [search, setSearch] = useState('');
@@ -56,7 +58,7 @@ export default function Projects() {
 
   return (
     <div>
-      <TopBar title="Projects" />
+      <TopBar title={t('projects')} />
       <div className="p-6 space-y-6">
         {/* Toolbar */}
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -64,7 +66,7 @@ export default function Projects() {
             <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search projects..."
+                placeholder={t('searchProjects')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="pl-9"
@@ -72,21 +74,21 @@ export default function Projects() {
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40">
-                <SelectValue placeholder="All Statuses" />
+                <SelectValue placeholder={t('allStatuses')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="planning">Planning</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="on_hold">On Hold</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="all">{t('allStatuses')}</SelectItem>
+                <SelectItem value="draft">{t('draft')}</SelectItem>
+                <SelectItem value="planning">{t('planning')}</SelectItem>
+                <SelectItem value="in_progress">{t('inProgress')}</SelectItem>
+                <SelectItem value="on_hold">{t('onHold')}</SelectItem>
+                <SelectItem value="completed">{t('completed')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <Button onClick={() => { setEditProject(null); setShowForm(true); }} className="gap-2">
             <Plus className="w-4 h-4" />
-            New Project
+            {t('newProject')}
           </Button>
         </div>
 
@@ -94,9 +96,9 @@ export default function Projects() {
         {filtered.length === 0 ? (
           <EmptyState
             icon={FolderKanban}
-            title="No projects found"
-            description="Create your first project to get started"
-            actionLabel="New Project"
+            title={t('noProjectsFound')}
+            description={t('createFirstProject')}
+            actionLabel={t('newProject')}
             onAction={() => setShowForm(true)}
           />
         ) : (

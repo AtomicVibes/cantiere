@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import TopBar from '@/components/layout/TopBar';
@@ -18,6 +19,7 @@ import {
 import { findEntity, getEntity, createEntity, updateEntity } from '@/services/dataService';
 
 export default function ProjectDetail() {
+  const { t } = useTranslation();
   const { id } = useParams();
   const queryClient = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
@@ -66,8 +68,8 @@ export default function ProjectDetail() {
   if (!project) {
     return (
       <div className="p-6 text-center">
-        <p className="text-muted-foreground">Project not found</p>
-        <Link to="/projects" className="text-primary text-sm mt-2 inline-block">Back to Projects</Link>
+        <p className="text-muted-foreground">{t('projectNotFound')}</p>
+        <Link to="/projects" className="text-primary text-sm mt-2 inline-block">{t('backToProjects')}</Link>
       </div>
     );
   }
@@ -90,10 +92,10 @@ export default function ProjectDetail() {
         {/* Back + Actions */}
         <div className="flex items-center justify-between">
           <Link to="/projects" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Back to Projects
+            <ArrowLeft className="w-4 h-4" /> {t('backToProjects')}
           </Link>
           <Button variant="outline" size="sm" onClick={() => setShowEdit(true)} className="gap-2">
-            <Pencil className="w-3.5 h-3.5" /> Edit
+            <Pencil className="w-3.5 h-3.5" /> {t('edit')}
           </Button>
         </div>
 
@@ -108,7 +110,7 @@ export default function ProjectDetail() {
               <div className="flex flex-wrap items-center gap-3">
                 <StatusBadge status={project.status} />
                 <PriorityBadge priority={project.priority} />
-                {clientName && <span className="text-sm text-muted-foreground">Client: {clientName}</span>}
+                {clientName && <span className="text-sm text-muted-foreground">{t('clientLabel')}: {clientName}</span>}
               </div>
             </div>
             <div className="flex items-center gap-2 w-32">
@@ -120,7 +122,7 @@ export default function ProjectDetail() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-border">
             {project.budget > 0 && (
               <div>
-                <p className="text-xs text-muted-foreground">Budget</p>
+                <p className="text-xs text-muted-foreground">{t('budget')}</p>
                 <p className="font-semibold flex items-center gap-1">
                   <DollarSign className="w-3.5 h-3.5" />€{project.budget?.toLocaleString()}
                 </p>
@@ -128,7 +130,7 @@ export default function ProjectDetail() {
             )}
             {project.start_date && (
               <div>
-                <p className="text-xs text-muted-foreground">Start Date</p>
+                <p className="text-xs text-muted-foreground">{t('startDate')}</p>
                 <p className="font-semibold flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5" />{format(new Date(project.start_date), 'MMM d, yyyy')}
                 </p>
@@ -136,7 +138,7 @@ export default function ProjectDetail() {
             )}
             {project.end_date && (
               <div>
-                <p className="text-xs text-muted-foreground">End Date</p>
+                <p className="text-xs text-muted-foreground">{t('endDate')}</p>
                 <p className="font-semibold flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5" />{format(new Date(project.end_date), 'MMM d, yyyy')}
                 </p>
@@ -144,7 +146,7 @@ export default function ProjectDetail() {
             )}
             {project.location && (
               <div>
-                <p className="text-xs text-muted-foreground">Location</p>
+                <p className="text-xs text-muted-foreground">{t('location')}</p>
                 <p className="font-semibold flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5" />{project.location}
                 </p>
@@ -156,32 +158,32 @@ export default function ProjectDetail() {
         {/* Timeline Tab */}
         <Tabs defaultValue="timeline">
           <TabsList>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
+            <TabsTrigger value="timeline">{t('timeline')}</TabsTrigger>
+            <TabsTrigger value="documents">{t('documents')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="timeline" className="space-y-4 mt-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-heading font-semibold">Project Timeline</h3>
+              <h3 className="font-heading font-semibold">{t('projectTimeline')}</h3>
               <Button size="sm" variant="outline" onClick={() => setAddingEntry(!addingEntry)} className="gap-2">
-                <Plus className="w-3.5 h-3.5" /> Add Entry
+                <Plus className="w-3.5 h-3.5" /> {t('addEntry')}
               </Button>
             </div>
 
             {addingEntry && (
               <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-                <Input placeholder="Entry title" value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
+                <Input placeholder={t('entryTitle')} value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
                 <Textarea placeholder="Description" value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
                 <Input type="date" value={newEntry.date} onChange={e => setNewEntry({...newEntry, date: e.target.value})} />
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title}>Save</Button>
-                  <Button size="sm" variant="outline" onClick={() => setAddingEntry(false)}>Cancel</Button>
+                  <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title}>{t('save')}</Button>
+                  <Button size="sm" variant="outline" onClick={() => setAddingEntry(false)}>{t('cancel')}</Button>
                 </div>
               </div>
             )}
 
             {timeline.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground text-sm">No timeline entries yet</div>
+              <div className="text-center py-12 text-muted-foreground text-sm">{t('noTimelineEntries')}</div>
             ) : (
               <div className="relative pl-6 border-l-2 border-border space-y-6">
                 {timeline.map(entry => (
@@ -198,10 +200,10 @@ export default function ProjectDetail() {
                       <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {entry.date ? format(new Date(entry.date), 'MMM d, yyyy') : 'No date'}
+                          {entry.date ? format(new Date(entry.date), 'MMM d, yyyy') : t('noDate')}
                         </span>
                         {entry.responsible_person && (
-                          <span>Assigned to: {entry.responsible_person}</span>
+                          <span>{t('assignedTo')}: {entry.responsible_person}</span>
                         )}
                       </div>
                     </div>
@@ -213,7 +215,7 @@ export default function ProjectDetail() {
 
           <TabsContent value="documents" className="mt-4">
             <div className="text-center py-12 text-muted-foreground text-sm">
-              Documents for this project will appear here
+              {t('documentsPlaceholder')}
             </div>
           </TabsContent>
         </Tabs>

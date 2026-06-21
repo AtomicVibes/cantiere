@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -12,19 +13,19 @@ import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns';
 
-const EVENT_TYPES = [
-  { value: 'deadline', label: 'Deadline', color: 'bg-red-500' },
-  { value: 'meeting', label: 'Meeting', color: 'bg-blue-500' },
-  { value: 'site_visit', label: 'Site Visit', color: 'bg-emerald-500' },
-  { value: 'inspection', label: 'Inspection', color: 'bg-purple-500' },
-  { value: 'permit_expiry', label: 'Permit Expiry', color: 'bg-amber-500' },
-  { value: 'payment_due', label: 'Payment Due', color: 'bg-indigo-500' },
-  { value: 'other', label: 'Other', color: 'bg-slate-500' },
-];
-
 const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '' };
 
 export default function CalendarPage() {
+  const { t } = useTranslation();
+  const EVENT_TYPES = [
+    { value: 'deadline', label: 'Deadline', color: 'bg-red-500' },
+    { value: 'meeting', label: 'Meeting', color: 'bg-blue-500' },
+    { value: 'site_visit', label: 'Site Visit', color: 'bg-emerald-500' },
+    { value: 'inspection', label: 'Inspection', color: 'bg-purple-500' },
+    { value: 'permit_expiry', label: 'Permit Expiry', color: 'bg-amber-500' },
+    { value: 'payment_due', label: 'Payment Due', color: 'bg-indigo-500' },
+    { value: 'other', label: t('other'), color: 'bg-slate-500' },
+  ];
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyEvent);
@@ -67,7 +68,7 @@ export default function CalendarPage() {
 
   return (
     <div>
-      <TopBar title="Calendar" />
+      <TopBar title={t('calendar')} />
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -83,7 +84,7 @@ export default function CalendarPage() {
             </Button>
           </div>
           <Button onClick={() => { setForm(emptyEvent); setShowForm(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> Add Event
+            <Plus className="w-4 h-4" /> {t('addEvent')}
           </Button>
         </div>
 
@@ -122,7 +123,7 @@ export default function CalendarPage() {
                       </div>
                     ))}
                     {dayEvents.length > 3 && (
-                      <span className="text-xs text-muted-foreground">+{dayEvents.length - 3} more</span>
+                      <span className="text-xs text-muted-foreground">+{dayEvents.length - 3} {t('more')}</span>
                     )}
                   </div>
                 </div>
@@ -134,7 +135,7 @@ export default function CalendarPage() {
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent>
-          <DialogHeader><DialogTitle className="font-heading">New Event</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-heading">{t('newEvent')}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div><Label>Title *</Label><Input value={form.title} onChange={e => setForm({...form, title: e.target.value})} required /></div>
             <div><Label>Description</Label><Textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} rows={2} /></div>
@@ -153,8 +154,8 @@ export default function CalendarPage() {
               <div><Label>Location</Label><Input value={form.location} onChange={e => setForm({...form, location: e.target.value})} /></div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving || !form.title || !form.date}>{saving ? 'Saving...' : 'Save'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="submit" disabled={saving || !form.title || !form.date}>{saving ? t('saving') : t('save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

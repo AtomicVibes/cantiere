@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -14,25 +15,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
-const CATEGORIES = [
-  { value: 'materials', label: 'Materials' },
-  { value: 'labor', label: 'Labor' },
-  { value: 'equipment', label: 'Equipment' },
-  { value: 'architecture', label: 'Architecture' },
-  { value: 'engineering', label: 'Engineering' },
-  { value: 'transport', label: 'Transport' },
-  { value: 'utilities', label: 'Utilities' },
-  { value: 'miscellaneous', label: 'Miscellaneous' },
-];
-
-const STATUSES = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'partially_paid', label: 'Partially Paid' },
-  { value: 'overdue', label: 'Overdue' },
-];
-
 const emptyInvoice = {
   invoice_number: '', client_id: '', project_id: '', category: 'miscellaneous',
   supplier: '', amount: '', tax: '', total: '', issue_date: '', due_date: '',
@@ -40,6 +22,25 @@ const emptyInvoice = {
 };
 
 export default function Finance() {
+  const { t } = useTranslation();
+  const CATEGORIES = [
+    { value: 'materials', label: 'Materials' },
+    { value: 'labor', label: 'Labor' },
+    { value: 'equipment', label: 'Equipment' },
+    { value: 'architecture', label: 'Architecture' },
+    { value: 'engineering', label: 'Engineering' },
+    { value: 'transport', label: 'Transport' },
+    { value: 'utilities', label: 'Utilities' },
+    { value: 'miscellaneous', label: 'Miscellaneous' },
+  ];
+
+  const STATUSES = [
+    { value: 'draft', label: t('draft') },
+    { value: 'pending', label: t('pending') },
+    { value: 'paid', label: 'Paid' },
+    { value: 'partially_paid', label: 'Partially Paid' },
+    { value: 'overdue', label: t('overdue') },
+  ];
   const [showForm, setShowForm] = useState(false);
   const [editInvoice, setEditInvoice] = useState(null);
   const [form, setForm] = useState(emptyInvoice);
@@ -107,47 +108,47 @@ export default function Finance() {
 
   return (
     <div>
-      <TopBar title="Finance" />
+      <TopBar title={t('finance')} />
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard title="Revenue (Paid)" value={`€${totalRevenue.toLocaleString()}`} icon={TrendingUp} color="success" />
-          <StatCard title="Pending" value={`€${totalPending.toLocaleString()}`} icon={DollarSign} color="warning" />
-          <StatCard title="Overdue" value={`€${totalOverdue.toLocaleString()}`} icon={TrendingDown} color="destructive" />
+          <StatCard title={t('revenuePaid')} value={`€${totalRevenue.toLocaleString()}`} icon={TrendingUp} color="success" />
+          <StatCard title={t('pending')} value={`€${totalPending.toLocaleString()}`} icon={DollarSign} color="warning" />
+          <StatCard title={t('overdue')} value={`€${totalOverdue.toLocaleString()}`} icon={TrendingDown} color="destructive" />
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="flex gap-3 flex-1">
             <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search invoices..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+              <Input placeholder={t('searchInvoices')} value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36"><SelectValue placeholder="All" /></SelectTrigger>
+              <SelectTrigger className="w-36"><SelectValue placeholder={t('all')} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="all">{t('allStatuses')}</SelectItem>
                 {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <Button onClick={() => { setEditInvoice(null); setForm(emptyInvoice); setShowForm(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> New Invoice
+            <Plus className="w-4 h-4" /> {t('newInvoice')}
           </Button>
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyState icon={Receipt} title="No invoices" description="Create your first invoice" actionLabel="New Invoice" onAction={() => setShowForm(true)} />
+          <EmptyState icon={Receipt} title={t('noDocuments')} description="Create your first invoice" actionLabel={t('newInvoice')} onAction={() => setShowForm(true)} />
         ) : (
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead className="hidden md:table-cell">Client</TableHead>
-                  <TableHead className="hidden lg:table-cell">Category</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead className="hidden md:table-cell">Due Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-20">Actions</TableHead>
+                  <TableHead>{t('invoiceNumber')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('client')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('filter')}</TableHead>
+                  <TableHead>{t('amount')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('dueDate')}</TableHead>
+                  <TableHead>{t('status')}</TableHead>
+                  <TableHead className="w-20">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -175,7 +176,7 @@ export default function Finance() {
 
       <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); if (!v) setEditInvoice(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-heading">{editInvoice ? 'Edit Invoice' : 'New Invoice'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-heading">{editInvoice ? t('editInvoice') : t('newInvoice')}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Invoice # *</Label><Input value={form.invoice_number} onChange={e => setForm({...form, invoice_number: e.target.value})} required /></div>
@@ -221,8 +222,8 @@ export default function Finance() {
               </Select>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
-              <Button type="submit" disabled={saving || !form.invoice_number}>{saving ? 'Saving...' : 'Save'}</Button>
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="submit" disabled={saving || !form.invoice_number}>{saving ? t('saving') : t('save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

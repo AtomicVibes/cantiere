@@ -4,8 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/lib/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 export default function TopBar({ title }) {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const initials = user?.full_name
     ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
@@ -21,7 +23,7 @@ export default function TopBar({ title }) {
         <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search..."
+            placeholder={t('searchPlaceholder')}
             className="pl-9 w-64 h-9 bg-secondary border-0"
           />
         </div>

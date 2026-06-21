@@ -8,21 +8,22 @@ import {
   Bell, DollarSign, Calendar, BarChart3, FileText,
   Settings, ChevronLeft, ChevronRight, LogOut
 } from 'lucide-react';
-
-const navItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-  { label: 'Projects', icon: FolderKanban, path: '/projects' },
-  { label: 'Teams', icon: Users, path: '/teams' },
-  { label: 'Clients', icon: UserCircle, path: '/clients' },
-  { label: 'Notifications', icon: Bell, path: '/notifications' },
-  { label: 'Finance', icon: DollarSign, path: '/finance' },
-  { label: 'Calendar', icon: Calendar, path: '/calendar' },
-  { label: 'Reports', icon: BarChart3, path: '/reports' },
-  { label: 'Documents', icon: FileText, path: '/documents' },
-  { label: 'Settings', icon: Settings, path: '/settings' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCollapsedProp }) {
+  const { t } = useTranslation();
+  const navItems = [
+    { label: t('dashboard'), icon: LayoutDashboard, path: '/' },
+    { label: t('projects'), icon: FolderKanban, path: '/projects' },
+    { label: t('teams'), icon: Users, path: '/teams' },
+    { label: t('clients'), icon: UserCircle, path: '/clients' },
+    { label: t('notifications'), icon: Bell, path: '/notifications' },
+    { label: t('finance'), icon: DollarSign, path: '/finance' },
+    { label: t('calendar'), icon: Calendar, path: '/calendar' },
+    { label: t('reports'), icon: BarChart3, path: '/reports' },
+    { label: t('documents'), icon: FileText, path: '/documents' },
+    { label: t('settings'), icon: Settings, path: '/settings' },
+  ];
   const [collapsedInternal, setCollapsedInternal] = useState(false);
   const collapsed = collapsedProp !== undefined ? collapsedProp : collapsedInternal;
   const setCollapsed = setCollapsedProp || setCollapsedInternal;
@@ -77,14 +78,14 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent w-full transition-colors"
         >
           <LogOut className="w-5 h-5 flex-shrink-0" />
-          {!collapsed && <span>Logout</span>}
+          {!collapsed && <span>{t('logout')}</span>}
         </button>
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent w-full transition-colors"
         >
           {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
-          {!collapsed && <span>Collapse</span>}
+          {!collapsed && <span>{t('collapse')}</span>}
         </button>
       </div>
     </aside>

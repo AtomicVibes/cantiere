@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -10,6 +11,7 @@ import { FolderKanban, DollarSign, Users, UserCircle } from 'lucide-react';
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6', '#ec4899', '#14b8a6'];
 
 export default function Reports() {
+  const { t } = useTranslation();
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: () => base44.entities.Project.list(), initialData: [] });
   const { data: invoices = [] } = useQuery({ queryKey: ['invoices'], queryFn: () => base44.entities.Invoice.list(), initialData: [] });
   const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: () => base44.entities.Client.list(), initialData: [] });
@@ -45,27 +47,27 @@ export default function Reports() {
 
   return (
     <div>
-      <TopBar title="Reports" />
+      <TopBar title={t('reports')} />
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Total Projects" value={projects.length} icon={FolderKanban} color="primary" />
-          <StatCard title="Total Invoiced" value={`€${totalInvoiced.toLocaleString()}`} icon={DollarSign} color="blue" />
-          <StatCard title="Team Members" value={members.length} icon={Users} color="violet" />
-          <StatCard title="Total Clients" value={clients.length} icon={UserCircle} color="success" />
+          <StatCard title={t('totalProjects')} value={projects.length} icon={FolderKanban} color="primary" />
+          <StatCard title={t('totalInvoiced')} value={`€${totalInvoiced.toLocaleString()}`} icon={DollarSign} color="blue" />
+          <StatCard title={t('teamMembers')} value={members.length} icon={Users} color="violet" />
+          <StatCard title={t('totalClients')} value={clients.length} icon={UserCircle} color="success" />
         </div>
 
         <Tabs defaultValue="projects">
           <TabsList>
-            <TabsTrigger value="projects">Projects</TabsTrigger>
-            <TabsTrigger value="finance">Finance</TabsTrigger>
+            <TabsTrigger value="projects">{t('projects')}</TabsTrigger>
+            <TabsTrigger value="finance">{t('finance')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="projects" className="space-y-6 mt-4">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="bg-card rounded-xl border border-border p-5">
-                <h3 className="font-heading font-semibold mb-4">Projects by Type</h3>
+                <h3 className="font-heading font-semibold mb-4">{t('projectsByType')}</h3>
                 {projectsByType.length === 0 ? (
-                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">{t('noData')}</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={240}>
                     <PieChart>
@@ -80,9 +82,9 @@ export default function Reports() {
               </div>
 
               <div className="bg-card rounded-xl border border-border p-5">
-                <h3 className="font-heading font-semibold mb-4">Budget vs Actual Cost</h3>
+                <h3 className="font-heading font-semibold mb-4">{t('budgetVsActualCost')}</h3>
                 {budgetVsActual.length === 0 ? (
-                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+                  <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">{t('noData')}</div>
                 ) : (
                   <ResponsiveContainer width="100%" height={240}>
                     <BarChart data={budgetVsActual} barGap={4}>
@@ -101,9 +103,9 @@ export default function Reports() {
 
           <TabsContent value="finance" className="space-y-6 mt-4">
             <div className="bg-card rounded-xl border border-border p-5">
-              <h3 className="font-heading font-semibold mb-4">Revenue by Category</h3>
+              <h3 className="font-heading font-semibold mb-4">{t('revenueByCategory')}</h3>
               {categoryRevenue.length === 0 ? (
-                <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No data</div>
+                <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">{t('noData')}</div>
               ) : (
                 <ResponsiveContainer width="100%" height={280}>
                   <BarChart data={categoryRevenue} layout="vertical" barSize={20}>
