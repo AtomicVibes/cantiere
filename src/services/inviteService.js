@@ -20,8 +20,12 @@ export async function inviteUserByEmail({ email, role_id, full_name, phone, job_
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `Invite failed (${response.status})`);
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      message = body.error || body.message || message;
+    } catch {}
+    throw new Error(message);
   }
 
   return response.json();
@@ -44,8 +48,12 @@ export async function deleteUser(userId) {
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body.error || `Delete failed (${response.status})`);
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = await response.json();
+      message = body.error || body.message || message;
+    } catch {}
+    throw new Error(message);
   }
 
   return response.json();
