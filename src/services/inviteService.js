@@ -1,14 +1,21 @@
-import { supabase } from './supabase';
+import { FunctionsHttpError } from '@supabase/supabase-js';
+
+function extractError(err) {
+  if (err instanceof FunctionsHttpError) {
+    const ctx = err.context;
+    console.error(`[${err.name}]`, ctx?.detail || ctx);
+    return ctx?.message || 'Something went wrong. Please try again.';
+  }
+  console.error('[FunctionError]', err);
+  return err.message || 'Something went wrong. Please try again.';
+}
 
 export async function inviteUserByEmail({ email, role_id, full_name, phone, job_title, department }) {
   const { data, error } = await supabase.functions.invoke('invite-user', {
     body: { email, role_id, full_name, phone, job_title, department },
   });
 
-  if (error) {
-    console.error('[invite-user]', error.detail || error);
-    throw new Error(error.message || 'Failed to send invitation. Please try again.');
-  }
+  if (error) throw new Error(extractError(error));
 
   return data;
 }
@@ -18,10 +25,7 @@ export async function deleteUser(userId) {
     body: { user_id: userId },
   });
 
-  if (error) {
-    console.error('[delete-user]', error.detail || error);
-    throw new Error(error.message || 'Failed to delete user. Please try again.');
-  }
+  if (error) throw new Error(extractError(error));
 
   return data;
 }
