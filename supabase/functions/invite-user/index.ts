@@ -43,8 +43,8 @@ serve(async (req) => {
       .eq('id', user.id)
       .single();
 
-    if (profileError || !profile || profile.roles.name !== 'super_admin') {
-      throw new Error('Forbidden: super_admin role required');
+    if (profileError || !profile || !['super_admin', 'admin'].includes(profile.roles.name)) {
+      throw new Error('Forbidden: insufficient permissions');
     }
 
     const { email, role_id, full_name, phone, job_title, department } = await req.json();
