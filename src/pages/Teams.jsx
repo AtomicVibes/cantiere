@@ -13,6 +13,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -48,6 +53,7 @@ export default function Teams() {
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: roles = [] } = useQuery({
@@ -203,13 +209,13 @@ export default function Teams() {
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(member => (
-              <TeamMemberCard key={member.id} member={member} layout="grid" onEdit={openEdit} onDelete={(id) => deleteMutation.mutate(id)} canDelete={canDelete} />
+              <TeamMemberCard key={member.id} member={member} layout="grid" onEdit={openEdit} onDelete={(id) => setDeleteTarget(id)} canDelete={canDelete} />
             ))}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {filtered.map(member => (
-              <TeamMemberCard key={member.id} member={member} layout="list" onEdit={openEdit} onDelete={(id) => deleteMutation.mutate(id)} canDelete={canDelete} />
+              <TeamMemberCard key={member.id} member={member} layout="list" onEdit={openEdit} onDelete={(id) => setDeleteTarget(id)} canDelete={canDelete} />
             ))}
           </div>
         )}
@@ -266,6 +272,30 @@ export default function Teams() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete team member</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this user from the system,
+              including their auth account and profile. They will lose all access.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) deleteMutation.mutate(deleteTarget);
+                setDeleteTarget(null);
+              }}
+            >
+              Yes, delete it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
