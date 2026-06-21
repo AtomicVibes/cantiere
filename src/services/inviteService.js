@@ -18,10 +18,11 @@ async function callFunction(url, payload) {
   });
 
   if (!res.ok) {
-    let detail = null;
-    try { detail = await res.json(); } catch {}
-    console.error(`[${url.split('/').pop()}]`, detail?.detail || detail);
-    throw new Error(detail?.message || 'Something went wrong. Please try again.');
+    const text = await res.text();
+    let detail;
+    try { detail = JSON.parse(text); } catch { detail = text; }
+    console.error(`[${url.split('/').pop()}] ${res.status}`, { payload, response: detail });
+    throw new Error(detail?.message || `Request failed (${res.status})`);
   }
 
   return res.json();
