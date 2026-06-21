@@ -47,7 +47,7 @@ serve(async (req) => {
       throw new Error('Forbidden: super_admin role required');
     }
 
-    const { email, role_id } = await req.json();
+    const { email, role_id, full_name, phone, job_title, department } = await req.json();
     if (!email || !role_id) {
       throw new Error('email and role_id are required');
     }
@@ -55,7 +55,7 @@ serve(async (req) => {
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
-        data: { role_id },
+        data: { role_id, full_name, phone, job_title, department },
         redirectTo: `${supabaseUrl}/auth/v1/callback`,
       }
     );

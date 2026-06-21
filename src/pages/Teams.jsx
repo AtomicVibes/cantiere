@@ -63,13 +63,33 @@ export default function Teams() {
 
   const { data: members = [] } = useQuery({
     queryKey: ['teamMembers'],
-    queryFn: () => base44.entities.TeamMember.list('-created_date'),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, phone, job_title, department, role_id, roles:roles!profiles_role_id_fkey(name)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map(p => ({
+        id: p.id,
+        full_name: p.full_name || '',
+        email: p.email || '',
+        phone: p.phone || '',
+        job_title: p.job_title || '',
+        department: p.department || '',
+        status: 'active',
+        role_id: p.role_id,
+        role_name: p.roles?.name || '',
+      }));
+    },
     initialData: [],
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.TeamMember.create(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teamMembers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    },
     onError: (err) => handleMutationError(err, t, toast),
   });
   const updateMutation = useMutation({
@@ -107,7 +127,14 @@ export default function Teams() {
     } else {
       if (payload.role_id && payload.email) {
         try {
-          await inviteUserByEmail(payload.email, payload.role_id);
+          await inviteUserByEmail({
+            email: payload.email,
+            role_id: payload.role_id,
+            full_name: payload.full_name,
+            phone: payload.phone,
+            job_title: payload.job_title,
+            department: payload.department,
+          });
           toast.success('Invite sent!');
         } catch (inviteErr) {
           setSaving(false);

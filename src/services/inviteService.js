@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 
 const INVITE_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`;
 
-export async function inviteUserByEmail(email, roleId) {
+export async function inviteUserByEmail({ email, role_id, full_name, phone, job_title, department }) {
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
   if (sessionError || !session) {
@@ -15,7 +15,7 @@ export async function inviteUserByEmail(email, roleId) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({ email, role_id: roleId }),
+    body: JSON.stringify({ email, role_id, full_name, phone, job_title, department }),
   });
 
   if (!response.ok) {
