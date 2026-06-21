@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -12,11 +13,17 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
+import { handleMutationError } from '@/lib/rbac';
 
 const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active' };
 
 export default function Teams() {
   const { t } = useTranslation();
+  const { role } = useUserRole();
+  const canCreate = PERMISSIONS.canCreateTeamMember.includes(role);
+  const canDelete = PERMISSIONS.canDeleteTeamMember.includes(role);
   const JOB_TITLES = [
     { value: 'project_manager', label: t('supervisor') },
     { value: 'project_coordinator', label: 'Project Coordinator' },
@@ -50,14 +57,17 @@ export default function Teams() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.TeamMember.create(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teamMembers'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.TeamMember.update(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teamMembers'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.TeamMember.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teamMembers'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
 
   const openEdit = (member) => {
@@ -71,6 +81,10 @@ export default function Teams() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!canCreate && !editMember) {
+      toast.error(t('accessDenied'));
+      return;
+    }
     setSaving(true);
     if (editMember) {
       await updateMutation.mutateAsync({ id: editMember.id, data: form });
@@ -106,25 +120,27 @@ export default function Teams() {
                 <List className="w-4 h-4" />
               </ToggleGroupItem>
             </ToggleGroup>
-            <Button onClick={() => { setEditMember(null); setForm(emptyMember); setShowForm(true); }} className="gap-2">
-              <Plus className="w-4 h-4" /> {t('addMember')}
-            </Button>
+            {canCreate && (
+              <Button onClick={() => { setEditMember(null); setForm(emptyMember); setShowForm(true); }} className="gap-2">
+                <Plus className="w-4 h-4" /> {t('addMember')}
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Members */}
         {filtered.length === 0 ? (
-          <EmptyState icon={Users} title={t('noTeamMembers')} description={t('addFirstTeamMember')} actionLabel={t('addMember')} onAction={() => setShowForm(true)} />
+          <EmptyState icon={Users} title={t('noTeamMembers')} description={t('addFirstTeamMember')} actionLabel={canCreate ? t('addMember') : undefined} onAction={canCreate ? () => setShowForm(true) : undefined} />
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(member => (
-              <TeamMemberCard key={member.id} member={member} layout="grid" onEdit={openEdit} onDelete={(id) => deleteMutation.mutate(id)} />
+              <TeamMemberCard key={member.id} member={member} layout="grid" onEdit={openEdit} onDelete={(id) => deleteMutation.mutate(id)} canDelete={canDelete} />
             ))}
           </div>
         ) : (
           <div className="flex flex-col gap-3">
             {filtered.map(member => (
-              <TeamMemberCard key={member.id} member={member} layout="list" onEdit={openEdit} onDelete={(id) => deleteMutation.mutate(id)} />
+              <TeamMemberCard key={member.id} member={member} layout="list" onEdit={openEdit} onDelete={(id) => deleteMutation.mutate(id)} canDelete={canDelete} />
             ))}
           </div>
         )}

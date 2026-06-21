@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
+import { handleMutationError } from '@/lib/rbac';
 
 const defaultForm = {
   name: '',
@@ -34,6 +38,7 @@ const defaultForm = {
 
 export default function ProjectFormDialog({ open, onOpenChange, project, clients, onSave }) {
   const { t } = useTranslation();
+  const { role } = useUserRole();
   const TYPE_OPTIONS = [
     { value: 'construction', label: t('construction') },
     { value: 'renovation', label: t('renovation') },
@@ -87,6 +92,11 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const perm = isEditing ? PERMISSIONS.canEditProject : PERMISSIONS.canCreateProject;
+    if (!perm.includes(role)) {
+      toast.error(t('accessDenied'));
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -101,7 +111,9 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
       await onSave(payload);
       onOpenChange(false);
     } catch (err) {
-      console.error('Failed to save project:', err);
+      if (!handleMutationError(err, t, toast)) {
+        console.error('Failed to save project:', err);
+      }
     } finally {
       setSaving(false);
     }

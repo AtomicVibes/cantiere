@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import TopBar from '@/components/layout/TopBar';
@@ -17,9 +18,15 @@ import {
   Plus, Loader2
 } from 'lucide-react';
 import { findEntity, getEntity, createEntity, updateEntity } from '@/services/dataService';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
+import { handleMutationError } from '@/lib/rbac';
 
 export default function ProjectDetail() {
   const { t } = useTranslation();
+  const { role } = useUserRole();
+  const canEdit = PERMISSIONS.canEditProject.includes(role);
+  const canAddEntry = PERMISSIONS.canAddTimelineEntry.includes(role);
   const { id } = useParams();
   const queryClient = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
@@ -55,6 +62,7 @@ export default function ProjectDetail() {
       setNewEntry({ title: '', description: '', date: '' });
       setAddingEntry(false);
     },
+    onError: (err) => handleMutationError(err, t, toast),
   });
 
   if (isLoading) {
@@ -94,9 +102,11 @@ export default function ProjectDetail() {
           <Link to="/projects" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" /> {t('backToProjects')}
           </Link>
-          <Button variant="outline" size="sm" onClick={() => setShowEdit(true)} className="gap-2">
-            <Pencil className="w-3.5 h-3.5" /> {t('edit')}
-          </Button>
+          {canEdit && (
+            <Button variant="outline" size="sm" onClick={() => setShowEdit(true)} className="gap-2">
+              <Pencil className="w-3.5 h-3.5" /> {t('edit')}
+            </Button>
+          )}
         </div>
 
         {/* Project Header Card */}
@@ -165,9 +175,11 @@ export default function ProjectDetail() {
           <TabsContent value="timeline" className="space-y-4 mt-4">
             <div className="flex items-center justify-between">
               <h3 className="font-heading font-semibold">{t('projectTimeline')}</h3>
-              <Button size="sm" variant="outline" onClick={() => setAddingEntry(!addingEntry)} className="gap-2">
-                <Plus className="w-3.5 h-3.5" /> {t('addEntry')}
-              </Button>
+              {canAddEntry && (
+                <Button size="sm" variant="outline" onClick={() => setAddingEntry(!addingEntry)} className="gap-2">
+                  <Plus className="w-3.5 h-3.5" /> {t('addEntry')}
+                </Button>
+              )}
             </div>
 
             {addingEntry && (

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -9,6 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Bell, CheckCheck, FolderKanban, Users, DollarSign, AlertTriangle, Clock } from 'lucide-react';
 import { format } from 'date-fns';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
+import { handleMutationError } from '@/lib/rbac';
 
 const TYPE_ICONS = {
   project_update: FolderKanban,
@@ -28,6 +32,8 @@ const PRIORITY_STYLES = {
 export default function Notifications() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { role } = useUserRole();
+  const canManage = PERMISSIONS.canManageNotifications.includes(role);
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications'],
@@ -38,9 +44,14 @@ export default function Notifications() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Notification.update(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
 
   const markAllRead = async () => {
+    if (!canManage) {
+      toast.error(t('accessDenied'));
+      return;
+    }
     const unread = notifications.filter(n => !n.is_read);
     await Promise.all(unread.map(n => base44.entities.Notification.update(n.id, { is_read: true })));
     queryClient.invalidateQueries({ queryKey: ['notifications'] });
@@ -59,7 +70,7 @@ export default function Notifications() {
               <Badge variant="secondary" className="bg-primary/10 text-primary">{unreadCount} unread</Badge>
             )}
           </div>
-          {unreadCount > 0 && (
+          {unreadCount > 0 && canManage && (
             <Button variant="outline" size="sm" onClick={markAllRead} className="gap-2">
               <CheckCheck className="w-4 h-4" /> Mark all read
             </Button>
@@ -93,7 +104,7 @@ export default function Notifications() {
                     </div>
                     {notif.message && <p className="text-sm text-muted-foreground mt-0.5">{notif.message}</p>}
                   </div>
-                  {!notif.is_read && (
+                  {!notif.is_read && canManage && (
                     <Button
                       variant="ghost"
                       size="sm"

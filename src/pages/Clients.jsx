@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -12,11 +13,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2 } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
+import { handleMutationError } from '@/lib/rbac';
 
 const emptyClient = { name: '', company_name: '', email: '', phone: '', address: '', zip_code: '', vat_number: '', notes: '', status: 'active' };
 
 export default function Clients() {
   const { t } = useTranslation();
+  const { role } = useUserRole();
+  const canCreate = PERMISSIONS.canCreateClient.includes(role);
+  const canDelete = PERMISSIONS.canDeleteClient.includes(role);
   const [showForm, setShowForm] = useState(false);
   const [editClient, setEditClient] = useState(null);
   const [form, setForm] = useState(emptyClient);
@@ -33,14 +40,17 @@ export default function Clients() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Client.create(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Client.update(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Client.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
 
   const openEdit = (client) => {
@@ -55,6 +65,10 @@ export default function Clients() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!canCreate && !editClient) {
+      toast.error(t('accessDenied'));
+      return;
+    }
     setSaving(true);
     if (editClient) await updateMutation.mutateAsync({ id: editClient.id, data: form });
     else await createMutation.mutateAsync(form);
@@ -77,13 +91,15 @@ export default function Clients() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder={t('searchClients')} value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <Button onClick={() => { setEditClient(null); setForm(emptyClient); setShowForm(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> {t('addClient')}
-          </Button>
+          {canCreate && (
+            <Button onClick={() => { setEditClient(null); setForm(emptyClient); setShowForm(true); }} className="gap-2">
+              <Plus className="w-4 h-4" /> {t('addClient')}
+            </Button>
+          )}
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyState icon={UserCircle} title={t('noClients')} description={t('addFirstClient')} actionLabel={t('addClient')} onAction={() => setShowForm(true)} />
+          <EmptyState icon={UserCircle} title={t('noClients')} description={t('addFirstClient')} actionLabel={canCreate ? t('addClient') : undefined} onAction={canCreate ? () => setShowForm(true) : undefined} />
         ) : (
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <Table>
@@ -118,7 +134,9 @@ export default function Clients() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(client)}><Pencil className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(client.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(client.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -12,9 +13,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Search, FileText, Upload, ExternalLink, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
+import { handleMutationError } from '@/lib/rbac';
 
 export default function Documents() {
   const { t } = useTranslation();
+  const { role } = useUserRole();
+  const canUpload = PERMISSIONS.canUploadDocument.includes(role);
+  const canDelete = PERMISSIONS.canDeleteDocument.includes(role);
   const DOC_TYPES = [
     { value: 'blueprint', label: t('blueprint') },
     { value: 'contract', label: t('contract') },
@@ -44,14 +51,20 @@ export default function Documents() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Document.create(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Document.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
 
   const handleUpload = async (e) => {
     e.preventDefault();
+    if (!canUpload) {
+      toast.error(t('accessDenied'));
+      return;
+    }
     if (!form.name) return;
     setUploading(true);
     let file_url = '';
@@ -97,13 +110,15 @@ export default function Documents() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => setShowUpload(true)} className="gap-2">
-            <Upload className="w-4 h-4" /> {t('uploadDocument')}
-          </Button>
+          {canUpload && (
+            <Button onClick={() => setShowUpload(true)} className="gap-2">
+              <Upload className="w-4 h-4" /> {t('uploadDocument')}
+            </Button>
+          )}
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyState icon={FileText} title={t('noDocuments')} description={t('uploadFirstDocument')} actionLabel={t('uploadDocument')} onAction={() => setShowUpload(true)} />
+          <EmptyState icon={FileText} title={t('noDocuments')} description={t('uploadFirstDocument')} actionLabel={canUpload ? t('uploadDocument') : undefined} onAction={canUpload ? () => setShowUpload(true) : undefined} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(doc => (
@@ -119,7 +134,9 @@ export default function Documents() {
                         <Button variant="ghost" size="icon" className="h-7 w-7"><ExternalLink className="w-3.5 h-3.5" /></Button>
                       </a>
                     )}
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(doc.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    {canDelete && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(doc.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">

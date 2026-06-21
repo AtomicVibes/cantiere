@@ -10,9 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, FolderKanban } from 'lucide-react';
 import { listEntities, createEntity, updateEntity } from '@/services/dataService';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
 
 export default function Projects() {
   const { t } = useTranslation();
+  const { role } = useUserRole();
+  const canCreate = PERMISSIONS.canCreateProject.includes(role);
   const [showForm, setShowForm] = useState(false);
   const [editProject, setEditProject] = useState(null);
   const [search, setSearch] = useState('');
@@ -86,10 +90,12 @@ export default function Projects() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => { setEditProject(null); setShowForm(true); }} className="gap-2">
-            <Plus className="w-4 h-4" />
-            {t('newProject')}
-          </Button>
+          {canCreate && (
+            <Button onClick={() => { setEditProject(null); setShowForm(true); }} className="gap-2">
+              <Plus className="w-4 h-4" />
+              {t('newProject')}
+            </Button>
+          )}
         </div>
 
         {/* Project Grid */}
@@ -98,8 +104,8 @@ export default function Projects() {
             icon={FolderKanban}
             title={t('noProjectsFound')}
             description={t('createFirstProject')}
-            actionLabel={t('newProject')}
-            onAction={() => setShowForm(true)}
+            actionLabel={canCreate ? t('newProject') : undefined}
+            onAction={canCreate ? () => setShowForm(true) : undefined}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

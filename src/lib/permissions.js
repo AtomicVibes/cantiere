@@ -1,0 +1,28 @@
+export const ROLES = {
+  SUPER_ADMIN: 'super_admin',
+  ADMIN: 'admin',
+  MANAGER: 'manager',
+  CLIENT: 'client',
+};
+
+export const PERMISSIONS = {
+  canCreateProject: ['super_admin', 'admin'],
+  canEditProject: ['super_admin', 'admin', 'manager'],
+  canDeleteProject: ['super_admin'],
+  canCreateTeamMember: ['super_admin', 'admin'],
+  canEditTeamMember: ['super_admin', 'admin'],
+  canDeleteTeamMember: ['super_admin'],
+  canCreateClient: ['super_admin', 'admin'],
+  canEditClient: ['super_admin', 'admin', 'manager'],
+  canDeleteClient: ['super_admin'],
+  canCreateInvoice: ['super_admin', 'admin', 'manager'],
+  canEditInvoice: ['super_admin', 'admin', 'manager'],
+  canDeleteInvoice: ['super_admin'],
+  canUploadDocument: ['super_admin', 'admin', 'manager'],
+  canDeleteDocument: ['super_admin'],
+  canAddTimelineEntry: ['super_admin', 'admin', 'manager'],
+  canManageSettings: ['super_admin', 'admin'],
+  canManageNotifications: ['super_admin', 'admin', 'manager'],
+  canViewFinance: ['super_admin', 'admin', 'manager'],
+  canViewReports: ['super_admin', 'admin', 'manager'],
+};

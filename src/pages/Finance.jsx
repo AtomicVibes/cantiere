@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
@@ -14,6 +15,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
+import { handleMutationError } from '@/lib/rbac';
 
 const emptyInvoice = {
   invoice_number: '', client_id: '', project_id: '', category: 'miscellaneous',
@@ -23,6 +27,9 @@ const emptyInvoice = {
 
 export default function Finance() {
   const { t } = useTranslation();
+  const { role } = useUserRole();
+  const canCreate = PERMISSIONS.canCreateInvoice.includes(role);
+  const canDelete = PERMISSIONS.canDeleteInvoice.includes(role);
   const CATEGORIES = [
     { value: 'materials', label: 'Materials' },
     { value: 'labor', label: 'Labor' },
@@ -63,14 +70,17 @@ export default function Finance() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Invoice.create(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Invoice.update(id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Invoice.delete(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+    onError: (err) => handleMutationError(err, t, toast),
   });
 
   const openEdit = (inv) => {
@@ -86,6 +96,10 @@ export default function Finance() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    if (!canCreate && !editInvoice) {
+      toast.error(t('accessDenied'));
+      return;
+    }
     setSaving(true);
     const data = { ...form, amount: Number(form.amount) || 0, tax: Number(form.tax) || 0, total: Number(form.total) || 0 };
     if (editInvoice) await updateMutation.mutateAsync({ id: editInvoice.id, data });
@@ -130,13 +144,15 @@ export default function Finance() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => { setEditInvoice(null); setForm(emptyInvoice); setShowForm(true); }} className="gap-2">
-            <Plus className="w-4 h-4" /> {t('newInvoice')}
-          </Button>
+          {canCreate && (
+            <Button onClick={() => { setEditInvoice(null); setForm(emptyInvoice); setShowForm(true); }} className="gap-2">
+              <Plus className="w-4 h-4" /> {t('newInvoice')}
+            </Button>
+          )}
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyState icon={Receipt} title={t('noDocuments')} description="Create your first invoice" actionLabel={t('newInvoice')} onAction={() => setShowForm(true)} />
+          <EmptyState icon={Receipt} title={t('noDocuments')} description="Create your first invoice" actionLabel={canCreate ? t('newInvoice') : undefined} onAction={canCreate ? () => setShowForm(true) : undefined} />
         ) : (
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <Table>
@@ -163,7 +179,9 @@ export default function Finance() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(inv)}><Pencil className="w-3.5 h-3.5" /></Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(inv.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        {canDelete && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(inv.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

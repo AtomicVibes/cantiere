@@ -24,7 +24,7 @@ const JOB_TITLES = [
 
 const getInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??';
 
-export default function TeamMemberCard({ member, layout = 'grid', onEdit, onDelete }) {
+export default function TeamMemberCard({ member, layout = 'grid', onEdit, onDelete, canDelete }) {
   const jobLabel = JOB_TITLES.find(j => j.value === member.job_title)?.label || member.job_title;
   const waLink = member.phone ? `https://wa.me/${member.phone.replace(/\D/g, '')}` : null;
 
@@ -64,9 +64,11 @@ export default function TeamMemberCard({ member, layout = 'grid', onEdit, onDele
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(member)}>
             <Pencil className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => onDelete(member.id)}>
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+          {canDelete && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => onDelete(member.id)}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -91,9 +93,11 @@ export default function TeamMemberCard({ member, layout = 'grid', onEdit, onDele
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(member)}>
             <Pencil className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(member.id)}>
-            <Trash2 className="w-3.5 h-3.5" />
-          </Button>
+          {canDelete && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => onDelete(member.id)}>
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </div>
       </div>
 
