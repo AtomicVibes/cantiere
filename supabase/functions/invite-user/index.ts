@@ -50,6 +50,14 @@ serve(async (req) => {
       return error('Please select a role for the new user.', 'Missing role_id field');
     }
 
+    const userMetadata = {
+      full_name: full_name || '',
+      phone: phone || '',
+      job_title: job_title || '',
+      department: department || '',
+      role_id,
+    };
+
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return error('Authentication required', 'Missing or invalid Authorization header');
@@ -83,7 +91,7 @@ serve(async (req) => {
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,
       {
-        data: { role_id, full_name, phone, job_title, department },
+        data: userMetadata,
         redirectTo: `${supabaseUrl}/auth/v1/callback`,
       }
     );
