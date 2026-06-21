@@ -17,7 +17,7 @@ import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
-import { inviteUserByEmail } from '@/services/inviteService';
+import { inviteUserByEmail, deleteUser } from '@/services/inviteService';
 
 const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active', role_id: '' };
 
@@ -98,9 +98,15 @@ export default function Teams() {
     onError: (err) => handleMutationError(err, t, toast),
   });
   const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.TeamMember.delete(id),
+    mutationFn: async (id) => {
+      await deleteUser(id);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teamMembers'] }),
-    onError: (err) => handleMutationError(err, t, toast),
+    onError: (err) => {
+      if (!handleMutationError(err, t, toast)) {
+        toast.error(err.message);
+      }
+    },
   });
 
   const openEdit = (member) => {
@@ -124,6 +130,16 @@ export default function Teams() {
     if (editMember) {
       delete payload.role_id;
       await updateMutation.mutateAsync({ id: editMember.id, data: payload });
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: payload.full_name,
+          phone: payload.phone,
+          job_title: payload.job_title,
+          department: payload.department,
+        })
+        .eq('id', editMember.id);
+      if (updateError) throw updateError;
     } else {
       if (payload.role_id && payload.email) {
         try {
