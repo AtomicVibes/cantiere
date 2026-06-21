@@ -20,38 +20,28 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useTeamFormFields } from '@/hooks/useFormSchema';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
+import { useDirection } from '@/i18n/LanguageProvider';
 import { inviteUserByEmail, deleteUser } from '@/services/inviteService';
 
 const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active', role_id: '' };
 
 export default function Teams() {
   const { t } = useTranslation();
+  const { dir } = useDirection();
   const { role, isSuperAdmin } = useUserRole();
   const canCreate = PERMISSIONS.canCreateTeamMember.includes(role);
   const canDelete = PERMISSIONS.canDeleteTeamMember.includes(role);
-  const JOB_TITLES = [
-    { value: 'project_manager', label: t('supervisor') },
-    { value: 'project_coordinator', label: 'Project Coordinator' },
-    { value: 'supervisor', label: t('supervisor') },
-    { value: 'architect', label: t('architect') },
-    { value: 'civil_engineer', label: t('civilEngineer') },
-    { value: 'interior_designer', label: t('interiorDesigner') },
-    { value: 'technician', label: t('technician') },
-    { value: 'accountant', label: t('accountant') },
-    { value: 'procurement_officer', label: t('procurementOfficer') },
-    { value: 'supplier', label: t('supplier') },
-    { value: 'contractor', label: t('contractor') },
-    { value: 'safety_officer', label: 'Safety Officer' },
-    { value: 'surveyor', label: 'Surveyor' },
-    { value: 'consultant', label: 'Consultant' },
-  ];
+  const { fields, jobTitleOptions, statusOptions } = useTeamFormFields();
   const [showForm, setShowForm] = useState(false);
   const [editMember, setEditMember] = useState(null);
   const [form, setForm] = useState(emptyMember);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
+  const [inviteMode, setInviteMode] = useState('direct');
+  const [friendlyError, setFriendlyError] = useState('');
   const [viewMode, setViewMode] = useState('grid');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const queryClient = useQueryClient();
@@ -147,20 +137,21 @@ export default function Teams() {
         .eq('id', editMember.id);
       if (updateError) throw updateError;
     } else {
-      if (payload.role_id && payload.email) {
+      if (payload.email) {
         try {
-          await inviteUserByEmail({
+          const { user } = await inviteUserByEmail({
             email: payload.email,
             role_id: payload.role_id,
             full_name: payload.full_name,
             phone: payload.phone,
             job_title: payload.job_title,
             department: payload.department,
+            mode: inviteMode,
           });
-          toast.success('Invite sent!');
+          toast.success(inviteMode === 'direct' ? `User created (${user?.email})` : 'Invite sent!');
         } catch (inviteErr) {
           setSaving(false);
-          toast.error(inviteErr.message);
+          setFriendlyError(inviteErr.message);
           return;
         }
       }
@@ -222,46 +213,69 @@ export default function Teams() {
       </div>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); if (!v) setEditMember(null); }}>
+      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); setFriendlyError(''); if (!v) setEditMember(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="font-heading">{editMember ? t('editMember') : t('addMember')}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSave} className="space-y-4">
-            <div><Label>Full Name *</Label><Input value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
-              <div><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+          {friendlyError && (
+            <div className="bg-destructive/10 text-destructive text-sm rounded-lg px-4 py-3 border border-destructive/20" dir={dir}>
+              {friendlyError}
             </div>
-            <div className="grid grid-cols-2 gap-4">
+          )}
+          <form onSubmit={handleSave} className="space-y-4" dir={dir}>
+            {fields.filter(f => editMember ? f.key !== 'role_id' : true).map(field => {
+              if (field.type === 'select') {
+                let options = [];
+                if (field.key === 'job_title') options = jobTitleOptions;
+                else if (field.key === 'role_id') options = roles.map(r => ({ value: r.id, label: r.name.replace(/_/g, ' ') }));
+                else if (field.key === 'status') options = statusOptions;
+
+                if (field.key === 'role_id' && !isSuperAdmin) return null;
+
+                return (
+                  <div key={field.key}>
+                    <Label>{field.label}</Label>
+                    <Select value={form[field.key]} onValueChange={v => setForm({...form, [field.key]: v})}>
+                      <SelectTrigger><SelectValue placeholder={t('select')} /></SelectTrigger>
+                      <SelectContent>
+                        {options.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                );
+              }
+              return (
+                <div key={field.key}>
+                  <Label>{field.label}{field.required ? ' *' : ''}</Label>
+                  <Input
+                    type={field.type}
+                    value={form[field.key] || ''}
+                    onChange={e => setForm({...form, [field.key]: e.target.value})}
+                    required={field.required}
+                  />
+                </div>
+              );
+            })}
+            {!editMember && (
               <div>
-                <Label>Job Title</Label>
-                <Select value={form.job_title} onValueChange={v => setForm({...form, job_title: v})}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{JOB_TITLES.map(j => <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div><Label>Department</Label><Input value={form.department} onChange={e => setForm({...form, department: e.target.value})} /></div>
-            </div>
-            {isSuperAdmin && !editMember && (
-              <div>
-                <Label>Role</Label>
-                <Select value={form.role_id} onValueChange={v => setForm({...form, role_id: v})}>
-                  <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
-                  <SelectContent>
-                    {roles.map(r => <SelectItem key={r.id} value={r.id}>{r.name.replace(/_/g, ' ')}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Label>{t('provisioning')}</Label>
+                <select
+                  value={inviteMode}
+                  onChange={e => setInviteMode(e.target.value)}
+                  className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="direct">{t('directCreation')}</option>
+                  <option value="invite">{t('sendInvitation')}</option>
+                </select>
               </div>
             )}
-            <div>
-              <Label>Status</Label>
+            <div key="status">
+              <Label>{t('status')}</Label>
               <Select value={form.status} onValueChange={v => setForm({...form, status: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('select')} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="on_leave">On Leave</SelectItem>
+                  {statusOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

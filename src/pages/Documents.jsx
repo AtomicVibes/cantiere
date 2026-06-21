@@ -14,26 +14,18 @@ import { Badge } from '@/components/ui/badge';
 import { Search, FileText, Upload, ExternalLink, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useDocumentFormFields } from '@/hooks/useFormSchema';
+import { useDirection } from '@/i18n/LanguageProvider';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 
 export default function Documents() {
   const { t } = useTranslation();
+  const { dir } = useDirection();
   const { role } = useUserRole();
   const canUpload = PERMISSIONS.canUploadDocument.includes(role);
   const canDelete = PERMISSIONS.canDeleteDocument.includes(role);
-  const DOC_TYPES = [
-    { value: 'blueprint', label: t('blueprint') },
-    { value: 'contract', label: t('contract') },
-    { value: 'permit', label: t('permit') },
-    { value: 'invoice', label: t('invoice') },
-    { value: 'photo', label: t('photo') },
-    { value: 'video', label: t('video') },
-    { value: 'audio_note', label: t('audioNote') },
-    { value: 'cad_file', label: t('cadFile') },
-    { value: 'report', label: t('report') },
-    { value: 'other', label: t('other') },
-  ];
+  const { fields, typeOptions } = useDocumentFormFields();
   const [showUpload, setShowUpload] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'other', notes: '' });
   const [file, setFile] = useState(null);
@@ -154,20 +146,21 @@ export default function Documents() {
       <Dialog open={showUpload} onOpenChange={setShowUpload}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-heading">{t('uploadDocument')}</DialogTitle></DialogHeader>
-          <form onSubmit={handleUpload} className="space-y-4">
-            <div><Label>Document Name *</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required /></div>
+          <form onSubmit={handleUpload} className="space-y-4" dir={dir}>
+            {fields.filter(f => f.key !== 'type').map(f => (
+              <div key={f.key}>
+                <Label>{f.label}{f.required ? ' *' : ''}</Label>
+                <Input type={f.type} value={form[f.key] || ''} onChange={e => setForm({...form, [f.key]: e.target.value})} required={f.required} />
+              </div>
+            ))}
             <div>
-              <Label>Type</Label>
+              <Label>{t('type')}</Label>
               <Select value={form.type} onValueChange={v => setForm({...form, type: v})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{DOC_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{typeOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>File</Label>
-              <Input type="file" onChange={e => setFile(e.target.files[0])} />
-            </div>
-            <div><Label>Notes</Label><Input value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
+            <div><Label>{t('file')}</Label><Input type="file" onChange={e => setFile(e.target.files[0])} /></div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowUpload(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : t('upload')}</Button>

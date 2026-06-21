@@ -16,6 +16,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useInvoiceFormFields } from '@/hooks/useFormSchema';
+import { useDirection } from '@/i18n/LanguageProvider';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 
@@ -27,27 +29,11 @@ const emptyInvoice = {
 
 export default function Finance() {
   const { t } = useTranslation();
+  const { dir } = useDirection();
   const { role } = useUserRole();
   const canCreate = PERMISSIONS.canCreateInvoice.includes(role);
   const canDelete = PERMISSIONS.canDeleteInvoice.includes(role);
-  const CATEGORIES = [
-    { value: 'materials', label: 'Materials' },
-    { value: 'labor', label: 'Labor' },
-    { value: 'equipment', label: 'Equipment' },
-    { value: 'architecture', label: 'Architecture' },
-    { value: 'engineering', label: 'Engineering' },
-    { value: 'transport', label: 'Transport' },
-    { value: 'utilities', label: 'Utilities' },
-    { value: 'miscellaneous', label: 'Miscellaneous' },
-  ];
-
-  const STATUSES = [
-    { value: 'draft', label: t('draft') },
-    { value: 'pending', label: t('pending') },
-    { value: 'paid', label: 'Paid' },
-    { value: 'partially_paid', label: 'Partially Paid' },
-    { value: 'overdue', label: t('overdue') },
-  ];
+  const { fields, categoryOptions, statusOptions } = useInvoiceFormFields();
   const [showForm, setShowForm] = useState(false);
   const [editInvoice, setEditInvoice] = useState(null);
   const [form, setForm] = useState(emptyInvoice);
@@ -195,48 +181,53 @@ export default function Finance() {
       <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); if (!v) setEditInvoice(null); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-heading">{editInvoice ? t('editInvoice') : t('newInvoice')}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSave} className="space-y-4">
+          <form onSubmit={handleSave} className="space-y-4" dir={dir}>
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Invoice # *</Label><Input value={form.invoice_number} onChange={e => setForm({...form, invoice_number: e.target.value})} required /></div>
-              <div><Label>Supplier</Label><Input value={form.supplier} onChange={e => setForm({...form, supplier: e.target.value})} /></div>
+              {fields.filter(f => ['invoice_number', 'supplier'].includes(f.key)).map(f => (
+                <div key={f.key}><Label>{f.label}{f.required ? ' *' : ''}</Label><Input type={f.type} value={form[f.key] || ''} onChange={e => setForm({...form, [f.key]: e.target.value})} required={f.required} /></div>
+              ))}
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Client</Label>
-                <Select value={form.client_id} onValueChange={v => setForm({...form, client_id: v})}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Project</Label>
-                <Select value={form.project_id} onValueChange={v => setForm({...form, project_id: v})}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>{projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
+              {fields.filter(f => ['client_id', 'project_id'].includes(f.key)).map(f => {
+                const data = f.key === 'client_id' ? clients : projects;
+                return (
+                  <div key={f.key}>
+                    <Label>{f.label}</Label>
+                    <Select value={form[f.key]} onValueChange={v => setForm({...form, [f.key]: v})}>
+                      <SelectTrigger><SelectValue placeholder={t('select')} /></SelectTrigger>
+                      <SelectContent>{data.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                );
+              })}
             </div>
             <div className="grid grid-cols-3 gap-4">
-              <div><Label>Amount (€)</Label><Input type="number" value={form.amount} onChange={e => setForm({...form, amount: e.target.value, total: String(Number(e.target.value) + Number(form.tax || 0))})} /></div>
-              <div><Label>Tax (€)</Label><Input type="number" value={form.tax} onChange={e => setForm({...form, tax: e.target.value, total: String(Number(form.amount || 0) + Number(e.target.value))})} /></div>
-              <div><Label>Total (€)</Label><Input type="number" value={form.total} onChange={e => setForm({...form, total: e.target.value})} /></div>
+              {fields.filter(f => ['amount', 'tax', 'total'].includes(f.key)).map(f => (
+                <div key={f.key}><Label>{f.label}</Label><Input type="number" value={form[f.key] || ''} onChange={e => {
+                  const newForm = { ...form, [f.key]: e.target.value };
+                  if (f.key === 'amount') newForm.total = String(Number(e.target.value) + Number(form.tax || 0));
+                  if (f.key === 'tax') newForm.total = String(Number(form.amount || 0) + Number(e.target.value));
+                  setForm(newForm);
+                }} /></div>
+              ))}
             </div>
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <Label>Category</Label>
+                <Label>{t('category')}</Label>
                 <Select value={form.category} onValueChange={v => setForm({...form, category: v})}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
+                  <SelectContent>{categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>Issue Date</Label><Input type="date" value={form.issue_date} onChange={e => setForm({...form, issue_date: e.target.value})} /></div>
-              <div><Label>Due Date</Label><Input type="date" value={form.due_date} onChange={e => setForm({...form, due_date: e.target.value})} /></div>
+              {fields.filter(f => ['issue_date', 'due_date'].includes(f.key)).map(f => (
+                <div key={f.key}><Label>{f.label}</Label><Input type="date" value={form[f.key] || ''} onChange={e => setForm({...form, [f.key]: e.target.value})} /></div>
+              ))}
             </div>
             <div>
-              <Label>Payment Status</Label>
+              <Label>{t('paymentStatus')}</Label>
               <Select value={form.payment_status} onValueChange={v => setForm({...form, payment_status: v})}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+                <SelectContent>{statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <DialogFooter>

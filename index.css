@@ -98,6 +98,27 @@
   }
 }
 
+/* RTL utility: flip SVG icons horizontally in RTL */
+html[dir="rtl"] .flip-icon {
+  transform: scaleX(-1);
+}
+
+/* RTL-aware padding: use logical properties */
+html[dir="rtl"] .pl-9 {
+  padding-left: 0;
+  padding-right: 2.25rem;
+}
+
+html[dir="rtl"] .left-3 {
+  left: auto;
+  right: 0.75rem;
+}
+
+/* RTL text alignment for form labels */
+html[dir="rtl"] label {
+  text-align: right;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
