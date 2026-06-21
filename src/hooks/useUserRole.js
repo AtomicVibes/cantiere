@@ -22,7 +22,7 @@ export function useUserRole() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('roles(name)')
+          .select('roles:roles!profiles_role_id_fkey(name)')
           .eq('id', user.id)
           .single();
 
