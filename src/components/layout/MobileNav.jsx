@@ -1,9 +1,10 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import Logo from '@/components/Logo';
 import {
   LayoutDashboard, FolderKanban, Users, DollarSign,
-  Calendar, Menu, HardHat
+  Calendar, Menu
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import Sidebar from './Sidebar';
@@ -23,10 +24,8 @@ export default function MobileNav() {
     <>
       <div className="fixed top-0 left-0 right-0 h-14 bg-card border-b border-border z-40 flex items-center justify-between px-4">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <HardHat className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="font-display font-bold">BuildPro</span>
+          <Logo className="w-6 h-6 text-primary" />
+          <span className="font-display font-bold">Cantiere</span>
         </div>
         <Sheet>
           <SheetTrigger asChild>

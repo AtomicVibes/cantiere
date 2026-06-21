@@ -29,16 +29,18 @@ async function serveStaticOrSpa(request, url, env) {
 }
 
 async function handleAuthCallback(request, url, env) {
-  const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
-  const supabaseKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
+  const { SUPABASE_URL: supabaseUrl, SUPABASE_ANON_KEY: supabaseKey } = env;
+
+  if (!supabaseUrl) {
+    throw new Error('Missing SUPABASE_URL binding — set it via "wrangler pages secret put SUPABASE_URL" or in the Cloudflare Pages dashboard');
+  }
+  if (!supabaseKey) {
+    throw new Error('Missing SUPABASE_ANON_KEY binding — set it via "wrangler pages secret put SUPABASE_ANON_KEY" or in the Cloudflare Pages dashboard');
+  }
 
   const code = url.searchParams.get('code');
   if (!code) {
     return Response.redirect(new URL('/login?error=missing_code', url.origin), 302);
-  }
-
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase credentials');
   }
 
   const tokenRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=authorization_code`, {

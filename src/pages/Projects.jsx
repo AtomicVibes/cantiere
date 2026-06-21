@@ -19,7 +19,7 @@ export default function Projects() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => listEntities('projects', { order: { column: 'created_date', direction: 'desc' } }),
+    queryFn: () => listEntities('projects', { order: { column: 'created_at', direction: 'desc' } }),
     initialData: [],
   });
   const { data: clients = [] } = useQuery({
@@ -48,7 +48,7 @@ export default function Projects() {
     setEditProject(null);
   };
 
-  const filtered = projects.filter(p => {
+  const filtered = (projects ?? []).filter(p => {
     const matchesSearch = !search || p.name?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     return matchesSearch && matchesStatus;

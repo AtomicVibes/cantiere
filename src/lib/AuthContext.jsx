@@ -2,6 +2,8 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import { supabase } from '@/services/supabase';
 import { signOut as supabaseSignOut } from '@/services/authService';
 import { appParams } from '@/lib/app-params';
+import i18n from '@/i18n';
+import { getProfileLanguage } from '@/services/profileService';
 
 const AuthContext = createContext();
 
@@ -18,20 +20,42 @@ export const AuthProvider = ({ children }) => {
     checkAppState();
 
     // Get current session on mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       if (currentUser) {
         setUser(currentUser);
         setIsAuthenticated(true);
+
+        try {
+          const preferredLang = await getProfileLanguage(currentUser.id);
+          if (preferredLang) {
+            await i18n.changeLanguage(preferredLang);
+          }
+        } catch {
+          // Defaults to 'en' via i18n fallbackLng
+        }
+
         setIsLoadingAuth(false);
         setAuthChecked(true);
       }
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       setIsAuthenticated(!!currentUser);
+
+      if (currentUser) {
+        try {
+          const preferredLang = await getProfileLanguage(currentUser.id);
+          if (preferredLang) {
+            await i18n.changeLanguage(preferredLang);
+          }
+        } catch {
+          // Defaults to 'en' via i18n fallbackLng
+        }
+      }
+
       setIsLoadingAuth(false);
       setAuthChecked(true);
     });

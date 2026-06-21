@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/services/supabase';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,13 +13,9 @@ import { toast } from 'sonner';
 import TopBar from '@/components/layout/TopBar';
 import { User, Palette, Bell } from 'lucide-react';
 
-// FLAG: Supabase user object shape differs from Base44 user object.
-// Base44 user: full_name, email, phone, department, role, preferences (top-level)
-// Supabase user: email, user_metadata (full_name, etc.), and custom fields would be in user_metadata or a separate profile table.
-// The handleSave now uses supabase.auth.updateUser() to update user_metadata.
-
 export default function Settings() {
   const { user } = useAuth();
+  const { i18n } = useTranslation();
   const [profile, setProfile] = useState({
     phone: '',
     department: '',
@@ -29,7 +27,6 @@ export default function Settings() {
   });
   const [saving, setSaving] = useState(false);
 
-  // Apply theme to <html> element
   const applyTheme = (theme) => {
     const root = document.documentElement;
     if (theme === 'dark') {
@@ -37,16 +34,9 @@ export default function Settings() {
     } else if (theme === 'light') {
       root.classList.remove('dark');
     } else {
-      // system
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       prefersDark ? root.classList.add('dark') : root.classList.remove('dark');
     }
-  };
-
-  // Apply language to <html> lang attribute
-  const applyLanguage = (lang) => {
-    document.documentElement.lang = lang;
-    localStorage.setItem('app-language', lang);
   };
 
   useEffect(() => {
@@ -63,11 +53,9 @@ export default function Settings() {
         email_notifications: user.user_metadata?.preferences?.email_notifications !== false,
       });
       applyTheme(savedTheme);
-      applyLanguage(savedLang);
     }
   }, [user]);
 
-  // Listen for system theme changes when theme is 'system'
   useEffect(() => {
     if (preferences.theme !== 'system') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -86,23 +74,45 @@ export default function Settings() {
 
   const handleLanguageChange = (v) => {
     setPreferences(p => ({ ...p, language: v }));
-    applyLanguage(v);
+    i18n.changeLanguage(v);
   };
 
   const handleSave = async () => {
     setSaving(true);
-    const { error } = await supabase.auth.updateUser({
-      data: {
-        phone: profile.phone,
-        department: profile.department,
-        preferences,
-      }
-    });
-    setSaving(false);
-    if (error) {
-      toast.error('Failed to save settings');
-    } else {
+
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !authUser) {
+      console.error('Auth guard failed — no authenticated user');
+      toast.error('You must be logged in to save settings');
+      setSaving(false);
+      return;
+    }
+
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          phone: profile.phone,
+          department: profile.department,
+          preferences,
+        }
+      });
+
+      const { error: upsertError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: authUser.id,
+          preferred_language: preferences.language,
+        });
+
+      if (upsertError) throw upsertError;
+
       toast.success('Settings saved');
+    } catch (error) {
+      toast.error('Failed to save settings');
+      console.error('Settings save error:', error);
+    } finally {
+      setSaving(false);
     }
   };
 

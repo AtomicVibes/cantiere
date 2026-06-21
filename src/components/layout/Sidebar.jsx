@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/services/authService';
+import Logo from '@/components/Logo';
 import {
   LayoutDashboard, FolderKanban, Users, UserCircle,
   Bell, DollarSign, Calendar, BarChart3, FileText,
-  Settings, ChevronLeft, ChevronRight, Bolt, LogOut
+  Settings, ChevronLeft, ChevronRight, LogOut
 } from 'lucide-react';
 
 const navItems = [
@@ -41,9 +42,7 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
     >
       <div className="h-16 flex items-center px-4 border-b border-border">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-            <Bolt className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <Logo className="w-7 h-7 text-primary flex-shrink-0" />
           {!collapsed && (
             <span className="font-display font-bold text-lg truncate">Cantiere</span>
           )}

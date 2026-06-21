@@ -1,6 +1,6 @@
 # env
 .env
-.env.*
+.env.*.local
 
 # dependencies
 node_modules
@@ -35,3 +35,6 @@ lerna-debug.log*
 
 # Cloudflare Wrangler local state
 .wrangler/
+
+# Supabase local state
+supabase/.temp/

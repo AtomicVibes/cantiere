@@ -3,13 +3,15 @@ import { resetPassword } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Loader2 } from "lucide-react";
+import { Lock, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import AuthLayout from "@/components/AuthLayout";
 
 export default function ResetPassword() {
   const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -41,15 +43,24 @@ export default function ResetPassword() {
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
             <Input
               id="password"
-              type="password"
+              type={showNewPassword ? "text" : "password"}
               autoComplete="new-password"
               autoFocus
               placeholder="••••••••"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="pl-10 h-12"
+              className="pl-10 pr-10 h-12"
               required
             />
+            <button
+              type="button"
+              onClick={() => setShowNewPassword(!showNewPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label={showNewPassword ? "Hide password" : "Show password"}
+              aria-pressed={showNewPassword}
+            >
+              {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
           </div>
         </div>
         <div className="space-y-2">
@@ -58,14 +69,23 @@ export default function ResetPassword() {
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
             <Input
               id="confirm"
-              type="password"
+              type={showConfirmPassword ? "text" : "password"}
               autoComplete="new-password"
               placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="pl-10 h-12"
+              className="pl-10 pr-10 h-12"
               required
             />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              aria-pressed={showConfirmPassword}
+            >
+              {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
           </div>
         </div>
         <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
