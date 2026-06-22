@@ -14,6 +14,7 @@ export const RoleSelector = ({ userId, currentRoleId, onUpdate }) => {
   }, []);
 
   const handleRoleChange = async (newRoleId) => {
+    if (!userId) return;
     setLoading(true);
     await supabase.from('profiles').update({ role_id: newRoleId }).eq('id', userId);
     onUpdate();

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { signUpWithEmail, signInWithGoogle } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
 
 export default function Register() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -27,14 +28,14 @@ export default function Register() {
     const result = await signUpWithEmail(email, password);
     setLoading(false);
     if (result) {
-      window.location.href = "/login?message=check-email";
+      navigate("/login?message=check-email");
     } else {
       toast.error("Failed to create account. Please try again.");
     }
   };
 
   const handleGoogle = async () => {
-    await signInWithGoogle(window.location.origin + "/");
+    await signInWithGoogle();
   };
 
   return (

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useTranslation } from 'react-i18next';
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { signInWithEmail, signInWithGoogle } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import GoogleIcon from "@/components/GoogleIcon";
 
 export default function Login() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,14 +24,14 @@ export default function Login() {
     const result = await signInWithEmail(email, password);
     setLoading(false);
     if (result) {
-      window.location.href = "/";
+      navigate("/");
     } else {
       toast.error(t('invalidEmailOrPassword'));
     }
   };
 
   const handleGoogle = async () => {
-    await signInWithGoogle(window.location.origin + "/");
+    await signInWithGoogle();
   };
 
   return (

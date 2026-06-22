@@ -38,5 +38,6 @@ export async function inviteClientByEmail({ email, full_name, phone, mode }) {
 }
 
 export async function deleteUser(userId) {
+  if (!userId) throw new Error('userId is required');
   return callFunction(DELETE_URL, { user_id: userId });
 }
