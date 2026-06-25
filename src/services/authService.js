@@ -14,7 +14,7 @@ const handleAuthCall = async (operation) => {
   }
 };
 
-export const signInWithGoogle = async (redirectTo = window.location.origin + '/') => {
+export const signInWithGoogle = async (redirectTo = window.location.origin + '/auth/callback') => {
   return handleAuthCall(async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
