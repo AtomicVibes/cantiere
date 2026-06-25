@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 const INVITE_USER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`;
 const INVITE_CLIENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-client`;
 const DELETE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`;
+const CREATE_CLIENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-client`;
 
 async function callFunction(url, payload) {
   const { data: { session } } = await supabase.auth.getSession();
@@ -33,8 +34,8 @@ export async function inviteUserByEmail({ email, role_id, full_name, phone, job_
   return callFunction(INVITE_USER_URL, { email, role_id, full_name, phone, job_title, department, mode });
 }
 
-export async function inviteClientByEmail({ email, full_name, phone, mode }) {
-  return callFunction(INVITE_CLIENT_URL, { email, full_name, phone, mode });
+export async function createClient({ email, password, full_name, phone }) {
+  return callFunction(CREATE_CLIENT_URL, { email, password, full_name, phone });
 }
 
 export async function deleteUser(userId) {
