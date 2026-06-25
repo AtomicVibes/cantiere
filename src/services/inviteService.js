@@ -1,7 +1,6 @@
 import { supabase } from './supabase';
 
 const INVITE_USER_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`;
-const INVITE_CLIENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-client`;
 const DELETE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`;
 const CREATE_CLIENT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-client`;
 
