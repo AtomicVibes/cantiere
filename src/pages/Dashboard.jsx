@@ -20,21 +20,27 @@ export default function Dashboard() {
     queryFn: () => listEntities('projects'),
     initialData: [],
   });
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => listEntities('clients'),
-    initialData: [],
-  });
-  const { data: teamMembers = [] } = useQuery({
-    queryKey: ['dashboardTeamMembers'],
+  const { data: clientCount = 0 } = useQuery({
+    queryKey: ['clientCount'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, roles:roles!profiles_role_id_fkey(name)');
+      const { count, error } = await supabase
+        .from('clients')
+        .select('*', { count: 'exact', head: true });
       if (error) throw error;
-      return (data ?? []).filter(p => p.roles?.name !== 'super_admin');
+      return count ?? 0;
     },
-    initialData: [],
+    initialData: 0,
+  });
+  const { data: teamMemberCount = 0 } = useQuery({
+    queryKey: ['teamMemberCount'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('team_members')
+        .select('*', { count: 'exact', head: true });
+      if (error) throw error;
+      return count ?? 0;
+    },
+    initialData: 0,
   });
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
@@ -65,8 +71,8 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title={t('teamMembers')} value={teamMembers.length} icon={Users} color="violet" />
-          <StatCard title={t('clients')} value={clients.length} icon={UserCircle} color="blue" />
+          <StatCard title={t('teamMembers')} value={teamMemberCount} icon={Users} color="violet" />
+          <StatCard title={t('clients')} value={clientCount} icon={UserCircle} color="blue" />
           <StatCard
             title={t('revenue')}
             value={`€${totalRevenue.toLocaleString()}`}
