@@ -2,5 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "cantiere",
   "pages_build_output_dir": "dist",
-  "compatibility_date": "2026-06-20"
+  "compatibility_date": "2026-06-20",
+  "vars": {
+    "VITE_SUPABASE_URL": "https://hrtncnmmykzckemykesu.supabase.co",
+    "VITE_SUPABASE_ANON_KEY": "sb_publishable__xX9gpDUVc6htcBZOi_IrQ_4gyyadt8"
+  }
 }

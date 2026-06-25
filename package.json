@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node -e \"var fs=require('fs'); var c=JSON.parse(fs.readFileSync('wrangler.jsonc','utf8')); var vars=c.vars||{}; var env=Object.entries(vars).map(function(e){return e[0]+'='+e[1]}).join('\\n'); fs.writeFileSync('.env',env); console.log('=== Build environment variables detected ==='); Object.keys(vars).forEach(function(k){console.log('  '+k+'='+(vars[k]?'[SET]':'[MISSING]'))}); console.log('=== .env generated from wrangler.jsonc ===');\"",
     "build": "vite build && node -e \"require('fs').copyFileSync('src/worker.js','dist/_worker.js')\"",
     "deploy": "npm run build && wrangler pages deploy dist --branch production",
     "deploy:preview": "npm run build && wrangler pages deploy dist --branch preview",
