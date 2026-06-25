@@ -10,8 +10,8 @@ const CLIENT_ROLE_ID = "f3e7c0d7-d41f-486f-89fd-732d1c9cc200";
 
 const ALLOWED_ORIGINS = [
   "http://localhost:5173",
-  "https://cantiere-git-main-atomicvibes-projects.vercel.app",
-  "https://cantiere.atomicvibes.workers.dev",
+  "https://hrtncnmmykzckemykesu.supabase.co/auth/v1/callback",
+  "https://cantiere-cyb.pages.dev",
 ];
 
 function getOriginHeaders(origin) {
@@ -30,7 +30,7 @@ function respond(data, status = 200, origin) {
   });
 }
 
-serve(async (req) => {
+serve(async (req: { headers: { get: (arg0: string) => string; }; method: string; json: () => any; }) => {
   const origin = req.headers.get('origin') || '';
 
   if (req.method === 'OPTIONS') {

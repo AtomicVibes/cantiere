@@ -18,7 +18,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2 } from 'lucide-react';
+import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2, Eye, EyeOff } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
@@ -38,6 +38,7 @@ export default function Clients() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
   const [friendlyError, setFriendlyError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -229,7 +230,24 @@ export default function Clients() {
             {!editClient && (
               <div>
                 <Label>Password</Label>
-                <Input type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required={!!form.email} />
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={e => setForm({...form, password: e.target.value})}
+                    required={!!form.email}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">
