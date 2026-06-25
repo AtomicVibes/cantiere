@@ -7,26 +7,36 @@ import {
   LayoutDashboard, FolderKanban, Users, UserCircle,
   Bell, DollarSign, Calendar, BarChart3, FileText,
   Settings, ScrollText, ChevronLeft, ChevronRight, LogOut,
-  ClipboardList
+  ClipboardList, ShieldCheck
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useUserRole } from '@/hooks/useUserRole';
 
 export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCollapsedProp }) {
   const { t } = useTranslation();
-  const navItems = [
+  const { role, isLoading } = useUserRole();
+  const isSuperAdmin = role === 'super_admin';
+
+  const allNavItems = [
     { label: t('dashboard'), icon: LayoutDashboard, path: '/' },
     { label: t('projects'), icon: FolderKanban, path: '/projects' },
-    { label: t('teams'), icon: Users, path: '/teams' },
+    { label: t('teams'), icon: Users, path: '/teams', requires: 'super_admin' },
     { label: t('clients'), icon: UserCircle, path: '/clients' },
     { label: t('notifications'), icon: Bell, path: '/notifications' },
     { label: t('finance'), icon: DollarSign, path: '/finance' },
     { label: t('calendar'), icon: Calendar, path: '/calendar' },
-    { label: t('reports'), icon: BarChart3, path: '/reports' },
+    { label: t('reports'), icon: BarChart3, path: '/reports', requires: 'super_admin' },
     { label: t('documents'), icon: FileText, path: '/documents' },
     { label: t('requests'), icon: ClipboardList, path: '/requests' },
-    { label: t('logs.auditLogs'), icon: ScrollText, path: '/logs' },
+    { label: t('requestManagement'), icon: ShieldCheck, path: '/admin/requests', requires: 'super_admin' },
+    { label: t('logs.auditLogs'), icon: ScrollText, path: '/logs', requires: 'super_admin' },
     { label: t('settings'), icon: Settings, path: '/settings' },
   ];
+
+  const navItems = isLoading
+    ? allNavItems.filter((item) => !item.requires)
+    : allNavItems.filter((item) => !item.requires || isSuperAdmin);
+
   const [collapsedInternal, setCollapsedInternal] = useState(false);
   const collapsed = collapsedProp !== undefined ? collapsedProp : collapsedInternal;
   const setCollapsed = setCollapsedProp || setCollapsedInternal;

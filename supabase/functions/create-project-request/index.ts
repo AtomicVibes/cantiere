@@ -3,7 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 const corsHeaders = {
@@ -35,7 +34,6 @@ serve(async (req) => {
     }
 
     const token = authHeader.replace('Bearer ', '');
-
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
       return respond({ error: 'Session expired. Please log in again.', detail: userError?.message }, 400);
@@ -52,10 +50,7 @@ serve(async (req) => {
     }
 
     if (profile.roles.name !== 'client') {
-      return respond(
-        { error: 'Only clients can submit project requests.' },
-        400
-      );
+      return respond({ error: 'Only clients can submit project requests.' }, 400);
     }
 
     const { data: clientRecord, error: clientError } = await supabaseAdmin
@@ -75,7 +70,7 @@ serve(async (req) => {
       return respond({ error: 'Invalid request body.' }, 400);
     }
 
-    const { project_name, description } = body;
+    const { project_name, description, category, address, budget } = body;
 
     if (!project_name?.trim()) {
       return respond({ error: 'Project name is required.' }, 400);
@@ -87,6 +82,9 @@ serve(async (req) => {
         client_id: clientRecord.id,
         project_name: project_name.trim(),
         description: description?.trim() || null,
+        category: category || null,
+        address: address?.trim() || null,
+        budget: budget != null ? Number(budget) : null,
         status: 'pending',
       })
       .select()

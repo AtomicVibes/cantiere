@@ -9,17 +9,23 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import Sidebar from './Sidebar';
 import { useTranslation } from 'react-i18next';
+import { useUserRole } from '@/hooks/useUserRole';
 
 export default function MobileNav() {
   const { t } = useTranslation();
+  const { role } = useUserRole();
+  const isSuperAdmin = role === 'super_admin';
   const location = useLocation();
-  const bottomNav = [
+
+  const bottomItems = [
     { icon: LayoutDashboard, path: '/', label: t('home') },
     { icon: FolderKanban, path: '/projects', label: t('projects') },
-    { icon: Users, path: '/teams', label: t('teams') },
+    { icon: Users, path: '/teams', label: t('teams'), requires: 'super_admin' },
     { icon: DollarSign, path: '/finance', label: t('finance') },
     { icon: Calendar, path: '/calendar', label: t('calendar') },
   ];
+
+  const bottomNav = bottomItems.filter((item) => !item.requires || isSuperAdmin);
 
   return (
     <>

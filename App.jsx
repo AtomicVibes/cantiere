@@ -32,6 +32,7 @@ import Documents from '@/pages/Documents';
 import Settings from '@/pages/Settings';
 import Logs from '@/pages/Logs';
 import ProjectRequests from '@/pages/ProjectRequests';
+import AdminInbox from '@/pages/AdminInbox';
 
 const AuthenticatedApp = () => {
   const { t } = useTranslation();
@@ -82,6 +83,7 @@ const AuthenticatedApp = () => {
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/requests" element={<ProjectRequests />} />
+          <Route path="/admin/requests" element={<AdminInbox />} />
         </Route>
       </Route>
 

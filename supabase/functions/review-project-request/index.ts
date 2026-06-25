@@ -65,14 +65,14 @@ serve(async (req) => {
       return respond({ error: 'Invalid request body.' }, 400);
     }
 
-    const { request_id, action } = body;
+    const { request_id, action, rejection_reason } = body;
 
     if (!request_id) {
       return respond({ error: 'Request ID is required.' }, 400);
     }
 
-    if (!['approved', 'rejected'].includes(action)) {
-      return respond({ error: 'Action must be "approved" or "rejected".' }, 400);
+    if (!['verify', 'approve', 'reject'].includes(action)) {
+      return respond({ error: 'Action must be "verify", "approve", or "reject".' }, 400);
     }
 
     const { data: existingRequest, error: fetchError } = await supabaseAdmin
@@ -85,14 +85,35 @@ serve(async (req) => {
       return respond({ error: 'Request not found.' }, 400);
     }
 
-    if (existingRequest.status !== 'pending') {
-      return respond({ error: `This request has already been ${existingRequest.status}.` }, 400);
-    }
+    if (action === 'verify') {
+      if (existingRequest.status !== 'pending') {
+        return respond({ error: `Cannot verify a request with status "${existingRequest.status}".` }, 400);
+      }
 
-    if (action === 'rejected') {
       const { error: updateError } = await supabaseAdmin
         .from('project_requests')
-        .update({ status: 'rejected' })
+        .update({ status: 'verification' })
+        .eq('id', request_id);
+
+      if (updateError) {
+        console.error('Failed to verify request:', updateError);
+        return respond({ error: 'Failed to verify request.' }, 400);
+      }
+
+      return respond({ request: { ...existingRequest, status: 'verification' } }, 200);
+    }
+
+    if (action === 'reject') {
+      if (existingRequest.status !== 'pending' && existingRequest.status !== 'verification') {
+        return respond({ error: `Cannot reject a request with status "${existingRequest.status}".` }, 400);
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from('project_requests')
+        .update({
+          status: 'rejected',
+          rejection_reason: rejection_reason?.trim() || null,
+        })
         .eq('id', request_id);
 
       if (updateError) {
@@ -100,35 +121,35 @@ serve(async (req) => {
         return respond({ error: 'Failed to reject request.' }, 400);
       }
 
-      return respond({ request: { ...existingRequest, status: 'rejected' } }, 200);
+      return respond({ request: { ...existingRequest, status: 'rejected', rejection_reason } }, 200);
     }
 
-    const { data: project, error: projectError } = await supabaseAdmin
-      .from('projects')
-      .insert({
-        name: existingRequest.project_name,
-        client_id: existingRequest.client_id,
-        status: 'draft',
-      })
-      .select()
-      .single();
+    if (action === 'approve') {
+      if (existingRequest.status !== 'verification') {
+        return respond({ error: 'Request must be in verification status to approve.' }, 400);
+      }
 
-    if (projectError) {
-      console.error('Failed to create project from request:', projectError);
-      return respond({ error: 'Failed to create project. Please try again.' }, 400);
+      const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc(
+        'validate_project_request',
+        { p_request_id: request_id }
+      );
+
+      if (rpcError) {
+        console.error('Failed to approve request via RPC:', rpcError);
+        return respond({ error: 'Failed to approve request.', detail: rpcError.message }, 400);
+      }
+
+      if (!rpcResult?.success) {
+        return respond({ error: rpcResult?.error || 'Failed to validate request.' }, 400);
+      }
+
+      return respond({
+        request: { ...existingRequest, status: 'validated' },
+        project_id: rpcResult.project_id,
+      }, 200);
     }
 
-    const { error: updateError } = await supabaseAdmin
-      .from('project_requests')
-      .update({ status: 'approved' })
-      .eq('id', request_id);
-
-    if (updateError) {
-      console.error('Failed to update request status:', updateError);
-      return respond({ error: 'Project created but status update failed.', detail: updateError.message }, 400);
-    }
-
-    return respond({ request: { ...existingRequest, status: 'approved' }, project }, 200);
+    return respond({ error: 'Unknown action.' }, 400);
   } catch (err) {
     console.error('Unexpected error in review-project-request', err);
     return respond({ error: 'Something went wrong. Please try again.' }, 400);

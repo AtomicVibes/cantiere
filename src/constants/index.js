@@ -66,12 +66,14 @@ export const MODES = {
 
 export const REQUEST_STATUSES = {
   PENDING: 'pending',
-  APPROVED: 'approved',
+  VERIFICATION: 'verification',
+  VALIDATED: 'validated',
   REJECTED: 'rejected',
 };
 
 export const getRequestStatuses = (t) => [
   { value: REQUEST_STATUSES.PENDING, label: t('pending') },
-  { value: REQUEST_STATUSES.APPROVED, label: t('approved') },
+  { value: REQUEST_STATUSES.VERIFICATION, label: t('verification') },
+  { value: REQUEST_STATUSES.VALIDATED, label: t('validated') },
   { value: REQUEST_STATUSES.REJECTED, label: t('rejected') },
 ];

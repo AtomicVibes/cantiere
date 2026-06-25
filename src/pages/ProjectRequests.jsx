@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import TopBar from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -22,15 +19,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Loader2, ClipboardList, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Plus, ClipboardList, CheckCircle2, XCircle, Clock, ShieldCheck } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { getRequestStatuses, REQUEST_STATUSES } from '@/constants';
-import { createProjectRequest, reviewProjectRequest, getClientRequests } from '@/services/requestService';
+import { getClientRequests } from '@/services/requestService';
+import ProjectRequestForm from '@/components/projects/ProjectRequestForm';
 
 const statusConfig = {
   [REQUEST_STATUSES.PENDING]: { icon: Clock, variant: 'secondary' },
-  [REQUEST_STATUSES.APPROVED]: { icon: CheckCircle2, variant: 'success' },
+  [REQUEST_STATUSES.VERIFICATION]: { icon: ShieldCheck, variant: 'warning' },
+  [REQUEST_STATUSES.VALIDATED]: { icon: CheckCircle2, variant: 'success' },
   [REQUEST_STATUSES.REJECTED]: { icon: XCircle, variant: 'destructive' },
 };
 
@@ -40,11 +39,8 @@ export default function ProjectRequests() {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('all');
   const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState({ project_name: '', description: '' });
-  const [submitting, setSubmitting] = useState(false);
 
   const canCreate = PERMISSIONS.canCreateRequest.includes(role);
-  const canReview = PERMISSIONS.canReviewRequest.includes(role);
 
   const { data: requests = [] } = useQuery({
     queryKey: ['projectRequests'],
@@ -52,40 +48,13 @@ export default function ProjectRequests() {
     initialData: [],
   });
 
-  const reviewMutation = useMutation({
-    mutationFn: ({ request_id, action }) => reviewProjectRequest({ request_id, action }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projectRequests'] }),
-  });
-
   const filtered = statusFilter === 'all'
     ? requests
     : requests.filter(r => r.status === statusFilter);
 
-  const handleSubmitRequest = async (e) => {
-    e.preventDefault();
-    if (!form.project_name.trim()) return;
-    setSubmitting(true);
-    try {
-      await createProjectRequest({
-        project_name: form.project_name.trim(),
-        description: form.description.trim() || undefined,
-      });
-      setForm({ project_name: '', description: '' });
-      setFormOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['projectRequests'] });
-    } catch (err) {
-      console.error('Failed to create request:', err);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleReview = async (request_id, action) => {
-    try {
-      await reviewMutation.mutateAsync({ request_id, action });
-    } catch (err) {
-      console.error('Failed to review request:', err);
-    }
+  const handleFormSuccess = () => {
+    setFormOpen(false);
+    queryClient.invalidateQueries({ queryKey: ['projectRequests'] });
   };
 
   return (
@@ -109,44 +78,19 @@ export default function ProjectRequests() {
           {canCreate && (
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
               <DialogTrigger asChild>
-                <Button className="gap-2">
+                <Button className="gap-2 min-h-[44px]">
                   <Plus className="w-4 h-4" />
                   {t('newRequest')}
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent
+                className="sm:max-w-lg"
+                style={{ maxHeight: '100dvh', overflowY: 'auto' }}
+              >
                 <DialogHeader>
                   <DialogTitle>{t('newRequest')}</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmitRequest} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="project_name">{t('projectName')}</Label>
-                    <Input
-                      id="project_name"
-                      value={form.project_name}
-                      onChange={e => setForm({ ...form, project_name: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">{t('description')}</Label>
-                    <Textarea
-                      id="description"
-                      value={form.description}
-                      onChange={e => setForm({ ...form, description: e.target.value })}
-                      rows={3}
-                    />
-                  </div>
-                  <div className="flex justify-end gap-3">
-                    <Button type="button" variant="outline" onClick={() => setFormOpen(false)}>
-                      {t('cancel')}
-                    </Button>
-                    <Button type="submit" disabled={submitting}>
-                      {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                      {t('submit')}
-                    </Button>
-                  </div>
-                </form>
+                <ProjectRequestForm onSuccess={handleFormSuccess} />
               </DialogContent>
             </Dialog>
           )}
@@ -187,28 +131,11 @@ export default function ProjectRequests() {
                       <p className="text-sm text-muted-foreground">{req.description}</p>
                     </CardContent>
                   )}
-                  {canReview && req.status === REQUEST_STATUSES.PENDING && (
-                    <CardContent className="flex gap-2 pt-0">
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="gap-1"
-                        onClick={() => handleReview(req.id, 'approved')}
-                        disabled={reviewMutation.isPending}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        {t('approve')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1 text-destructive border-destructive hover:bg-destructive/10"
-                        onClick={() => handleReview(req.id, 'rejected')}
-                        disabled={reviewMutation.isPending}
-                      >
-                        <XCircle className="w-4 h-4" />
-                        {t('reject')}
-                      </Button>
+                  {req.rejection_reason && (
+                    <CardContent className="pb-3">
+                      <p className="text-xs text-destructive">
+                        {t('rejectionReason')}: {req.rejection_reason}
+                      </p>
                     </CardContent>
                   )}
                 </Card>
