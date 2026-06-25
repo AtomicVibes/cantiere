@@ -114,7 +114,7 @@ export default function Clients() {
   };
 
   const handleAddClient = async (payload) => {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('clients')
       .insert([{
         name: payload.name,
@@ -126,8 +126,10 @@ export default function Clients() {
         zip_code: payload.zip_code,
         notes: payload.notes,
         status: payload.status || 'active',
-      }]);
+      }])
+      .select();
     if (error) throw error;
+    return data[0];
   };
 
   const handleSave = async (e) => {
@@ -159,8 +161,8 @@ export default function Clients() {
           });
           toast.success(`User created (${user?.email})`);
         }
-        await handleAddClient(form);
-
+        const inserted = await handleAddClient(form);
+        queryClient.setQueryData(['clients'], (old = []) => [...old, inserted]);
         queryClient.invalidateQueries({ queryKey: ['clients'] });
         queryClient.invalidateQueries({ queryKey: ['profiles'] });
         const liveCount = await fetchCounts();
