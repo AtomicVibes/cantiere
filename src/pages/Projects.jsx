@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search, FolderKanban } from 'lucide-react';
+import { supabase } from '@/services/supabase';
 import { listEntities, createEntity, updateEntity } from '@/services/dataService';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -33,8 +34,19 @@ export default function Projects() {
     queryFn: () => listEntities('clients'),
     initialData: [],
   });
+  const { data: managers = [] } = useQuery({
+    queryKey: ['team_members', 'managers'],
+    queryFn: () =>
+      supabase
+        .from('team_members')
+        .select('user_id, full_name')
+        .not('user_id', 'is', null)
+        .order('full_name')
+        .then(({ data, error }) => { if (error) throw error; return data ?? []; }),
+    initialData: [],
+  });
 
-  const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
+  const clientMap = Object.fromEntries(clients.map(c => [c.id, c.company_name]));
 
   const createMutation = useMutation({
     mutationFn: (data) => createEntity('projects', data),
@@ -125,6 +137,7 @@ export default function Projects() {
         onOpenChange={setShowForm}
         project={editProject}
         clients={clients}
+        managers={managers}
         onSave={handleSave}
       />
     </div>

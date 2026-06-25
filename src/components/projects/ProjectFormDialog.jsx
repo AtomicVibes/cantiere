@@ -29,6 +29,7 @@ const defaultForm = {
   priority: 'medium',
   description: '',
   client_id: '',
+  manager_id: '',
   start_date: '',
   end_date: '',
   location: '',
@@ -36,7 +37,7 @@ const defaultForm = {
   progress: 0,
 };
 
-export default function ProjectFormDialog({ open, onOpenChange, project, clients, onSave }) {
+export default function ProjectFormDialog({ open, onOpenChange, project, clients, managers, onSave }) {
   const { t } = useTranslation();
   const { role } = useUserRole();
   const TYPE_OPTIONS = [
@@ -78,6 +79,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           priority: project.priority || 'medium',
           description: project.description || '',
           client_id: project.client_id || '',
+          manager_id: project.manager_id || '',
           start_date: project.start_date || '',
           end_date: project.end_date || '',
           location: project.location || '',
@@ -108,6 +110,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
       if (!payload.end_date) delete payload.end_date;
       if (!payload.location) delete payload.location;
       if (!payload.client_id) delete payload.client_id;
+      if (!payload.manager_id) delete payload.manager_id;
       await onSave(payload);
       onOpenChange(false);
     } catch (err) {
@@ -156,7 +159,21 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
                 <SelectContent>
                   <SelectItem value="none">{t('none')}</SelectItem>
                   {(clients ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manager">{t('projectManager')}</Label>
+              <Select value={form.manager_id} onValueChange={set('manager_id')}>
+                <SelectTrigger id="manager">
+                  <SelectValue placeholder={t('none')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('none')}</SelectItem>
+                  {(managers ?? []).map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
