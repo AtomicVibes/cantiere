@@ -42,6 +42,14 @@ export default function Clients() {
 
   const queryClient = useQueryClient();
 
+  const fetchCounts = async () => {
+    const { count, error } = await supabase
+      .from('clients')
+      .select('*', { count: 'exact', head: true });
+    if (error) throw error;
+    return count ?? 0;
+  };
+
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
     queryFn: async () => {
@@ -105,6 +113,23 @@ export default function Clients() {
     setShowForm(true);
   };
 
+  const handleAddClient = async (payload) => {
+    const { error } = await supabase
+      .from('clients')
+      .insert([{
+        name: payload.name,
+        email: payload.email,
+        phone: payload.phone,
+        company_name: payload.company_name,
+        vat_number: payload.vat_number,
+        address: payload.address,
+        zip_code: payload.zip_code,
+        notes: payload.notes,
+        status: payload.status || 'active',
+      }]);
+    if (error) throw error;
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!canCreate && !editClient) {
@@ -134,7 +159,12 @@ export default function Clients() {
           });
           toast.success(`User created (${user?.email})`);
         }
-        await createMutation.mutateAsync(form);
+        await handleAddClient(form);
+
+        queryClient.invalidateQueries({ queryKey: ['clients'] });
+        queryClient.invalidateQueries({ queryKey: ['profiles'] });
+        const liveCount = await fetchCounts();
+        queryClient.setQueryData(['clientCount'], liveCount);
       }
       setShowForm(false);
       setEditClient(null);
