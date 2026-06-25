@@ -6,7 +6,8 @@ import Logo from '@/components/Logo';
 import {
   LayoutDashboard, FolderKanban, Users, UserCircle,
   Bell, DollarSign, Calendar, BarChart3, FileText,
-  Settings, ScrollText, ChevronLeft, ChevronRight, LogOut
+  Settings, ScrollText, ChevronLeft, ChevronRight, LogOut,
+  ClipboardList
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -22,6 +23,7 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
     { label: t('calendar'), icon: Calendar, path: '/calendar' },
     { label: t('reports'), icon: BarChart3, path: '/reports' },
     { label: t('documents'), icon: FileText, path: '/documents' },
+    { label: t('requests'), icon: ClipboardList, path: '/requests' },
     { label: t('logs.auditLogs'), icon: ScrollText, path: '/logs' },
     { label: t('settings'), icon: Settings, path: '/settings' },
   ];

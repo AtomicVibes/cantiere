@@ -18,3 +18,5 @@ policy = "per_worker"
 "invite-client" = {}
 "delete-user" = {}
 "create-client" = {}
+"create-project-request" = {}
+"review-project-request" = {}

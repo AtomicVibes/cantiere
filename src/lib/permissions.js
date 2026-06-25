@@ -25,4 +25,6 @@ export const PERMISSIONS = {
   canManageNotifications: ['super_admin', 'admin', 'manager'],
   canViewFinance: ['super_admin', 'admin', 'manager'],
   canViewReports: ['super_admin', 'admin', 'manager'],
+  canCreateRequest: ['client'],
+  canReviewRequest: ['super_admin', 'admin'],
 };

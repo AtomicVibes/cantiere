@@ -1,4 +1,4 @@
-import i18n from 'i18next';
+﻿import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
@@ -40,6 +40,15 @@ const resources = {
       pageNotFound: 'Page not found',
       goHome: 'Go Home',
       goBack: 'Go Back',
+      requests: 'Requests',
+      projectRequests: 'Project Requests',
+      newRequest: 'New Request',
+      noRequests: 'No requests yet',
+      approve: 'Approve',
+      reject: 'Reject',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      pending: 'Pending',
       profileInformation: 'Profile Information',
       fullName: 'Full Name',
       phone: 'Phone',
@@ -285,7 +294,15 @@ const resources = {
       pageNotFound: 'الصفحة غير موجودة',
       goHome: 'الذهاب إلى الصفحة الرئيسية',
       goBack: 'العودة',
-      profileInformation: 'معلومات الملف الشخصي',
+      requests: 'الطلبات',
+      projectRequests: 'طلبات المشروع',
+      newRequest: 'طلب جديد',
+      noRequests: 'لا توجد طلبات بعد',
+      approve: 'موافقة',
+      reject: 'رفض',
+      approved: 'تمت الموافقة',
+      rejected: 'مرفوض',
+      pending: 'قيد الانتظار',
       fullName: 'الاسم الكامل',
       phone: 'الهاتف',
       department: 'القسم',
@@ -530,6 +547,15 @@ const resources = {
       pageNotFound: 'Page non trouvée',
       goHome: 'Accueil',
       goBack: 'Retour',
+      requests: 'Demandes',
+      projectRequests: 'Demandes de projet',
+      newRequest: 'Nouvelle demande',
+      noRequests: 'Aucune demande',
+      approve: 'Approuver',
+      reject: 'Rejeter',
+      approved: 'Approuvée',
+      rejected: 'Rejetée',
+      pending: 'En attente',
       profileInformation: 'Informations du profil',
       fullName: 'Nom complet',
       phone: 'Téléphone',
@@ -775,6 +801,15 @@ const resources = {
       pageNotFound: 'Pagina non trovata',
       goHome: 'Home',
       goBack: 'Indietro',
+      requests: 'Richieste',
+      projectRequests: 'Richieste di progetto',
+      newRequest: 'Nuova richiesta',
+      noRequests: 'Nessuna richiesta',
+      approve: 'Approva',
+      reject: 'Rifiuta',
+      approved: 'Approvata',
+      rejected: 'Rifiutata',
+      pending: 'In attesa',
       profileInformation: 'Informazioni profilo',
       fullName: 'Nome completo',
       phone: 'Telefono',
@@ -1006,3 +1041,4 @@ i18n
   });
 
 export default i18n;
+

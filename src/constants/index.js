@@ -63,3 +63,15 @@ export const MODES = {
   DIRECT: 'direct',
   INVITE: 'invite',
 };
+
+export const REQUEST_STATUSES = {
+  PENDING: 'pending',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+};
+
+export const getRequestStatuses = (t) => [
+  { value: REQUEST_STATUSES.PENDING, label: t('pending') },
+  { value: REQUEST_STATUSES.APPROVED, label: t('approved') },
+  { value: REQUEST_STATUSES.REJECTED, label: t('rejected') },
+];
