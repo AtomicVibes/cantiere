@@ -11,41 +11,34 @@ import {
   Users, UserCircle, DollarSign, FileWarning
 } from 'lucide-react';
 import { listEntities } from '@/services/dataService';
-import { supabase } from '@/services/supabase';
+import { useDashboardData } from '@/hooks/useDashboardData';
+
+function StatSkeleton() {
+  return (
+    <div className="bg-card rounded-xl border border-border p-5 animate-pulse">
+      <div className="flex items-start justify-between">
+        <div className="space-y-2 flex-1">
+          <div className="h-3 w-20 bg-muted rounded" />
+          <div className="h-8 w-16 bg-muted rounded" />
+        </div>
+        <div className="h-10 w-10 rounded-lg bg-muted" />
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { t } = useTranslation();
+  const { clientCount, teamMemberCount, isLoading } = useDashboardData();
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => listEntities('projects'),
-    initialData: [],
-  });
-  const { data: clientCount = 0 } = useQuery({
-    queryKey: ['clientCount'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('clients')
-        .select('*', { count: 'exact', head: true });
-      if (error) throw error;
-      return count ?? 0;
-    },
-    initialData: 0,
-  });
-  const { data: teamMemberCount = 0 } = useQuery({
-    queryKey: ['teamMemberCount'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('team_members')
-        .select('*', { count: 'exact', head: true });
-      if (error) throw error;
-      return count ?? 0;
-    },
-    initialData: 0,
+    placeholderData: [],
   });
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
     queryFn: () => listEntities('invoices'),
-    initialData: [],
+    placeholderData: [],
   });
 
   const activeProjects = projects.filter(p => p.status === 'in_progress');
@@ -71,8 +64,17 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title={t('teamMembers')} value={teamMemberCount} icon={Users} color="violet" />
-          <StatCard title={t('clients')} value={clientCount} icon={UserCircle} color="blue" />
+          {isLoading ? (
+            <>
+              <StatSkeleton />
+              <StatSkeleton />
+            </>
+          ) : (
+            <>
+              <StatCard title={t('teamMembers')} value={teamMemberCount} icon={Users} color="violet" />
+              <StatCard title={t('clients')} value={clientCount} icon={UserCircle} color="blue" />
+            </>
+          )}
           <StatCard
             title={t('revenue')}
             value={`€${totalRevenue.toLocaleString()}`}

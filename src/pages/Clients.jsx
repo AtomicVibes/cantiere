@@ -70,6 +70,7 @@ export default function Clients() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['clientCount'] });
     },
     onError: (err) => handleMutationError(err, t, toast),
   });
@@ -82,7 +83,10 @@ export default function Clients() {
     mutationFn: async (id) => {
       await deleteUser(id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['clientCount'] });
+    },
     onError: (err) => {
       if (!handleMutationError(err, t, toast)) {
         toast.error(err.message);
@@ -108,18 +112,20 @@ export default function Clients() {
       return;
     }
     setSaving(true);
-    if (editClient) {
-      await updateMutation.mutateAsync({ id: editClient.id, data: form });
-      if (form.email) {
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ full_name: form.name, phone: form.phone })
-          .eq('id', editClient.id);
-        if (updateError) throw updateError;
-      }
-    } else {
-      if (form.email) {
-        try {
+    setFriendlyError('');
+
+    try {
+      if (editClient) {
+        await updateMutation.mutateAsync({ id: editClient.id, data: form });
+        if (form.email) {
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ full_name: form.name, phone: form.phone })
+            .eq('id', editClient.id);
+          if (updateError) throw updateError;
+        }
+      } else {
+        if (form.email) {
           const { user } = await createClient({
             email: form.email,
             password: form.password,
@@ -127,18 +133,17 @@ export default function Clients() {
             phone: form.phone,
           });
           toast.success(`User created (${user?.email})`);
-        } catch (createErr) {
-          setSaving(false);
-          setFriendlyError(createErr.message);
-          return;
         }
+        await createMutation.mutateAsync(form);
       }
-      await createMutation.mutateAsync(form);
+      setShowForm(false);
+      setEditClient(null);
+      setForm(emptyClient);
+    } catch (err) {
+      setFriendlyError(err.message);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setShowForm(false);
-    setEditClient(null);
-    setForm(emptyClient);
   };
 
   const filtered = clients.filter(c =>
