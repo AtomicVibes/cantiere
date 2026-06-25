@@ -104,9 +104,16 @@ export const AuthProvider = ({ children }) => {
 
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (cancelled) return;
       await setSession(session);
+
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        const path = window.location.pathname;
+        if (path === '/login' || path === '/auth/callback') {
+          window.location.href = '/dashboard';
+        }
+      }
     });
 
     return () => {

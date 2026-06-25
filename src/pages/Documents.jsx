@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -19,8 +19,14 @@ import { useDirection } from '@/i18n/LanguageProvider';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 
+const DOC_CATEGORIES = [
+  'blueprint', 'contract', 'permit', 'invoice', 'photo',
+  'video', 'audio_note', 'cad_file', 'report', 'other',
+];
+
 export default function Documents() {
   const { t } = useTranslation();
+  const docTypeOptions = useMemo(() => DOC_CATEGORIES.map(c => ({ value: c, label: t(c) })), [t]);
   const { dir } = useDirection();
   const { role } = useUserRole();
   const canUpload = PERMISSIONS.canUploadDocument.includes(role);
@@ -59,21 +65,26 @@ export default function Documents() {
     }
     if (!form.name) return;
     setUploading(true);
-    let file_url = '';
-    if (file) {
-      const result = await base44.integrations.Core.UploadFile({ file });
-      file_url = result.file_url;
+    try {
+      let file_url = '';
+      if (file) {
+        const result = await base44.integrations.Core.UploadFile({ file });
+        file_url = result.file_url;
+      }
+      await createMutation.mutateAsync({
+        ...form,
+        file_url,
+        file_format: file?.name?.split('.').pop() || '',
+        file_size: file?.size || 0,
+      });
+      setShowUpload(false);
+      setForm({ name: '', type: 'other', notes: '' });
+      setFile(null);
+    } catch {
+      // error handled by mutation onError
+    } finally {
+      setUploading(false);
     }
-    await createMutation.mutateAsync({
-      ...form,
-      file_url,
-      file_format: file?.name?.split('.').pop() || '',
-      file_size: file?.size || 0,
-    });
-    setUploading(false);
-    setShowUpload(false);
-    setForm({ name: '', type: 'other', notes: '' });
-    setFile(null);
   };
 
   const filtered = documents.filter(d => {
@@ -82,7 +93,7 @@ export default function Documents() {
     return matchesSearch && matchesType;
   });
 
-  const getTypeLabel = (type) => DOC_TYPES.find(t => t.value === type)?.label || type;
+  const getTypeLabel = (type) => docTypeOptions.find(t => t.value === type)?.label || type;
 
   return (
     <div>
@@ -98,7 +109,7 @@ export default function Documents() {
               <SelectTrigger className="w-36"><SelectValue placeholder={t('all')} /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">{t('all')}</SelectItem>
-                {DOC_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                {docTypeOptions.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

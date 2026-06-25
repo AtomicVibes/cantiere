@@ -85,6 +85,7 @@ export default function Teams() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
     },
     onError: (err) => handleMutationError(err, t, toast),
   });
@@ -97,7 +98,10 @@ export default function Teams() {
     mutationFn: async (id) => {
       await deleteUser(id);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teamMembers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
+      queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
+    },
     onError: (err) => {
       if (!handleMutationError(err, t, toast)) {
         toast.error(err.message);
@@ -121,24 +125,25 @@ export default function Teams() {
       return;
     }
     setSaving(true);
+    setFriendlyError('');
     const payload = { ...form };
 
-    if (editMember) {
-      delete payload.role_id;
-      await updateMutation.mutateAsync({ id: editMember.id, data: payload });
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: payload.full_name,
-          phone: payload.phone,
-          job_title: payload.job_title,
-          department: payload.department,
-        })
-        .eq('id', editMember.id);
-      if (updateError) throw updateError;
-    } else {
-      if (payload.email) {
-        try {
+    try {
+      if (editMember) {
+        delete payload.role_id;
+        await updateMutation.mutateAsync({ id: editMember.id, data: payload });
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            full_name: payload.full_name,
+            phone: payload.phone,
+            job_title: payload.job_title,
+            department: payload.department,
+          })
+          .eq('id', editMember.id);
+        if (updateError) throw updateError;
+      } else {
+        if (payload.email) {
           const { user } = await inviteUserByEmail({
             email: payload.email,
             role_id: payload.role_id,
@@ -149,18 +154,17 @@ export default function Teams() {
             mode: inviteMode,
           });
           toast.success(inviteMode === 'direct' ? `User created (${user?.email})` : 'Invite sent!');
-        } catch (inviteErr) {
-          setSaving(false);
-          setFriendlyError(inviteErr.message);
-          return;
         }
+        await createMutation.mutateAsync(payload);
       }
-      await createMutation.mutateAsync(payload);
+      setShowForm(false);
+      setEditMember(null);
+      setForm(emptyMember);
+    } catch (err) {
+      setFriendlyError(err.message);
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setShowForm(false);
-    setEditMember(null);
-    setForm(emptyMember);
   };
 
   const filtered = members.filter(m =>

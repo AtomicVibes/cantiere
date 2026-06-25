@@ -1,17 +1,29 @@
 import { useEffect } from 'react';
 import { supabase } from '@/services/supabase';
-import { useNavigate } from 'react-router-dom';
 
 export default function AuthCallback() {
-  const navigate = useNavigate();
-
   useEffect(() => {
-    supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN') {
-        navigate('/');
+    let cancelled = false;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (cancelled) return;
+      if (session?.user) {
+        window.location.href = '/dashboard';
       }
     });
-  }, [navigate]);
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (cancelled) return;
+      if (event === 'SIGNED_IN') {
+        window.location.href = '/dashboard';
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-background">
