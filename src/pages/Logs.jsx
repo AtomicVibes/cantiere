@@ -58,7 +58,9 @@ export default function Logs() {
         setLogs((prev) => [payload.new, ...prev].slice(0, PAGE_SIZE));
         setTotalCount((prev) => prev + 1);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err) console.warn('audit_logs realtime error:', err);
+      });
     return () => { supabase.removeChannel(channel); };
   }, []);
 
