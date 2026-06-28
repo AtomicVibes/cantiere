@@ -105,8 +105,9 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
         name: form.name || undefined,
         budget: form.budget ? Number(form.budget) : undefined,
         status: form.status || undefined,
-        client_id: form.client_id || undefined,
+        client_id: form.client_id && form.client_id !== 'none' ? form.client_id : undefined,
       };
+      console.log('ProjectFormDialog payload:', payload);
       await onSave(payload);
       onOpenChange(false);
     } catch (err) {
@@ -155,7 +156,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
                 <SelectContent>
                   <SelectItem value="none">{t('none')}</SelectItem>
                   {(clients ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name || c.full_name || ''}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.company_name || c.name || ''}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
