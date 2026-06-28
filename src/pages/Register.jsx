@@ -11,6 +11,7 @@ import GoogleIcon from "@/components/GoogleIcon";
 
 export default function Register() {
   const navigate = useNavigate();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -25,12 +26,18 @@ export default function Register() {
       return;
     }
     setLoading(true);
-    const result = await signUpWithEmail(email, password);
+    const { data, error } = await signUpWithEmail(email, password, {
+      full_name: fullName,
+    });
     setLoading(false);
-    if (result) {
-      navigate("/login?message=check-email");
+    if (error) {
+      if (error.message?.toLowerCase().includes("already exists") || error.code === "user_already_exists") {
+        navigate("/login", { state: { email, message: "email-exists" } });
+      } else {
+        toast.error(error.message || "Failed to create account.");
+      }
     } else {
-      toast.error("Failed to create account. Please try again.");
+      navigate("/login?message=check-email");
     }
   };
 
@@ -83,6 +90,21 @@ export default function Register() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="pl-10 h-12"
+              required
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="fullName">Full Name</Label>
+          <div className="relative">
+            <Input
+              id="fullName"
+              type="text"
+              autoComplete="name"
+              placeholder="John Doe"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="h-12"
               required
             />
           </div>

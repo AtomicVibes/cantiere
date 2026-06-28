@@ -1,5 +1,13 @@
 import { supabase } from './supabase';
 
+export const signUpWithEmail = async (email, password, metadata = {}) => {
+  const { data, error } = await supabase.auth.signUp(
+    { email, password },
+    { data: metadata }
+  );
+  return { data, error };
+};
+
 const handleAuthCall = async (operation) => {
   try {
     const result = await operation();
@@ -20,14 +28,6 @@ export const signInWithGoogle = async (redirectTo = window.location.origin + '/a
       provider: 'google',
       options: { redirectTo },
     });
-    if (error) throw error;
-    return true;
-  });
-};
-
-export const signUpWithEmail = async (email, password) => {
-  return handleAuthCall(async () => {
-    const { error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
     return true;
   });

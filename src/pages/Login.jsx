@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { signInWithEmail, signInWithGoogle } from "@/services/authService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,19 @@ import GoogleIcon from "@/components/GoogleIcon";
 export default function Login() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const location = useLocation();
+  const [email, setEmail] = useState(location.state?.email || "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (location.state?.message === "email-exists") {
+      toast.info("This email is already registered. Please log in or update your profile.");
+    } else if (location.search?.includes("message=check-email")) {
+      toast.success("Check your email for the confirmation link.");
+    }
+  }, [location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
