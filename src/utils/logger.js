@@ -1,25 +1,24 @@
-export const logAction = async (supabase, { actionType, message, docName = null, details = {} }) => {
-  try {
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      console.warn('Logger: no authenticated user, skipping log');
-      return;
-    }
+import { supabase } from '@/services/supabase';
 
-    const { error: insertError } = await supabase
+export const logAudit = async ({ action, table_name, record_id, details = {} }) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
       .from('audit_logs')
       .insert({
-        user_id: user.id,
-        action_type: actionType,
-        action_message: message,
-        document_name: docName,
+        action,
+        table_name: table_name || null,
+        record_id: record_id || null,
+        changed_by: user.id,
         details,
       });
 
-    if (insertError) {
-      console.warn('Logger: insert failed', insertError.message);
+    if (error) {
+      console.warn('audit log insert failed:', error.message);
     }
   } catch (err) {
-    console.warn('Logger: unexpected error', err);
+    console.warn('audit log error:', err);
   }
 };

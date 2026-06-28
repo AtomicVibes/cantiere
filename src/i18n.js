@@ -258,8 +258,13 @@ const resources = {
         message: 'Message',
         fileUpload: 'File Upload',
         projectCreate: 'Project Created',
+        projectUpdate: 'Project Updated',
+        projectDelete: 'Project Deleted',
         memberAdd: 'Member Added',
-        invoiceCreate: 'Invoice Created'
+        invoiceCreate: 'Invoice Created',
+        timelineCreate: 'Timeline Entry Added',
+        timelineUpdate: 'Timeline Entry Updated',
+        timelineDelete: 'Timeline Entry Deleted'
       }
     }
   },
@@ -517,8 +522,13 @@ const resources = {
         message: 'الرسالة',
         fileUpload: 'رفع ملف',
         projectCreate: 'تم إنشاء المشروع',
+        projectUpdate: 'تم تحديث المشروع',
+        projectDelete: 'تم حذف المشروع',
         memberAdd: 'تمت إضافة العضو',
-        invoiceCreate: 'تم إنشاء الفاتورة'
+        invoiceCreate: 'تم إنشاء الفاتورة',
+        timelineCreate: 'تمت إضافة حدث',
+        timelineUpdate: 'تم تحديث الحدث',
+        timelineDelete: 'تم حذف الحدث'
       }
     }
   },
@@ -777,8 +787,13 @@ const resources = {
         message: 'Message',
         fileUpload: 'Téléchargement de fichier',
         projectCreate: 'Projet créé',
+        projectUpdate: 'Projet mis à jour',
+        projectDelete: 'Projet supprimé',
         memberAdd: 'Membre ajouté',
-        invoiceCreate: 'Facture créée'
+        invoiceCreate: 'Facture créée',
+        timelineCreate: 'Entrée de chronologie ajoutée',
+        timelineUpdate: 'Entrée de chronologie mise à jour',
+        timelineDelete: 'Entrée de chronologie supprimée'
       }
     }
   },
@@ -1037,8 +1052,13 @@ const resources = {
         message: 'Messaggio',
         fileUpload: 'Caricamento file',
         projectCreate: 'Progetto creato',
+        projectUpdate: 'Progetto aggiornato',
+        projectDelete: 'Progetto eliminato',
         memberAdd: 'Membro aggiunto',
-        invoiceCreate: 'Fattura creata'
+        invoiceCreate: 'Fattura creata',
+        timelineCreate: 'Voce cronologia aggiunta',
+        timelineUpdate: 'Voce cronologia aggiornata',
+        timelineDelete: 'Voce cronologia eliminata'
       }
     }
   }
