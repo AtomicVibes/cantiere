@@ -9,7 +9,7 @@ import PriorityBadge from '@/components/shared/PriorityBadge';
 import ProjectFormDialog from '@/components/projects/ProjectFormDialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
@@ -208,72 +208,67 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Timeline Tab */}
-        <Tabs defaultValue="timeline">
-          <TabsList>
-            <TabsTrigger value="timeline">{t('timeline')}</TabsTrigger>
-            <TabsTrigger value="documents">{t('documents')}</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="timeline" className="space-y-4 mt-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-heading font-semibold">{t('projectTimeline')}</h3>
-              {canAddEntry && (
-                <Button size="sm" variant="outline" onClick={() => setAddingEntry(!addingEntry)} className="gap-2">
-                  <Plus className="w-3.5 h-3.5" /> {t('addEntry')}
-                </Button>
-              )}
-            </div>
-
-            {addingEntry && (
-              <div className="bg-card rounded-xl border border-border p-4 space-y-3">
-                <Input placeholder={t('entryTitle')} value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
-                <Textarea placeholder="Description" value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
-                <Input type="date" value={newEntry.date} onChange={e => setNewEntry({...newEntry, date: e.target.value})} />
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title}>{t('save')}</Button>
-                  <Button size="sm" variant="outline" onClick={() => setAddingEntry(false)}>{t('cancel')}</Button>
-                </div>
-              </div>
+        {/* Project Timeline Section */}
+        <section className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-heading font-semibold">{t('projectTimeline')}</h3>
+            {canAddEntry && (
+              <Button size="sm" variant="outline" onClick={() => setAddingEntry(!addingEntry)} className="gap-2">
+                <Plus className="w-3.5 h-3.5" /> {t('addEntry')}
+              </Button>
             )}
+          </div>
 
-            {timeline.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground text-sm">{t('noTimelineEntries')}</div>
-            ) : (
-              <div className="relative pl-6 border-l-2 border-border space-y-6">
-                {timeline.map(entry => (
-                  <div key={entry.id} className="relative">
-                    <div className="absolute -left-[25px] w-3 h-3 rounded-full bg-primary border-2 border-card" />
-                    <div className="bg-card rounded-lg border border-border p-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-semibold">{entry.title}</h4>
-                          {entry.description && <p className="text-sm text-muted-foreground mt-1">{entry.description}</p>}
-                        </div>
-                        <StatusBadge status={entry.status} />
+          {addingEntry && (
+            <div className="bg-card rounded-xl border border-border p-4 space-y-3 mb-4">
+              <Input placeholder={t('entryTitle')} value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
+              <Textarea placeholder="Description" value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
+              <Input type="date" value={newEntry.date} onChange={e => setNewEntry({...newEntry, date: e.target.value})} />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title}>{t('save')}</Button>
+                <Button size="sm" variant="outline" onClick={() => setAddingEntry(false)}>{t('cancel')}</Button>
+              </div>
+            </div>
+          )}
+
+          {timeline.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground text-sm">{t('noTimelineEntries')}</div>
+          ) : (
+            <div className="relative pl-6 border-l-2 border-border space-y-6">
+              {timeline.map(entry => (
+                <div key={entry.id} className="relative">
+                  <div className="absolute -left-[25px] w-3 h-3 rounded-full bg-primary border-2 border-card" />
+                  <div className="bg-card rounded-lg border border-border p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h4 className="font-semibold">{entry.title}</h4>
+                        {entry.description && <p className="text-sm text-muted-foreground mt-1">{entry.description}</p>}
                       </div>
-                      <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {entry.date ? format(new Date(entry.date), 'MMM d, yyyy') : entry.created_at ? format(new Date(entry.created_at), 'MMM d, yyyy') : t('noDate')}
-                        </span>
-                        {entry.responsible_person && (
-                          <span>{t('assignedTo')}: {entry.responsible_person}</span>
-                        )}
-                      </div>
+                      <StatusBadge status={entry.status} />
+                    </div>
+                    <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {entry.date ? format(new Date(entry.date), 'MMM d, yyyy') : entry.created_at ? format(new Date(entry.created_at), 'MMM d, yyyy') : t('noDate')}
+                      </span>
+                      {entry.responsible_person && (
+                        <span>{t('assignedTo')}: {entry.responsible_person}</span>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="documents" className="mt-4">
-            <div className="text-center py-12 text-muted-foreground text-sm">
-              {t('documentsPlaceholder')}
+                </div>
+              ))}
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </section>
+
+        {/* Documents Section */}
+        <section className="mt-8">
+          <h3 className="font-heading font-semibold mb-4">{t('documents')}</h3>
+          <div className="text-center py-12 text-muted-foreground text-sm">
+            {t('projectDetailNoDocuments')}
+          </div>
+        </section>
       </div>
 
       <ProjectFormDialog
