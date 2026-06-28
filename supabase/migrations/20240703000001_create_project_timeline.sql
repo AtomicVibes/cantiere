@@ -1,28 +1,23 @@
 -- =============================================================
 -- Migration: Create project_timeline table with RLS
--- - Renamed from timeline_entries to match codebase convention
 -- - FK to projects with CASCADE delete
 -- - RLS: admins full access, clients read-only on own projects
 -- =============================================================
 
--- 1. Drop old table if it somehow exists
-DROP TABLE IF EXISTS public.timeline_entries CASCADE;
-
--- 2. Create project_timeline table
-CREATE TABLE public.project_timeline (
+-- 1. Create project_timeline table (if not exists)
+CREATE TABLE IF NOT EXISTS public.project_timeline (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
-  date DATE,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled')),
-  responsible_person TEXT,
+  status TEXT DEFAULT 'pending',
+  responsible_person_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_project_timeline_project_id ON public.project_timeline(project_id);
-CREATE INDEX IF NOT EXISTS idx_project_timeline_date ON public.project_timeline(date);
+CREATE INDEX IF NOT EXISTS idx_project_timeline_created_at ON public.project_timeline(created_at);
 
 -- 3. Enable RLS
 ALTER TABLE public.project_timeline ENABLE ROW LEVEL SECURITY;
