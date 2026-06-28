@@ -32,20 +32,13 @@ export default function Projects() {
   const { data: clients = [] } = useQuery({
     queryKey: ['clients', 'dropdown'],
     queryFn: async () => {
-      const { data: roles, error: roleError } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', 'client')
-        .single();
-      if (roleError) throw roleError;
-      if (!roles?.id) return [];
-
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .eq('role_id', roles.id);
+        .from('clients')
+        .select('id, company_name');
       if (error) throw error;
-      return (data ?? []).map(p => ({ id: p.id, name: p.full_name || '' }));
+      const result = (data ?? []).map(c => ({ id: c.id, company_name: c.company_name || '' }));
+      console.log('Clients dropdown data:', result);
+      return result;
     },
     initialData: [],
   });
@@ -66,12 +59,14 @@ export default function Projects() {
         .in('role_id', roleIds)
         .order('full_name');
       if (error) throw error;
-      return (data ?? []).map(p => ({ user_id: p.id, full_name: p.full_name || '' }));
+      const result = (data ?? []).map(p => ({ id: p.id, full_name: p.full_name || '' }));
+      console.log('Managers dropdown data:', result);
+      return result;
     },
     initialData: [],
   });
 
-  const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
+  const clientMap = Object.fromEntries(clients.map(c => [c.id, c.company_name]));
 
   const createMutation = useMutation({
     mutationFn: (data) => createEntity('projects', data),

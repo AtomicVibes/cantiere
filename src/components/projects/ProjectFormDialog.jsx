@@ -29,7 +29,7 @@ const defaultForm = {
   priority: 'medium',
   description: '',
   client_id: '',
-  manager_id: '',
+  project_manager_id: '',
   start_date: '',
   end_date: '',
   location: '',
@@ -79,7 +79,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           priority: project.priority || 'medium',
           description: project.description || '',
           client_id: project.client_id || '',
-          manager_id: project.manager_id || '',
+          project_manager_id: project.project_manager_id || '',
           start_date: project.start_date || '',
           end_date: project.end_date || '',
           location: project.location || '',
@@ -106,6 +106,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
         budget: form.budget ? Number(form.budget) : undefined,
         status: form.status || undefined,
         client_id: form.client_id && form.client_id !== 'none' ? form.client_id : undefined,
+        project_manager_id: form.project_manager_id && form.project_manager_id !== 'none' ? form.project_manager_id : undefined,
       };
       console.log('ProjectFormDialog payload:', payload);
       await onSave(payload);
@@ -156,21 +157,21 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
                 <SelectContent>
                   <SelectItem value="none">{t('none')}</SelectItem>
                   {(clients ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.company_name || c.name || ''}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.company_name || ''}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="manager">{t('projectManager')}</Label>
-              <Select value={form.manager_id} onValueChange={set('manager_id')}>
+              <Select value={form.project_manager_id} onValueChange={set('project_manager_id')}>
                 <SelectTrigger id="manager">
                   <SelectValue placeholder={t('none')} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">{t('none')}</SelectItem>
                   {(managers ?? []).map((m) => (
-                    <SelectItem key={m?.user_id || m?.id} value={m?.user_id || m?.id || ''}>{m?.full_name || m?.name || ''}</SelectItem>
+                    <SelectItem key={m.id} value={m.id}>{m.full_name || ''}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

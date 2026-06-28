@@ -45,28 +45,18 @@ export default function ProjectDetail() {
     initialData: [],
   });
 
-  const { data: clientRoleId } = useQuery({
-    queryKey: ['clientRoleId'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('roles').select('id').eq('name', 'client').single();
-      if (error) throw error;
-      return data?.id;
-    },
-  });
-
   const { data: clients = [] } = useQuery({
     queryKey: ['clients', 'dropdown'],
     queryFn: async () => {
-      if (!clientRoleId) return [];
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .eq('role_id', clientRoleId)
-        .order('full_name');
+        .from('clients')
+        .select('id, company_name')
+        .order('company_name');
       if (error) throw error;
-      return (data ?? []).map(p => ({ id: p.id, name: p.full_name || '' }));
+      const result = (data ?? []).map(c => ({ id: c.id, company_name: c.company_name || '' }));
+      console.log('Clients dropdown data:', result);
+      return result;
     },
-    enabled: !!clientRoleId,
     initialData: [],
   });
 
@@ -87,7 +77,9 @@ export default function ProjectDetail() {
         .in('role_id', roleIds)
         .order('full_name');
       if (error) throw error;
-      return (data ?? []).map(p => ({ user_id: p.id, full_name: p.full_name || '' }));
+      const result = (data ?? []).map(p => ({ id: p.id, full_name: p.full_name || '' }));
+      console.log('Managers dropdown data:', result);
+      return result;
     },
     initialData: [],
   });
@@ -124,7 +116,7 @@ export default function ProjectDetail() {
     );
   }
 
-  const clientName = clients.find(c => c.id === project.client_id)?.name;
+  const clientName = clients.find(c => c.id === project.client_id)?.company_name;
 
   const handleAddEntry = async () => {
     if (!newEntry.title) return;
