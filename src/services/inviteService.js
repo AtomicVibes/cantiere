@@ -23,7 +23,7 @@ async function callFunction(url, payload) {
     let detail;
     try { detail = JSON.parse(text); } catch { detail = text; }
     console.error(`[${url.split('/').pop()}] ${res.status}`, { payload, response: detail });
-    throw new Error(detail?.error || `Request failed (${res.status})`);
+    throw new Error(detail?.message || detail?.error || `Request failed (${res.status})`);
   }
 
   return res.json();
