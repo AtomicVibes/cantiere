@@ -1,22 +1,23 @@
 import { supabase } from '@/services/supabase';
 
-export const logAudit = async ({ action, table_name, record_id, details = {} }) => {
+export const logAudit = async ({ action_type, message, details = {} }) => {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    const logData = {
+      user_id: user.id,
+      action_type,
+      message: message || null,
+      details,
+    };
+
     const { error } = await supabase
       .from('audit_logs')
-      .insert({
-        action,
-        table_name: table_name || null,
-        record_id: record_id || null,
-        changed_by: user.id,
-        details,
-      });
+      .insert([logData]);
 
     if (error) {
-      console.warn('audit log insert failed:', error.message);
+      console.warn('audit log insert failed:', error.message, 'payload:', logData);
     }
   } catch (err) {
     console.warn('audit log error:', err);

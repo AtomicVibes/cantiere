@@ -100,7 +100,7 @@ export default function Clients() {
     },
     onSuccess: async ({ userId, newRoleId }) => {
       const roleName = teamRoles.find(r => r.id === newRoleId)?.name || 'unknown';
-      await logAudit({ action: 'ROLE_UPDATE', table_name: 'profiles', record_id: userId, details: { new_role: roleName } });
+      await logAudit({ action_type: 'ROLE_UPDATE', message: `Promoted to ${roleName}`, details: { new_role: roleName } });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['clients', 'dropdown'] });
       queryClient.invalidateQueries({ queryKey: ['clientCount'] });
