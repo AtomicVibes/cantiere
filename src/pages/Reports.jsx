@@ -16,18 +16,19 @@ async function fetchAll(table) {
   return data ?? [];
 }
 
-async function fetchTeamMembers() {
-  const { data, error } = await supabase
-    .from('team_members')
-    .select('id, profile_id, status, profile:profiles!inner(id, email, full_name, phone, job_title, department)');
-  if (error) throw error;
-  return data ?? [];
-}
+async function fetchProfilesByRoles(roleNames) {
+  const { data: roles, error: roleError } = await supabase
+    .from('roles')
+    .select('id')
+    .in('name', roleNames);
+  if (roleError) throw roleError;
+  const roleIds = (roles ?? []).map(r => r.id);
+  if (roleIds.length === 0) return [];
 
-async function fetchClients() {
   const { data, error } = await supabase
-    .from('clients')
-    .select('id, profile_id, company_name, profile:profiles!inner(id, email, full_name, phone)');
+    .from('profiles')
+    .select('id, email, full_name, phone')
+    .in('role_id', roleIds);
   if (error) throw error;
   return data ?? [];
 }
@@ -36,8 +37,8 @@ export default function Reports() {
   const { t } = useTranslation();
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: () => fetchAll('projects') });
   const { data: invoices = [] } = useQuery({ queryKey: ['invoices'], queryFn: () => fetchAll('invoices') });
-  const { data: clientRecords = [] } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
-  const { data: memberRecords = [] } = useQuery({ queryKey: ['teamMembers'], queryFn: fetchTeamMembers });
+  const { data: clientRecords = [] } = useQuery({ queryKey: ['clients'], queryFn: () => fetchProfilesByRoles(['client']) });
+  const { data: memberRecords = [] } = useQuery({ queryKey: ['teamMembers'], queryFn: () => fetchProfilesByRoles(['super_admin', 'admin', 'manager']) });
 
   const projectsByType = projects.reduce((acc, p) => {
     const label = (p.type || 'other').replace(/_/g, ' ');

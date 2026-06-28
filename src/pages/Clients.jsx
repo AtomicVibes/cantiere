@@ -25,6 +25,16 @@ import { createClient, deleteUser } from '@/services/inviteService';
 
 const emptyForm = { full_name: '', company_name: '', email: '', password: '', phone: '', address: '', vat_number: '', notes: '' };
 
+async function getClientRoleId() {
+  const { data, error } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('name', 'client')
+    .single();
+  if (error) throw error;
+  return data?.id;
+}
+
 export default function Clients() {
   const { t } = useTranslation();
   const { role } = useUserRole();
@@ -44,36 +54,22 @@ export default function Clients() {
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ['clients'],
     queryFn: async () => {
+      const clientRoleId = await getClientRoleId();
+      if (!clientRoleId) return [];
+
       const { data, error } = await supabase
-        .from('clients')
-        .select(`
-          id,
-          profile_id,
-          company_name,
-          address,
-          vat_number,
-          notes,
-          created_at,
-          profile:profiles!inner(
-            id,
-            email,
-            full_name,
-            phone
-          )
-        `)
+        .from('profiles')
+        .select('id, email, full_name, phone, created_at')
+        .eq('role_id', clientRoleId)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []).map(c => ({
-        id: c.id,
-        profile_id: c.profile_id,
-        name: c.profile?.full_name || c.profile?.email || '',
-        email: c.profile?.email || '',
-        phone: c.profile?.phone || '',
-        full_name: c.profile?.full_name || '',
-        company_name: c.company_name || '',
-        address: c.address || '',
-        vat_number: c.vat_number || '',
-        notes: c.notes || '',
+      return (data ?? []).map(p => ({
+        id: p.id,
+        profile_id: p.id,
+        name: p.full_name || p.email || '',
+        email: p.email || '',
+        phone: p.phone || '',
+        status: 'active',
       }));
     },
   });
@@ -98,7 +94,7 @@ export default function Clients() {
     setEditClient(client);
     setFriendlyError('');
     setForm({
-      full_name: client.full_name || '',
+      full_name: client.name || '',
       company_name: client.company_name || '',
       email: client.email || '',
       phone: client.phone || '',
@@ -125,52 +121,18 @@ export default function Clients() {
           .update({ full_name: form.full_name, phone: form.phone })
           .eq('id', editClient.profile_id);
         if (profileError) throw profileError;
-
-        const { error: clientError } = await supabase
-          .from('clients')
-          .update({
-            company_name: form.company_name,
-            address: form.address,
-            vat_number: form.vat_number,
-            notes: form.notes,
-          })
-          .eq('id', editClient.id);
-        if (clientError) throw clientError;
       } else {
         if (!form.email) {
           setFriendlyError('Email is required');
           setSaving(false);
           return;
         }
-        const { user } = await createClient({
+        await createClient({
           email: form.email,
           password: form.password,
           full_name: form.full_name,
           phone: form.phone,
         });
-        if (!user?.id) throw new Error('User creation returned no ID');
-
-        const { error: clientError } = await supabase
-          .from('clients')
-          .update({
-            company_name: form.company_name,
-            address: form.address,
-            vat_number: form.vat_number,
-            notes: form.notes,
-          })
-          .eq('profile_id', user.id);
-        if (clientError && clientError.code !== 'PGRST116') {
-          const { error: insertError } = await supabase
-            .from('clients')
-            .insert({
-              profile_id: user.id,
-              company_name: form.company_name,
-              address: form.address,
-              vat_number: form.vat_number,
-              notes: form.notes,
-            });
-          if (insertError) throw insertError;
-        }
         toast.success(`Client created (${form.email})`);
       }
 
@@ -188,7 +150,7 @@ export default function Clients() {
   };
 
   const filtered = clients.filter(c =>
-    !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.company_name?.toLowerCase().includes(search.toLowerCase())
+    !search || c.name?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -219,7 +181,6 @@ export default function Clients() {
               <TableHeader>
                 <TableRow className="bg-muted/50">
                   <TableHead>{t('name')}</TableHead>
-                  <TableHead className="hidden md:table-cell">{t('company')}</TableHead>
                   <TableHead className="hidden md:table-cell">{t('contact')}</TableHead>
                   <TableHead className="w-20">{t('actions')}</TableHead>
                 </TableRow>
@@ -229,12 +190,6 @@ export default function Clients() {
                   <TableRow key={client.id} className="hover:bg-muted/30">
                     <TableCell>
                       <div className="font-medium">{client.name}</div>
-                      {client.vat_number && <div className="text-xs text-muted-foreground">VAT: {client.vat_number}</div>}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {client.company_name && (
-                        <span className="flex items-center gap-1 text-sm"><Building2 className="w-3.5 h-3.5" />{client.company_name}</span>
-                      )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <div className="space-y-0.5 text-sm">
@@ -269,10 +224,9 @@ export default function Clients() {
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Name *</Label><Input value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required /></div>
-              <div><Label>Company</Label><Input value={form.company_name} onChange={e => setForm({...form, company_name: e.target.value})} /></div>
+              <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} disabled={!!editClient} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} disabled={!!editClient} /></div>
               <div><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
             </div>
             {!editClient && (
@@ -298,9 +252,6 @@ export default function Clients() {
                 </div>
               </div>
             )}
-            <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
-            <div><Label>VAT Number</Label><Input value={form.vat_number} onChange={e => setForm({...form, vat_number: e.target.value})} /></div>
-            <div><Label>Notes</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={3} /></div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={saving || !form.full_name}>{saving ? t('saving') : t('save')}</Button>

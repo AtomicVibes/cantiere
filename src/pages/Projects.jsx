@@ -32,28 +32,41 @@ export default function Projects() {
   const { data: clients = [] } = useQuery({
     queryKey: ['clients', 'dropdown'],
     queryFn: async () => {
+      const { data: roles, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'client')
+        .single();
+      if (roleError) throw roleError;
+      if (!roles?.id) return [];
+
       const { data, error } = await supabase
-        .from('clients')
-        .select('id, company_name, profile:profiles!inner(id, full_name)');
+        .from('profiles')
+        .select('id, full_name')
+        .eq('role_id', roles.id);
       if (error) throw error;
-      return (data ?? []).map(c => ({
-        id: c.id,
-        name: c.company_name || c.profile?.full_name || '',
-        company_name: c.company_name || '',
-      }));
+      return (data ?? []).map(p => ({ id: p.id, name: p.full_name || '' }));
     },
     initialData: [],
   });
   const { data: managers = [] } = useQuery({
-    queryKey: ['team_members', 'managers'],
+    queryKey: ['teamMembers', 'managers'],
     queryFn: async () => {
+      const { data: roles, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .in('name', ['super_admin', 'admin', 'manager']);
+      if (roleError) throw roleError;
+      const roleIds = (roles ?? []).map(r => r.id);
+      if (roleIds.length === 0) return [];
+
       const { data, error } = await supabase
-        .from('team_members')
-        .select('profile_id, profile:profiles!inner(id, full_name)');
+        .from('profiles')
+        .select('id, full_name')
+        .in('role_id', roleIds)
+        .order('full_name');
       if (error) throw error;
-      return (data ?? [])
-        .map(tm => ({ user_id: tm.profile_id, full_name: tm.profile?.full_name || '' }))
-        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+      return (data ?? []).map(p => ({ user_id: p.id, full_name: p.full_name || '' }));
     },
     initialData: [],
   });

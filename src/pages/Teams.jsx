@@ -25,7 +25,17 @@ import { handleMutationError } from '@/lib/rbac';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { inviteUserByEmail, deleteUser } from '@/services/inviteService';
 
+const TEAM_ROLE_NAMES = ['super_admin', 'admin', 'manager'];
 const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active', role_id: '' };
+
+async function getTeamRoleIds() {
+  const { data, error } = await supabase
+    .from('roles')
+    .select('id, name')
+    .in('name', TEAM_ROLE_NAMES);
+  if (error) throw error;
+  return (data ?? []).map(r => r.id);
+}
 
 export default function Teams() {
   const { t } = useTranslation();
@@ -59,35 +69,25 @@ export default function Teams() {
   const { data: members = [], isLoading } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: async () => {
+      const roleIds = await getTeamRoleIds();
+      if (roleIds.length === 0) return [];
+
       const { data, error } = await supabase
-        .from('team_members')
-        .select(`
-          id,
-          profile_id,
-          status,
-          created_at,
-          profile:profiles!inner(
-            id,
-            email,
-            full_name,
-            phone,
-            job_title,
-            department,
-            role_id
-          )
-        `)
+        .from('profiles')
+        .select('id, email, full_name, phone, job_title, department, role_id')
+        .in('role_id', roleIds)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []).map(tm => ({
-        id: tm.id,
-        profile_id: tm.profile_id,
-        full_name: tm.profile?.full_name || '',
-        email: tm.profile?.email || '',
-        phone: tm.profile?.phone || '',
-        job_title: tm.profile?.job_title || '',
-        department: tm.profile?.department || '',
-        role_id: tm.profile?.role_id || '',
-        status: tm.status || 'active',
+      return (data ?? []).map(p => ({
+        id: p.id,
+        profile_id: p.id,
+        full_name: p.full_name || '',
+        email: p.email || '',
+        phone: p.phone || '',
+        job_title: p.job_title || '',
+        department: p.department || '',
+        role_id: p.role_id || '',
+        status: 'active',
       }));
     },
   });
@@ -143,12 +143,6 @@ export default function Teams() {
           })
           .eq('id', editMember.profile_id);
         if (profileError) throw profileError;
-
-        const { error: teamError } = await supabase
-          .from('team_members')
-          .update({ status: form.status })
-          .eq('profile_id', editMember.profile_id);
-        if (teamError) throw teamError;
       } else {
         if (!form.email) {
           setFriendlyError('Email is required');
