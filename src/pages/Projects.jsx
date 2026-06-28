@@ -12,6 +12,7 @@ import { Plus, Search, FolderKanban } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { listEntities, createEntity, updateEntity } from '@/services/dataService';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 
 export default function Projects() {
@@ -42,29 +43,7 @@ export default function Projects() {
     },
     initialData: [],
   });
-  const { data: managers = [] } = useQuery({
-    queryKey: ['teamMembers', 'managers'],
-    queryFn: async () => {
-      const { data: roles, error: roleError } = await supabase
-        .from('roles')
-        .select('id')
-        .in('name', ['super_admin', 'admin', 'manager']);
-      if (roleError) throw roleError;
-      const roleIds = (roles ?? []).map(r => r.id);
-      if (roleIds.length === 0) return [];
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('role_id', roleIds)
-        .order('full_name');
-      if (error) throw error;
-      const result = (data ?? []).map(p => ({ id: p.id, full_name: p.full_name || '' }));
-      console.log('Managers dropdown data:', result);
-      return result;
-    },
-    initialData: [],
-  });
+  const { data: managers = [] } = useManagers();
 
   const clientMap = Object.fromEntries(clients.map(c => [c.id, c.company_name]));
 

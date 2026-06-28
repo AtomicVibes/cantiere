@@ -23,7 +23,6 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { createClient, deleteUser } from '@/services/inviteService';
-import { logAudit } from '@/utils/logger';
 
 const emptyForm = { full_name: '', company_name: '', email: '', password: '', phone: '', address: '', vat_number: '', notes: '' };
 
@@ -94,22 +93,38 @@ export default function Clients() {
 
   const promoteMutation = useMutation({
     mutationFn: async ({ userId, newRoleId }) => {
-      const { error } = await supabase.from('profiles').update({ role_id: newRoleId }).eq('id', userId);
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .update({ role_id: newRoleId })
+        .eq('id', userId)
+        .select('id, role_id')
+        .single();
       if (error) throw error;
+      if (!profile) throw new Error('Profile not found after update');
       return { userId, newRoleId };
     },
     onSuccess: async ({ userId, newRoleId }) => {
       const roleName = teamRoles.find(r => r.id === newRoleId)?.name || 'unknown';
-      await logAudit({ action_type: 'ROLE_UPDATE', message: `Promoted to ${roleName}`, details: { new_role: roleName } });
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error: auditError } = await supabase
+        .from('audit_logs')
+        .insert({
+          user_id: user?.id,
+          action_type: 'ROLE_UPDATE',
+          message: `Promoted ${userId} to ${roleName}`,
+          details: { target_user_id: userId, new_role: roleName },
+        });
+      if (auditError) {
+        console.warn('audit log insert failed:', auditError.message);
+      }
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['clients', 'dropdown'] });
       queryClient.invalidateQueries({ queryKey: ['clientCount'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
-      queryClient.invalidateQueries({ queryKey: ['teamMembers', 'managers'] });
-      queryClient.invalidateQueries({ queryKey: ['projectManagers'] });
-      toast.success('Client promoted to team member');
+      queryClient.invalidateQueries({ queryKey: ['managers'] });
+      toast.success(`Promoted to ${roleName}`, { description: 'Audit log entry created' });
     },
     onError: (err) => {
       if (!handleMutationError(err, t, toast)) {
