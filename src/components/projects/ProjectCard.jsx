@@ -20,6 +20,11 @@ const TYPE_LABELS = {
 };
 
 export default function ProjectCard({ project, clientName }) {
+  if (!project) return null;
+
+  const progress = project.progress ?? 0;
+  const budget = project.budget ?? 0;
+
   return (
     <Link
       to={`/projects/${project.id}`}
@@ -31,44 +36,44 @@ export default function ProjectCard({ project, clientName }) {
             {project.name}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {TYPE_LABELS[project.type] || project.type}
+            {TYPE_LABELS[project?.type] || project?.type}
             {clientName && ` · ${clientName}`}
           </p>
         </div>
-        <PriorityBadge priority={project.priority} />
+        {project?.priority && <PriorityBadge priority={project.priority} />}
       </div>
 
-      {project.description && (
+      {project?.description && (
         <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{project.description}</p>
       )}
 
       <div className="space-y-3">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          {project.start_date && (
+          {project?.start_date && (
             <span className="flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" />
               {format(new Date(project.start_date), 'MMM d, yyyy')}
             </span>
           )}
-          {project.location && (
+          {project?.location && (
             <span className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5" />
               {project.location}
             </span>
           )}
-          {project.budget > 0 && (
+          {budget > 0 && (
             <span className="flex items-center gap-1">
               <DollarSign className="w-3.5 h-3.5" />
-              €{project.budget?.toLocaleString()}
+              €{budget?.toLocaleString()}
             </span>
           )}
         </div>
 
         <div className="flex items-center justify-between">
-          <StatusBadge status={project.status} />
+          <StatusBadge status={project?.status} />
           <div className="flex items-center gap-2 w-24">
-            <Progress value={project.progress || 0} className="h-1.5" />
-            <span className="text-xs text-muted-foreground">{project.progress || 0}%</span>
+            <Progress value={progress} className="h-1.5" />
+            <span className="text-xs text-muted-foreground">{progress}%</span>
           </div>
         </div>
       </div>
