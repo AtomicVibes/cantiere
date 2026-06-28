@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
-import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -24,7 +23,7 @@ import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { createClient, deleteUser } from '@/services/inviteService';
 
-const emptyClient = { name: '', company_name: '', email: '', password: '', phone: '', address: '', zip_code: '', vat_number: '', notes: '', status: 'active' };
+const emptyForm = { full_name: '', company_name: '', email: '', password: '', phone: '', address: '', vat_number: '', notes: '' };
 
 export default function Clients() {
   const { t } = useTranslation();
@@ -33,7 +32,7 @@ export default function Clients() {
   const canDelete = PERMISSIONS.canDeleteClient.includes(role);
   const [showForm, setShowForm] = useState(false);
   const [editClient, setEditClient] = useState(null);
-  const [form, setForm] = useState(emptyClient);
+  const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -42,51 +41,43 @@ export default function Clients() {
 
   const queryClient = useQueryClient();
 
-  const fetchCounts = async () => {
-    const { count, error } = await supabase
-      .from('clients')
-      .select('*', { count: 'exact', head: true });
-    if (error) throw error;
-    return count ?? 0;
-  };
-
-  const { data: clients = [] } = useQuery({
+  const { data: clients = [], isLoading } = useQuery({
     queryKey: ['clients'],
     queryFn: async () => {
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, phone, roles:roles!profiles_role_id_fkey(name)')
+      const { data, error } = await supabase
+        .from('clients')
+        .select(`
+          id,
+          profile_id,
+          company_name,
+          address,
+          vat_number,
+          notes,
+          created_at,
+          profile:profiles!inner(
+            id,
+            email,
+            full_name,
+            phone
+          )
+        `)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (profiles ?? [])
-        .filter(p => p.roles?.name === 'client')
-        .map(p => ({
-          id: p.id,
-          name: p.full_name || p.email || '',
-          email: p.email || '',
-          phone: p.phone || '',
-          company_name: '',
-          vat_number: '',
-          status: 'active',
-        }));
+      return (data ?? []).map(c => ({
+        id: c.id,
+        profile_id: c.profile_id,
+        name: c.profile?.full_name || c.profile?.email || '',
+        email: c.profile?.email || '',
+        phone: c.profile?.phone || '',
+        full_name: c.profile?.full_name || '',
+        company_name: c.company_name || '',
+        address: c.address || '',
+        vat_number: c.vat_number || '',
+        notes: c.notes || '',
+      }));
     },
-    initialData: [],
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Client.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
-      queryClient.invalidateQueries({ queryKey: ['clientCount'] });
-    },
-    onError: (err) => handleMutationError(err, t, toast),
-  });
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Client.update(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clients'] }),
-    onError: (err) => handleMutationError(err, t, toast),
-  });
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
       await deleteUser(id);
@@ -94,6 +85,7 @@ export default function Clients() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['clientCount'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
     },
     onError: (err) => {
       if (!handleMutationError(err, t, toast)) {
@@ -106,30 +98,15 @@ export default function Clients() {
     setEditClient(client);
     setFriendlyError('');
     setForm({
-      name: client.name || '', company_name: client.company_name || '', email: client.email || '',
-      phone: client.phone || '', address: client.address || '', zip_code: client.zip_code || '',
-      vat_number: client.vat_number || '', notes: client.notes || '', status: client.status || 'active',
+      full_name: client.full_name || '',
+      company_name: client.company_name || '',
+      email: client.email || '',
+      phone: client.phone || '',
+      address: client.address || '',
+      vat_number: client.vat_number || '',
+      notes: client.notes || '',
     });
     setShowForm(true);
-  };
-
-  const handleAddClient = async (payload) => {
-    const { data, error } = await supabase
-      .from('clients')
-      .insert([{
-        name: payload.name,
-        email: payload.email,
-        phone: payload.phone,
-        company_name: payload.company_name,
-        vat_number: payload.vat_number,
-        address: payload.address,
-        zip_code: payload.zip_code,
-        notes: payload.notes,
-        status: payload.status || 'active',
-      }])
-      .select();
-    if (error) throw error;
-    return data[0];
   };
 
   const handleSave = async (e) => {
@@ -143,34 +120,66 @@ export default function Clients() {
 
     try {
       if (editClient) {
-        await updateMutation.mutateAsync({ id: editClient.id, data: form });
-        if (form.email) {
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ full_name: form.name, phone: form.phone })
-            .eq('id', editClient.id);
-          if (updateError) throw updateError;
-        }
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ full_name: form.full_name, phone: form.phone })
+          .eq('id', editClient.profile_id);
+        if (profileError) throw profileError;
+
+        const { error: clientError } = await supabase
+          .from('clients')
+          .update({
+            company_name: form.company_name,
+            address: form.address,
+            vat_number: form.vat_number,
+            notes: form.notes,
+          })
+          .eq('id', editClient.id);
+        if (clientError) throw clientError;
       } else {
-        if (form.email) {
-          const { user } = await createClient({
-            email: form.email,
-            password: form.password,
-            full_name: form.name,
-            phone: form.phone,
-          });
-          toast.success(`User created (${user?.email})`);
+        if (!form.email) {
+          setFriendlyError('Email is required');
+          setSaving(false);
+          return;
         }
-        const inserted = await handleAddClient(form);
-        queryClient.setQueryData(['clients'], (old = []) => [...old, inserted]);
-        queryClient.invalidateQueries({ queryKey: ['clients'] });
-        queryClient.invalidateQueries({ queryKey: ['profiles'] });
-        const liveCount = await fetchCounts();
-        queryClient.setQueryData(['clientCount'], liveCount);
+        const { user } = await createClient({
+          email: form.email,
+          password: form.password,
+          full_name: form.full_name,
+          phone: form.phone,
+        });
+        if (!user?.id) throw new Error('User creation returned no ID');
+
+        const { error: clientError } = await supabase
+          .from('clients')
+          .update({
+            company_name: form.company_name,
+            address: form.address,
+            vat_number: form.vat_number,
+            notes: form.notes,
+          })
+          .eq('profile_id', user.id);
+        if (clientError && clientError.code !== 'PGRST116') {
+          const { error: insertError } = await supabase
+            .from('clients')
+            .insert({
+              profile_id: user.id,
+              company_name: form.company_name,
+              address: form.address,
+              vat_number: form.vat_number,
+              notes: form.notes,
+            });
+          if (insertError) throw insertError;
+        }
+        toast.success(`Client created (${form.email})`);
       }
+
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['clientCount'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
       setShowForm(false);
       setEditClient(null);
-      setForm(emptyClient);
+      setForm(emptyForm);
     } catch (err) {
       setFriendlyError(err.message);
     } finally {
@@ -192,13 +201,17 @@ export default function Clients() {
             <Input placeholder={t('searchClients')} value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
           {canCreate && (
-            <Button onClick={() => { setEditClient(null); setForm(emptyClient); setShowForm(true); }} className="gap-2">
+            <Button onClick={() => { setEditClient(null); setForm(emptyForm); setShowForm(true); }} className="gap-2">
               <Plus className="w-4 h-4" /> {t('addClient')}
             </Button>
           )}
         </div>
 
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState icon={UserCircle} title={t('noClients')} description={t('addFirstClient')} actionLabel={canCreate ? t('addClient') : undefined} onAction={canCreate ? () => setShowForm(true) : undefined} />
         ) : (
           <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -208,7 +221,6 @@ export default function Clients() {
                   <TableHead>{t('name')}</TableHead>
                   <TableHead className="hidden md:table-cell">{t('company')}</TableHead>
                   <TableHead className="hidden md:table-cell">{t('contact')}</TableHead>
-                  <TableHead>{t('status')}</TableHead>
                   <TableHead className="w-20">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -230,12 +242,11 @@ export default function Clients() {
                         {client.phone && <div className="flex items-center gap-1"><Phone className="w-3 h-3" />{client.phone}</div>}
                       </div>
                     </TableCell>
-                    <TableCell><StatusBadge status={client.status} /></TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(client)}><Pencil className="w-3.5 h-3.5" /></Button>
                         {canDelete && (
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(client.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(client.profile_id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                         )}
                       </div>
                     </TableCell>
@@ -257,11 +268,11 @@ export default function Clients() {
           )}
           <form onSubmit={handleSave} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Name *</Label><Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} required /></div>
+              <div><Label>Name *</Label><Input value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})} required /></div>
               <div><Label>Company</Label><Input value={form.company_name} onChange={e => setForm({...form, company_name: e.target.value})} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
+              <div><Label>Email</Label><Input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} disabled={!!editClient} /></div>
               <div><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
             </div>
             {!editClient && (
@@ -287,15 +298,12 @@ export default function Clients() {
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
-              <div><Label>ZIP Code</Label><Input value={form.zip_code} onChange={e => setForm({...form, zip_code: e.target.value})} /></div>
-            </div>
+            <div><Label>Address</Label><Input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
             <div><Label>VAT Number</Label><Input value={form.vat_number} onChange={e => setForm({...form, vat_number: e.target.value})} /></div>
             <div><Label>Notes</Label><Textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={3} /></div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
-              <Button type="submit" disabled={saving || !form.name}>{saving ? t('saving') : t('save')}</Button>
+              <Button type="submit" disabled={saving || !form.full_name}>{saving ? t('saving') : t('save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

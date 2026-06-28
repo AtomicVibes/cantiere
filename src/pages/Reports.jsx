@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
 import StatCard from '@/components/dashboard/StatCard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,14 +10,35 @@ import { FolderKanban, DollarSign, Users, UserCircle } from 'lucide-react';
 
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#3b82f6', '#ec4899', '#14b8a6'];
 
+async function fetchAll(table) {
+  const { data, error } = await supabase.from(table).select('*');
+  if (error) throw error;
+  return data ?? [];
+}
+
+async function fetchTeamMembers() {
+  const { data, error } = await supabase
+    .from('team_members')
+    .select('id, profile_id, status, profile:profiles!inner(id, email, full_name, phone, job_title, department)');
+  if (error) throw error;
+  return data ?? [];
+}
+
+async function fetchClients() {
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id, profile_id, company_name, profile:profiles!inner(id, email, full_name, phone)');
+  if (error) throw error;
+  return data ?? [];
+}
+
 export default function Reports() {
   const { t } = useTranslation();
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: () => base44.entities.Project.list(), initialData: [] });
-  const { data: invoices = [] } = useQuery({ queryKey: ['invoices'], queryFn: () => base44.entities.Invoice.list(), initialData: [] });
-  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: () => base44.entities.Client.list(), initialData: [] });
-  const { data: members = [] } = useQuery({ queryKey: ['teamMembers'], queryFn: () => base44.entities.TeamMember.list(), initialData: [] });
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: () => fetchAll('projects') });
+  const { data: invoices = [] } = useQuery({ queryKey: ['invoices'], queryFn: () => fetchAll('invoices') });
+  const { data: clientRecords = [] } = useQuery({ queryKey: ['clients'], queryFn: fetchClients });
+  const { data: memberRecords = [] } = useQuery({ queryKey: ['teamMembers'], queryFn: fetchTeamMembers });
 
-  // Project stats
   const projectsByType = projects.reduce((acc, p) => {
     const label = (p.type || 'other').replace(/_/g, ' ');
     const existing = acc.find(d => d.name === label);
@@ -31,7 +52,6 @@ export default function Reports() {
     .slice(0, 8)
     .map(p => ({ name: p.name?.slice(0, 15), budget: p.budget || 0, actual: p.actual_cost || 0 }));
 
-  // Finance stats
   const categoryRevenue = invoices.reduce((acc, inv) => {
     const cat = (inv.category || 'miscellaneous').replace(/_/g, ' ');
     const existing = acc.find(d => d.name === cat);
@@ -52,8 +72,8 @@ export default function Reports() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard title={t('totalProjects')} value={projects.length} icon={FolderKanban} color="primary" />
           <StatCard title={t('totalInvoiced')} value={`€${totalInvoiced.toLocaleString()}`} icon={DollarSign} color="blue" />
-          <StatCard title={t('teamMembers')} value={members.length} icon={Users} color="violet" />
-          <StatCard title={t('totalClients')} value={clients.length} icon={UserCircle} color="success" />
+          <StatCard title={t('teamMembers')} value={memberRecords.length} icon={Users} color="violet" />
+          <StatCard title={t('totalClients')} value={clientRecords.length} icon={UserCircle} color="success" />
         </div>
 
         <Tabs defaultValue="projects">

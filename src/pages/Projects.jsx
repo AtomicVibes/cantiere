@@ -30,19 +30,31 @@ export default function Projects() {
     initialData: [],
   });
   const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => listEntities('clients'),
+    queryKey: ['clients', 'dropdown'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, company_name, profile:profiles!inner(id, full_name)');
+      if (error) throw error;
+      return (data ?? []).map(c => ({
+        id: c.id,
+        name: c.company_name || c.profile?.full_name || '',
+        company_name: c.company_name || '',
+      }));
+    },
     initialData: [],
   });
   const { data: managers = [] } = useQuery({
     queryKey: ['team_members', 'managers'],
-    queryFn: () =>
-      supabase
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from('team_members')
-        .select('user_id, full_name')
-        .not('user_id', 'is', null)
-        .order('full_name')
-        .then(({ data, error }) => { if (error) throw error; return data ?? []; }),
+        .select('profile_id, profile:profiles!inner(id, full_name)');
+      if (error) throw error;
+      return (data ?? [])
+        .map(tm => ({ user_id: tm.profile_id, full_name: tm.profile?.full_name || '' }))
+        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+    },
     initialData: [],
   });
 

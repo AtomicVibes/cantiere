@@ -17,6 +17,7 @@ import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
   Plus, Loader2
 } from 'lucide-react';
+import { supabase } from '@/services/supabase';
 import { findEntity, getEntity, createEntity, updateEntity } from '@/services/dataService';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -45,8 +46,14 @@ export default function ProjectDetail() {
   });
 
   const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => listEntities('clients'),
+    queryKey: ['clients', 'dropdown'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, company_name, profile:profiles!inner(id, full_name)');
+      if (error) throw error;
+      return (data ?? []).map(c => ({ id: c.id, name: c.company_name || c.profile?.full_name || '' }));
+    },
     initialData: [],
   });
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -44,27 +44,57 @@ export default function Finance() {
 
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
-    queryFn: () => base44.entities.Invoice.list('-created_date'),
-    initialData: [],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('invoices').select('*').order('created_date', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
   });
-  const { data: clients = [] } = useQuery({ queryKey: ['clients'], queryFn: () => base44.entities.Client.list(), initialData: [] });
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: () => base44.entities.Project.list(), initialData: [] });
+  const { data: clients = [] } = useQuery({
+    queryKey: ['clients', 'dropdown'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('id, company_name, profile:profiles!inner(id, full_name)');
+      if (error) throw error;
+      return (data ?? []).map(c => ({ id: c.id, name: c.company_name || c.profile?.full_name || '' }));
+    },
+  });
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
   const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]));
 
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.Invoice.create(data),
+    mutationFn: async (data) => {
+      const { data: created, error } = await supabase.from('invoices').insert([data]).select().single();
+      if (error) throw error;
+      return created;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
     onError: (err) => handleMutationError(err, t, toast),
   });
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.Invoice.update(id, data),
+    mutationFn: async ({ id, data }) => {
+      const { data: updated, error } = await supabase.from('invoices').update(data).eq('id', id).select().single();
+      if (error) throw error;
+      return updated;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
     onError: (err) => handleMutationError(err, t, toast),
   });
   const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.Invoice.delete(id),
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('invoices').delete().eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
     onError: (err) => handleMutationError(err, t, toast),
   });

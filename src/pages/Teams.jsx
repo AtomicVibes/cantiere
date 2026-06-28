@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
-import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
 import TeamMemberCard from '@/components/teams/TeamMemberCard';
@@ -57,43 +56,42 @@ export default function Teams() {
     enabled: isSuperAdmin,
   });
 
-  const { data: members = [] } = useQuery({
+  const { data: members = [], isLoading } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, phone, job_title, department, role_id, roles:roles!profiles_role_id_fkey(name)')
+        .from('team_members')
+        .select(`
+          id,
+          profile_id,
+          status,
+          created_at,
+          profile:profiles!inner(
+            id,
+            email,
+            full_name,
+            phone,
+            job_title,
+            department,
+            role_id
+          )
+        `)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return (data ?? []).map(p => ({
-        id: p.id,
-        full_name: p.full_name || '',
-        email: p.email || '',
-        phone: p.phone || '',
-        job_title: p.job_title || '',
-        department: p.department || '',
-        status: 'active',
-        role_id: p.role_id,
-        role_name: p.roles?.name || '',
+      return (data ?? []).map(tm => ({
+        id: tm.id,
+        profile_id: tm.profile_id,
+        full_name: tm.profile?.full_name || '',
+        email: tm.profile?.email || '',
+        phone: tm.profile?.phone || '',
+        job_title: tm.profile?.job_title || '',
+        department: tm.profile?.department || '',
+        role_id: tm.profile?.role_id || '',
+        status: tm.status || 'active',
       }));
     },
-    initialData: [],
   });
 
-  const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.TeamMember.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
-      queryClient.invalidateQueries({ queryKey: ['profiles'] });
-      queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
-    },
-    onError: (err) => handleMutationError(err, t, toast),
-  });
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => base44.entities.TeamMember.update(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teamMembers'] }),
-    onError: (err) => handleMutationError(err, t, toast),
-  });
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
       await deleteUser(id);
@@ -101,6 +99,7 @@ export default function Teams() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
     },
     onError: (err) => {
       if (!handleMutationError(err, t, toast)) {
@@ -112,8 +111,13 @@ export default function Teams() {
   const openEdit = (member) => {
     setEditMember(member);
     setForm({
-      full_name: member.full_name || '', email: member.email || '', phone: member.phone || '',
-      job_title: member.job_title || '', department: member.department || '', status: member.status || 'active',
+      full_name: member.full_name || '',
+      email: member.email || '',
+      phone: member.phone || '',
+      job_title: member.job_title || '',
+      department: member.department || '',
+      status: member.status || 'active',
+      role_id: member.role_id || '',
     });
     setShowForm(true);
   };
@@ -126,37 +130,46 @@ export default function Teams() {
     }
     setSaving(true);
     setFriendlyError('');
-    const payload = { ...form };
 
     try {
       if (editMember) {
-        delete payload.role_id;
-        await updateMutation.mutateAsync({ id: editMember.id, data: payload });
-        const { error: updateError } = await supabase
+        const { error: profileError } = await supabase
           .from('profiles')
           .update({
-            full_name: payload.full_name,
-            phone: payload.phone,
-            job_title: payload.job_title,
-            department: payload.department,
+            full_name: form.full_name,
+            phone: form.phone,
+            job_title: form.job_title,
+            department: form.department,
           })
-          .eq('id', editMember.id);
-        if (updateError) throw updateError;
+          .eq('id', editMember.profile_id);
+        if (profileError) throw profileError;
+
+        const { error: teamError } = await supabase
+          .from('team_members')
+          .update({ status: form.status })
+          .eq('profile_id', editMember.profile_id);
+        if (teamError) throw teamError;
       } else {
-        if (payload.email) {
-          const { user } = await inviteUserByEmail({
-            email: payload.email,
-            role_id: payload.role_id,
-            full_name: payload.full_name,
-            phone: payload.phone,
-            job_title: payload.job_title,
-            department: payload.department,
-            mode: inviteMode,
-          });
-          toast.success(inviteMode === 'direct' ? `User created (${user?.email})` : 'Invite sent!');
+        if (!form.email) {
+          setFriendlyError('Email is required');
+          setSaving(false);
+          return;
         }
-        await createMutation.mutateAsync(payload);
+        await inviteUserByEmail({
+          email: form.email,
+          role_id: form.role_id,
+          full_name: form.full_name,
+          phone: form.phone,
+          job_title: form.job_title,
+          department: form.department,
+          mode: inviteMode,
+        });
+        toast.success(inviteMode === 'direct' ? `User created (${form.email})` : 'Invite sent!');
       }
+
+      queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
+      queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
       setShowForm(false);
       setEditMember(null);
       setForm(emptyMember);
@@ -175,7 +188,6 @@ export default function Teams() {
     <div>
       <TopBar title={t('teams')} />
       <div className="p-6 space-y-6">
-        {/* Toolbar */}
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -198,8 +210,11 @@ export default function Teams() {
           </div>
         </div>
 
-        {/* Members */}
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState icon={Users} title={t('noTeamMembers')} description={t('addFirstTeamMember')} actionLabel={canCreate ? t('addMember') : undefined} onAction={canCreate ? () => setShowForm(true) : undefined} />
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -216,7 +231,6 @@ export default function Teams() {
         )}
       </div>
 
-      {/* Add/Edit Dialog */}
       <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); setFriendlyError(''); if (!v) setEditMember(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -274,15 +288,6 @@ export default function Teams() {
                 </select>
               </div>
             )}
-            <div key="status">
-              <Label>{t('status')}</Label>
-              <Select value={form.status} onValueChange={v => setForm({...form, status: v})}>
-                <SelectTrigger><SelectValue placeholder={t('select')} /></SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={saving || !form.full_name}>{saving ? t('saving') : t('save')}</Button>
