@@ -102,15 +102,11 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
     setSaving(true);
     try {
       const payload = {
-        ...form,
-        budget: form.budget ? Number(form.budget) : null,
-        progress: Number(form.progress) || 0,
+        name: form.name || undefined,
+        budget: form.budget ? Number(form.budget) : undefined,
+        status: form.status || undefined,
+        client_id: form.client_id || undefined,
       };
-      if (!payload.start_date) delete payload.start_date;
-      if (!payload.end_date) delete payload.end_date;
-      if (!payload.location) delete payload.location;
-      if (!payload.client_id) delete payload.client_id;
-      if (!payload.manager_id) delete payload.manager_id;
       await onSave(payload);
       onOpenChange(false);
     } catch (err) {
