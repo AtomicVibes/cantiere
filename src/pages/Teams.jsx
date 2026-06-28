@@ -149,7 +149,7 @@ export default function Teams() {
           setSaving(false);
           return;
         }
-        await inviteUserByEmail({
+        const res = await inviteUserByEmail({
           email: form.email,
           role_id: form.role_id,
           full_name: form.full_name,
@@ -158,6 +158,21 @@ export default function Teams() {
           department: form.department,
           mode: inviteMode,
         });
+
+        // Optimistic update: show the new member immediately
+        const newMember = {
+          id: res.user.id,
+          profile_id: res.user.id,
+          full_name: form.full_name || '',
+          email: form.email,
+          phone: form.phone || '',
+          job_title: form.job_title || '',
+          department: form.department || '',
+          role_id: form.role_id || '',
+          status: 'active',
+        };
+        queryClient.setQueryData(['teamMembers'], (prev = []) => [newMember, ...prev]);
+
         toast.success(inviteMode === 'direct' ? `User created (${form.email})` : 'Invite sent!');
       }
 
