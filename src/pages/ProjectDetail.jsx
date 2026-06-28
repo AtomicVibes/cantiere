@@ -41,7 +41,7 @@ export default function ProjectDetail() {
 
   const { data: timeline = [] } = useQuery({
     queryKey: ['timeline', id],
-    queryFn: () => findEntity('timeline_entries', { project_id: id }, { order: { column: 'date', direction: 'desc' } }),
+    queryFn: () => findEntity('project_timeline', { project_id: id }, { order: { column: 'date', direction: 'desc' } }),
     initialData: [],
   });
 
@@ -98,7 +98,7 @@ export default function ProjectDetail() {
   });
 
   const createEntryMutation = useMutation({
-    mutationFn: (data) => createEntity('timeline_entries', data),
+    mutationFn: (data) => createEntity('project_timeline', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeline', id] });
       setNewEntry({ title: '', description: '', date: '' });

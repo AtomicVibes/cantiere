@@ -1,9 +1,8 @@
 import { supabase } from './supabase';
 
-const handleDataCall = async (operation) => {
+const handleReadCall = async (operation) => {
   try {
-    const result = await operation();
-    return result;
+    return await operation();
   } catch (error) {
     console.error('DATA_ERROR_LOG', {
       message: error.message,
@@ -11,12 +10,26 @@ const handleDataCall = async (operation) => {
       details: error.details,
       hint: error.hint,
     });
-    return null;
+    return undefined;
+  }
+};
+
+const handleWriteCall = async (operation) => {
+  try {
+    return await operation();
+  } catch (error) {
+    console.error('DATA_ERROR_LOG', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    throw error;
   }
 };
 
 export const listEntities = (table, options = {}) => {
-  return handleDataCall(async () => {
+  return handleReadCall(async () => {
     let query = supabase.from(table).select('*');
 
     if (options.order) {
@@ -39,7 +52,7 @@ export const listEntities = (table, options = {}) => {
 };
 
 export const getEntity = (table, id) => {
-  return handleDataCall(async () => {
+  return handleReadCall(async () => {
     const { data, error } = await supabase
       .from(table)
       .select('*')
@@ -52,7 +65,7 @@ export const getEntity = (table, id) => {
 };
 
 export const findEntity = (table, filters, options = {}) => {
-  return handleDataCall(async () => {
+  return handleReadCall(async () => {
     let query = supabase.from(table).select('*');
 
     Object.entries(filters).forEach(([key, value]) => {
@@ -73,7 +86,7 @@ export const findEntity = (table, filters, options = {}) => {
 };
 
 export const createEntity = (table, payload) => {
-  return handleDataCall(async () => {
+  return handleWriteCall(async () => {
     const { data, error } = await supabase
       .from(table)
       .insert([payload])
@@ -86,7 +99,7 @@ export const createEntity = (table, payload) => {
 };
 
 export const updateEntity = (table, id, payload) => {
-  return handleDataCall(async () => {
+  return handleWriteCall(async () => {
     const { data, error } = await supabase
       .from(table)
       .update(payload)
@@ -100,7 +113,7 @@ export const updateEntity = (table, id, payload) => {
 };
 
 export const deleteEntity = (table, id) => {
-  return handleDataCall(async () => {
+  return handleWriteCall(async () => {
     const { data, error } = await supabase
       .from(table)
       .delete()
