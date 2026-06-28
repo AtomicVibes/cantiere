@@ -45,14 +45,49 @@ export default function ProjectDetail() {
     initialData: [],
   });
 
+  const { data: clientRoleId } = useQuery({
+    queryKey: ['clientRoleId'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('roles').select('id').eq('name', 'client').single();
+      if (error) throw error;
+      return data?.id;
+    },
+  });
+
   const { data: clients = [] } = useQuery({
     queryKey: ['clients', 'dropdown'],
     queryFn: async () => {
+      if (!clientRoleId) return [];
       const { data, error } = await supabase
-        .from('clients')
-        .select('id, company_name, profile:profiles!inner(id, full_name)');
+        .from('profiles')
+        .select('id, full_name')
+        .eq('role_id', clientRoleId)
+        .order('full_name');
       if (error) throw error;
-      return (data ?? []).map(c => ({ id: c.id, name: c.company_name || c.profile?.full_name || '' }));
+      return (data ?? []).map(p => ({ id: p.id, name: p.full_name || '' }));
+    },
+    enabled: !!clientRoleId,
+    initialData: [],
+  });
+
+  const { data: managers = [] } = useQuery({
+    queryKey: ['projectManagers'],
+    queryFn: async () => {
+      const { data: roles, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .in('name', ['super_admin', 'admin', 'manager']);
+      if (roleError) throw roleError;
+      const roleIds = (roles ?? []).map(r => r.id);
+      if (roleIds.length === 0) return [];
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('role_id', roleIds)
+        .order('full_name');
+      if (error) throw error;
+      return (data ?? []).map(p => ({ user_id: p.id, full_name: p.full_name || '' }));
     },
     initialData: [],
   });
@@ -245,6 +280,7 @@ export default function ProjectDetail() {
         onOpenChange={setShowEdit}
         project={project}
         clients={clients}
+        managers={managers}
         onSave={async (data) => {
           await updateMutation.mutateAsync(data);
         }}

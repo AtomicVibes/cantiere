@@ -159,7 +159,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
                 <SelectContent>
                   <SelectItem value="none">{t('none')}</SelectItem>
                   {(clients ?? []).map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.name || c.full_name || ''}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -173,7 +173,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
                 <SelectContent>
                   <SelectItem value="none">{t('none')}</SelectItem>
                   {(managers ?? []).map((m) => (
-                    <SelectItem key={m.user_id} value={m.user_id}>{m.full_name}</SelectItem>
+                    <SelectItem key={m?.user_id || m?.id} value={m?.user_id || m?.id || ''}>{m?.full_name || m?.name || ''}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

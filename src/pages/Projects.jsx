@@ -71,7 +71,7 @@ export default function Projects() {
     initialData: [],
   });
 
-  const clientMap = Object.fromEntries(clients.map(c => [c.id, c.company_name]));
+  const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
 
   const createMutation = useMutation({
     mutationFn: (data) => createEntity('projects', data),

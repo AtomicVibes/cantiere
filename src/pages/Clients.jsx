@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
@@ -17,7 +18,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2, Eye, EyeOff } from 'lucide-react';
+import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2, Eye, EyeOff, ArrowUpFromLine } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
@@ -48,6 +49,8 @@ export default function Clients() {
   const [saving, setSaving] = useState(false);
   const [friendlyError, setFriendlyError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [promoteTarget, setPromoteTarget] = useState(null);
+  const [promoteRole, setPromoteRole] = useState('');
 
   const queryClient = useQueryClient();
 
@@ -71,6 +74,40 @@ export default function Clients() {
         phone: p.phone || '',
         status: 'active',
       }));
+    },
+  });
+
+  const { data: teamRoles = [] } = useQuery({
+    queryKey: ['teamRoles'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roles')
+        .select('id, name')
+        .in('name', ['super_admin', 'admin', 'manager'])
+        .order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    initialData: [],
+  });
+
+  const promoteMutation = useMutation({
+    mutationFn: async ({ userId, newRoleId }) => {
+      const { error } = await supabase.from('profiles').update({ role_id: newRoleId }).eq('id', userId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['clientCount'] });
+      queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
+      toast.success('Client promoted to team member');
+    },
+    onError: (err) => {
+      if (!handleMutationError(err, t, toast)) {
+        toast.error(err.message);
+      }
     },
   });
 
@@ -201,7 +238,10 @@ export default function Clients() {
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(client)}><Pencil className="w-3.5 h-3.5" /></Button>
                         {canDelete && (
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(client.profile_id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          <>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => { setPromoteTarget(client); setPromoteRole(''); }}><ArrowUpFromLine className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(client.profile_id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -283,6 +323,46 @@ export default function Clients() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!promoteTarget} onOpenChange={(v) => { if (!v) setPromoteTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Promote to Team Member</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Promote <strong>{promoteTarget?.name}</strong> from client to a team role.
+            </p>
+            <div className="space-y-2">
+              <Label>New Role</Label>
+              <Select value={promoteRole} onValueChange={setPromoteRole}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {teamRoles.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>{r.name.replace(/_/g, ' ')}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPromoteTarget(null)}>Cancel</Button>
+              <Button
+                disabled={!promoteRole || promoteMutation.isPending}
+                onClick={() => {
+                  if (promoteTarget && promoteRole) {
+                    promoteMutation.mutate({ userId: promoteTarget.profile_id, newRoleId: promoteRole });
+                    setPromoteTarget(null);
+                  }
+                }}
+              >
+                {promoteMutation.isPending ? 'Promoting...' : 'Promote'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
