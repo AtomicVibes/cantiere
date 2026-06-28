@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS public.project_timeline (
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   description TEXT,
+  date DATE,
   status TEXT DEFAULT 'pending',
   responsible_person_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -27,9 +28,16 @@ CREATE POLICY "Admins can read all timeline entries"
   ON public.project_timeline FOR SELECT
   USING (public.is_admin());
 
-CREATE POLICY "Admins can insert timeline entries"
+CREATE POLICY "Team can insert timeline entries"
   ON public.project_timeline FOR INSERT
-  WITH CHECK (public.is_admin());
+  WITH CHECK (
+    public.is_admin() OR
+    EXISTS (
+      SELECT 1 FROM public.profiles p
+      JOIN public.roles r ON r.id = p.role_id
+      WHERE p.id = auth.uid() AND r.name = 'manager'
+    )
+  );
 
 CREATE POLICY "Admins can update timeline entries"
   ON public.project_timeline FOR UPDATE
