@@ -92,7 +92,30 @@ serve(async (req: { headers: { get: (arg0: string) => string; }; method: string;
     const { data: usersData } = await supabaseAdmin.auth.admin.listUsers().catch(() => ({ data: null }));
     const existing = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
     if (existing) {
-      return respond({ error: 'This email is already in use.' }, 400, origin);
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        existing.id,
+        { user_metadata: { full_name: full_name || '', phone: phone || '', role_id: CLIENT_ROLE_ID } }
+      );
+      if (updateError) {
+        return respond({ error: 'Failed to update existing user.', detail: updateError.message }, 400, origin);
+      }
+
+      const { error: upsertError } = await supabaseAdmin
+        .from('profiles')
+        .upsert({
+          id: existing.id,
+          email: existing.email,
+          full_name: full_name || existing.user_metadata?.full_name || '',
+          phone: phone || existing.user_metadata?.phone || '',
+          role_id: CLIENT_ROLE_ID,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+
+      if (upsertError) {
+        return respond({ error: 'Failed to update profile.', detail: upsertError.message }, 400, origin);
+      }
+
+      return respond({ user: existing }, 200, origin);
     }
 
     const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({

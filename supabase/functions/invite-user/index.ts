@@ -88,7 +88,32 @@ serve(async (req) => {
     const { data: usersData } = await supabaseAdmin.auth.admin.listUsers().catch(() => ({ data: null }));
     const existing = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
     if (existing) {
-      return respond({ error: 'This email has already been invited or registered.', detail: `Email ${email} already exists in auth.users` }, 400);
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        existing.id,
+        { user_metadata: userMetadata }
+      );
+      if (updateError) {
+        return respond({ error: 'Failed to update existing user.', detail: updateError.message }, 400);
+      }
+
+      const { error: upsertError } = await supabaseAdmin
+        .from('profiles')
+        .upsert({
+          id: existing.id,
+          email: existing.email,
+          role_id,
+          full_name: full_name || existing.user_metadata?.full_name || '',
+          phone: phone || existing.user_metadata?.phone || '',
+          job_title: job_title || existing.user_metadata?.job_title || '',
+          department: department || existing.user_metadata?.department || '',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+
+      if (upsertError) {
+        return respond({ error: 'Failed to update profile.', detail: upsertError.message }, 400);
+      }
+
+      return respond({ user: existing });
     }
 
     const isDirect = mode !== 'invite';
