@@ -12,11 +12,16 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-function error(message, detail) {
-  return new Response(JSON.stringify({ message, detail }), {
-    status: 400,
+function respond(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+function error(message, detail, status = 400) {
+  console.error(`[delete-user] ${status}`, { message, detail });
+  return respond({ message, detail }, status);
 }
 
 serve(async (req) => {
@@ -25,10 +30,7 @@ serve(async (req) => {
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ message: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return respond({ message: 'Method not allowed' }, 405);
   }
 
   try {
@@ -41,7 +43,6 @@ serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
-      console.error('JWT validation failed', userError?.message);
       return error('Session expired. Please log in again.', userError?.message || 'Invalid token');
     }
 
@@ -78,7 +79,20 @@ serve(async (req) => {
       .eq('id', user_id);
 
     if (deleteProfileError) {
-      console.error('Profile deletion failed', deleteProfileError);
+      console.error('Profile deletion failed', {
+        code: deleteProfileError.code,
+        message: deleteProfileError.message,
+        details: deleteProfileError.details,
+      });
+
+      if (deleteProfileError.code === '23503') {
+        return error(
+          'Cannot delete this client. They are still linked to existing projects. Remove or reassign the projects first.',
+          'This client has projects that reference them. Delete or reassign those projects before deleting the client.',
+          409
+        );
+      }
+
       return error('Failed to remove user. Please try again.', deleteProfileError.message);
     }
 
@@ -89,10 +103,7 @@ serve(async (req) => {
       return error('Failed to remove user. Please try again.', deleteAuthError.message);
     }
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return respond({ success: true });
   } catch (err) {
     console.error('Unexpected delete error', err);
     return error('Something went wrong. Please try again.', err?.message || 'Unknown error');
