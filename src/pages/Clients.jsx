@@ -23,6 +23,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { createClient, deleteUser } from '@/services/inviteService';
+import { logAudit } from '@/utils/logger';
 
 const emptyForm = { full_name: '', company_name: '', email: '', password: '', phone: '', address: '', vat_number: '', notes: '' };
 
@@ -95,13 +96,19 @@ export default function Clients() {
     mutationFn: async ({ userId, newRoleId }) => {
       const { error } = await supabase.from('profiles').update({ role_id: newRoleId }).eq('id', userId);
       if (error) throw error;
+      return { userId, newRoleId };
     },
-    onSuccess: () => {
+    onSuccess: async ({ userId, newRoleId }) => {
+      const roleName = teamRoles.find(r => r.id === newRoleId)?.name || 'unknown';
+      await logAudit({ action: 'ROLE_UPDATE', table_name: 'profiles', record_id: userId, details: { new_role: roleName } });
       queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['clients', 'dropdown'] });
       queryClient.invalidateQueries({ queryKey: ['clientCount'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
+      queryClient.invalidateQueries({ queryKey: ['teamMembers', 'managers'] });
+      queryClient.invalidateQueries({ queryKey: ['projectManagers'] });
       toast.success('Client promoted to team member');
     },
     onError: (err) => {
