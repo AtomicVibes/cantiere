@@ -151,6 +151,19 @@ export default function Clients() {
     },
   });
 
+  const handleDelete = async (client) => {
+    try {
+      const result = await checkClientDeletePreflight(client.profile_id);
+      if (!result.canDelete) {
+        setBlockingProjects({ clientName: client.name, projects: result.projects });
+        return;
+      }
+      setDeleteTarget(client.profile_id);
+    } catch {
+      setDeleteTarget(client.profile_id);
+    }
+  };
+
   const openEdit = (client) => {
     setEditClient(client);
     setFriendlyError('');
@@ -264,18 +277,7 @@ export default function Clients() {
                         {canDelete && (
                           <>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => { setPromoteTarget(client); setPromoteRole(''); }}><ArrowUpFromLine className="w-3.5 h-3.5" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={async () => {
-                              try {
-                                const result = await checkClientDeletePreflight(client.profile_id);
-                                if (!result.canDelete) {
-                                  setBlockingProjects({ clientName: client.name, projects: result.projects });
-                                } else {
-                                  setDeleteTarget(client.profile_id);
-                                }
-                              } catch {
-                                setDeleteTarget(client.profile_id);
-                              }
-                            }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(client)}><Trash2 className="w-3.5 h-3.5" /></Button>
                           </>
                         )}
                       </div>
