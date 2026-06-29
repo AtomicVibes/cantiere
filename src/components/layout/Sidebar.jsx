@@ -54,7 +54,7 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
         collapsed ? "w-[72px]" : "w-[260px]"
       )}
     >
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-border min-h-16">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border">
         {collapsed ? (
           <Logo className="w-7 h-7 text-primary shrink-0" />
         ) : (
