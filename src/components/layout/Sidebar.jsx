@@ -54,12 +54,12 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
         collapsed ? "w-[72px]" : "w-[260px]"
       )}
     >
-      <div className="flex items-center gap-2 pl-2 pr-4 py-2 border-b border-border">
+      <div className="flex items-center justify-start gap-2 px-2 py-2 border-b border-border">
         {collapsed ? (
           <Logo className="w-7 h-7 text-primary shrink-0" />
         ) : (
           <>
-            <Logo className="w-full max-w-[140px] h-auto max-md:max-w-[100px] text-primary shrink-0" />
+            <Logo className="w-full max-w-[40px] h-auto text-primary shrink-0" />
             <span className="font-display font-bold text-lg truncate shrink-0">Geometra</span>
           </>
         )}

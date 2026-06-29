@@ -5,8 +5,8 @@ export default function AuthLayout({ title, subtitle, footer, children }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <Logo className="w-20 h-20 text-primary" />
+        <div className="flex flex-col items-center justify-center w-full mb-10">
+          <Logo className="w-28 h-auto text-primary block" />
           <h1 className="text-3xl font-bold tracking-tight text-foreground">{title}</h1>
           {subtitle && <p className="text-muted-foreground mt-2">{subtitle}</p>}
         </div>
