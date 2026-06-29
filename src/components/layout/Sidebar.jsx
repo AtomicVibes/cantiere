@@ -58,7 +58,7 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
         <div className="flex items-center gap-3 min-w-0">
           <Logo className="w-7 h-7 text-primary flex-shrink-0" />
           {!collapsed && (
-            <span className="font-display font-bold text-lg truncate">Cantiere</span>
+            <span className="font-display font-bold text-lg truncate">Geometra</span>
           )}
         </div>
       </div>
