@@ -29,10 +29,8 @@ export default function MobileNav() {
 
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 bg-card border-b border-border z-40 flex items-center justify-between px-4 py-3 min-h-14">
-        <div className="flex items-center">
-          <Logo className="w-28 h-auto text-primary" />
-        </div>
+      <div className="fixed top-0 left-0 right-0 bg-card border-b border-border z-40 flex flex-row items-center justify-between px-4 py-1.5">
+        <Logo className="h-8 w-auto text-primary" />
         <Sheet>
           <SheetTrigger asChild>
             <button className="p-2"><Menu className="w-5 h-5" /></button>
