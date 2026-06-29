@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/services/authService';
 import Logo from '@/components/Logo';
@@ -41,10 +41,11 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
   const collapsed = collapsedProp !== undefined ? collapsedProp : collapsedInternal;
   const setCollapsed = setCollapsedProp || setCollapsedInternal;
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleLogout = async () => {
     await signOut();
-    window.location.href = '/login';
+    navigate('/login');
   };
 
   return (
@@ -59,7 +60,7 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
           <Logo className="w-7 h-7 text-primary shrink-0" />
         ) : (
           <>
-            <Logo className="w-full max-w-[40px] h-auto text-primary shrink-0" />
+            <Logo className="w-[40px] h-auto text-primary shrink-0" />
             <span className="font-display font-bold text-lg truncate shrink-0">Geometra</span>
           </>
         )}
