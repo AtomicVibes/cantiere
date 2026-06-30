@@ -18,13 +18,19 @@ export default function MessagePopover({ member }) {
   const timerRef = useRef(null);
   const mediaRef = useRef(null);
   const chunksRef = useRef([]);
+  const mimeTypeRef = useRef('audio/webm');
 
   const startRecording = async () => {
     try {
       console.log('[Audio] Requesting mic...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
-      mediaRef.current = new MediaRecorder(stream);
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : 'audio/webm';
+      console.log('[Audio] Using mimeType:', mimeType);
+      mimeTypeRef.current = mimeType;
+      mediaRef.current = new MediaRecorder(stream, { mimeType });
 
       mediaRef.current.ondataavailable = (e) => {
         if (e.data.size > 0) {
@@ -34,7 +40,7 @@ export default function MessagePopover({ member }) {
       };
 
       mediaRef.current.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
         console.log('[Audio] Final blob:', blob.size, 'bytes');
         setAudioBlob(blob);
       };
@@ -99,11 +105,16 @@ export default function MessagePopover({ member }) {
 
       let audioUrl = null;
       if (hasAudio) {
-        const fileName = `messages/${member?.id}/${Date.now()}.webm`;
+        if (audioBlob.size === 0) {
+          console.warn('[Message] Audio blob is empty, skipping upload');
+          return;
+        }
+        const ext = mimeTypeRef.current.includes('opus') ? 'webm' : 'webm';
+        const fileName = `messages/${member?.id}/${Date.now()}.${ext}`;
         console.log('[Message] Uploading audio to:', fileName);
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('voice-messages')
-          .upload(fileName, audioBlob, { contentType: 'audio/webm' });
+          .upload(fileName, audioBlob, { contentType: mimeTypeRef.current });
         if (uploadError) throw uploadError;
         console.log('[Message] Upload success:', uploadData?.path);
         audioUrl = uploadData?.path;
