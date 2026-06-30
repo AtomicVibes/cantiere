@@ -88,20 +88,20 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
         })}
       </nav>
 
-      <div className="p-3 border-t border-border space-y-1">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent w-full transition-colors"
-        >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
-          {!collapsed && <span>{t('logout')}</span>}
-        </button>
+      <div className="mt-auto border-t border-border p-3 space-y-1">
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent w-full transition-colors"
         >
           {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
           {!collapsed && <span>{t('collapse')}</span>}
+        </button>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent w-full transition-colors"
+        >
+          <LogOut className="w-5 h-5 flex-shrink-0" />
+          {!collapsed && <span>{t('logout')}</span>}
         </button>
       </div>
     </aside>
