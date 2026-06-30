@@ -6,6 +6,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { MessageSquare, Mic, Send, Square } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/AuthContext';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+import AudioMessagePlayer from './AudioMessagePlayer';
 
 export default function MessagePopover({ member }) {
   const { t } = useTranslation();
@@ -147,30 +150,82 @@ export default function MessagePopover({ member }) {
           {t('messageButton')}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-4 space-y-3" side="top">
-        <p className="text-sm font-semibold">{t('messageButton')} {member.full_name?.split(' ')[0]}</p>
-        <Textarea
-          placeholder={t('typeAMessage')}
-          value={message}
-          onChange={e => setMessage(e.target.value)}
-          className="text-sm resize-none h-20"
-        />
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant={recording ? 'destructive' : 'secondary'}
-            className="gap-1.5 text-xs flex-1"
-            onClick={recording ? stopRecording : startRecording}
-          >
-            {recording ? (
-              <><Square className="w-3 h-3" /> {t('stop')} ({secondsLeft}s)</>
+      <PopoverContent className="w-96 p-0" side="top">
+        <div className="flex flex-col h-[420px]">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
+              {member.full_name?.charAt(0)?.toUpperCase()}
+            </div>
+            <p className="text-sm font-semibold">{member.full_name?.split(' ')[0]}</p>
+          </div>
+
+          <ScrollArea className="flex-1 px-4 py-3">
+            {messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-sm text-muted-foreground text-center">
+                  {t('typeAMessage')}
+                </p>
+              </div>
             ) : (
-              <><Mic className="w-3 h-3" /> {t('recordVoice')}</>
+              <div className="space-y-3">
+                {messages.map((msg) => {
+                  const isSender = msg.sender_id === user?.id;
+                  return (
+                    <div
+                      key={msg.id || msg.created_date}
+                      className={cn("flex", isSender ? "justify-end" : "justify-start")}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-2xl px-3.5 py-2",
+                          isSender
+                            ? "bg-primary text-primary-foreground rounded-tr-sm"
+                            : "bg-muted rounded-tl-sm"
+                        )}
+                      >
+                        {msg.text && (
+                          <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                        )}
+                        {msg.audio_url && (
+                          <AudioMessagePlayer audioUrl={msg.audio_url} sender={isSender} />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-          </Button>
-          <Button size="sm" className="gap-1.5 text-xs" onClick={handleSendMessage} disabled={!message.trim() && !audioBlob}>
-            <Send className="w-3 h-3" /> {t('send')}
-          </Button>
+          </ScrollArea>
+
+          <div className="border-t border-border p-4 space-y-3">
+            <Textarea
+              placeholder={t('typeAMessage')}
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              className="text-sm resize-none h-16 min-h-0"
+            />
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant={recording ? 'destructive' : 'secondary'}
+                className="gap-1.5 text-xs flex-1"
+                onClick={recording ? stopRecording : startRecording}
+              >
+                {recording ? (
+                  <>
+                    <Square className="w-3 h-3" />
+                    {t('stop')} ({secondsLeft}s)
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse ml-1" />
+                  </>
+                ) : (
+                  <><Mic className="w-3 h-3" /> {t('recordVoice')}</>
+                )}
+              </Button>
+              <Button size="sm" className="gap-1.5 text-xs" onClick={handleSendMessage} disabled={!message.trim() && !audioBlob}>
+                <Send className="w-3 h-3" /> {t('send')}
+              </Button>
+            </div>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
