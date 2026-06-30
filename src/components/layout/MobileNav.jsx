@@ -29,16 +29,19 @@ export default function MobileNav() {
 
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 bg-card border-b border-border z-40 flex flex-row items-center justify-between px-4">
-        <Logo size={28} className="text-primary" />
-        <Sheet>
-          <SheetTrigger asChild>
-            <button className="p-2"><Menu className="w-5 h-5" /></button>
-          </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-[260px]">
-            <Sidebar collapsed={false} setCollapsed={() => {}} />
-          </SheetContent>
-        </Sheet>
+      <div className="fixed top-0 left-0 right-0 bg-card border-b border-border z-40 grid grid-cols-3 items-center px-4 py-4">
+        <Logo size={40} className="text-primary" />
+        <span className="font-display font-bold text-lg justify-self-center">Geometra</span>
+        <div className="justify-self-end">
+          <Sheet>
+            <SheetTrigger asChild>
+              <button className="p-2"><Menu className="w-8 h-8" /></button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-[260px]">
+              <Sidebar collapsed={false} setCollapsed={() => {}} />
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40 flex items-center justify-around py-2 px-1">
