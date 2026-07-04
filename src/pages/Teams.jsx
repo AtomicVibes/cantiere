@@ -20,6 +20,7 @@ import {
 import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTeamFormFields } from '@/hooks/useFormSchema';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { useDirection } from '@/i18n/LanguageProvider';
@@ -56,34 +57,7 @@ export default function Teams() {
     enabled: isSuperAdmin,
   });
 
-  const { data: members = [], isLoading } = useQuery({
-    queryKey: ['teamMembers'],
-    queryFn: async () => {
-      const { data: roleRows } = await supabase
-        .from('roles')
-        .select('id')
-        .in('name', ['super_admin', 'admin', 'manager']);
-      const teamRoleIds = (roleRows ?? []).map(r => r.id);
-      if (teamRoleIds.length === 0) return [];
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, phone, job_title, department, role_id')
-        .in('role_id', teamRoleIds)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map(p => ({
-        id: p.id,
-        full_name: p.full_name || '',
-        email: p.email || '',
-        phone: p.phone || '',
-        job_title: p.job_title || '',
-        department: p.department || '',
-        role_id: p.role_id || '',
-        status: 'active',
-      }));
-    },
-  });
+  const { members, isLoading } = useTeamMembers({ userRole: role, isSuperAdmin });
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
@@ -137,14 +111,14 @@ export default function Teams() {
           .eq('id', editMember.id);
         if (profileError) throw profileError;
       } else {
-        if (!form.email) {
-          setFriendlyError('Email is required');
+        if (!form.email || !form.full_name) {
+          setFriendlyError(!form.email ? 'Email is required' : 'Full name is required');
           setSaving(false);
           return;
         }
         const res = await inviteUserByEmail({
           email: form.email,
-          role_id: form.role_id,
+          role_id: form.role_id || null,
           full_name: form.full_name,
           phone: form.phone,
           job_title: form.job_title,
