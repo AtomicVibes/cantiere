@@ -6,7 +6,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { MessageSquare, Mic, Send, Square } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/AuthContext';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import AudioMessagePlayer from './AudioMessagePlayer';
 
@@ -22,6 +21,66 @@ export default function MessagePopover({ member }) {
   const mediaRef = useRef(null);
   const chunksRef = useRef([]);
   const mimeTypeRef = useRef('audio/webm');
+  const scrollRef = useRef(null);
+
+  // Safety null-checks on user records
+  const senderId = user?.id;
+  const receiverId = member?.id;
+
+  const scrollToBottom = () => {
+    requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      }
+    });
+  };
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Historical feed load + real-time subscription
+  useEffect(() => {
+    if (!senderId || !receiverId) return;
+
+    const fetchMessages = async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${senderId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${senderId})`)
+        .order('created_at', { ascending: true });
+      if (!error && data) {
+        setMessages(data);
+      }
+    };
+
+    fetchMessages();
+
+    const channel = supabase
+      .channel(`messages-${senderId}-${receiverId}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages',
+          filter: `receiver_id=eq.${receiverId}` },
+        (payload) => {
+          if (payload.new.sender_id === senderId) {
+            setMessages(prev => [...prev, payload.new]);
+          }
+        })
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages',
+          filter: `receiver_id=eq.${senderId}` },
+        (payload) => {
+          if (payload.new.sender_id === receiverId) {
+            setMessages(prev => [...prev, payload.new]);
+          }
+        })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [senderId, receiverId]);
 
   const startRecording = async () => {
     try {
@@ -78,23 +137,9 @@ export default function MessagePopover({ member }) {
 
   useEffect(() => () => { clearInterval(timerRef.current); }, []);
 
-  useEffect(() => {
-    if (!member?.id) return;
-
-    const channel = supabase.channel(`messages-${member.id}`)
-      .on('postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages',
-          filter: `receiver_id=eq.${member.id}` },
-        (payload) => {
-          console.log('[Message] Realtime received:', payload.new);
-          setMessages(prev => [...prev, payload.new]);
-        })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [member?.id]);
-
   const handleSendMessage = async () => {
+    if (!senderId || !receiverId) return;
+
     try {
       const text = message.trim();
       const hasAudio = !!audioBlob;
@@ -104,7 +149,7 @@ export default function MessagePopover({ member }) {
         return;
       }
 
-      console.log('[Message] Sending to:', member?.id, '| text:', !!text, '| audio:', hasAudio);
+      console.log('[Message] Sending to:', receiverId, '| text:', !!text, '| audio:', hasAudio);
 
       let audioUrl = null;
       if (hasAudio) {
@@ -113,7 +158,7 @@ export default function MessagePopover({ member }) {
           return;
         }
         const ext = mimeTypeRef.current.includes('opus') ? 'webm' : 'webm';
-        const fileName = `messages/${member?.id}/${Date.now()}.${ext}`;
+        const fileName = `messages/${receiverId}/${Date.now()}.${ext}`;
         console.log('[Message] Uploading audio to:', fileName);
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('voice-messages')
@@ -127,8 +172,8 @@ export default function MessagePopover({ member }) {
       const { error: insertError } = await supabase
         .from('messages')
         .insert({
-          sender_id: user?.id,
-          receiver_id: member?.id,
+          sender_id: senderId,
+          receiver_id: receiverId,
           text: text || null,
           audio_url: audioUrl,
         });
@@ -141,6 +186,8 @@ export default function MessagePopover({ member }) {
       console.error('[Message] handleSendMessage error:', err);
     }
   };
+
+  if (!member) return null;
 
   return (
     <Popover>
@@ -159,7 +206,7 @@ export default function MessagePopover({ member }) {
             <p className="text-sm font-semibold">{member.full_name?.split(' ')[0]}</p>
           </div>
 
-          <ScrollArea className="flex-1 px-4 py-3">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
             {messages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <p className="text-sm text-muted-foreground text-center">
@@ -169,7 +216,7 @@ export default function MessagePopover({ member }) {
             ) : (
               <div className="space-y-3">
                 {messages.map((msg) => {
-                  const isSender = msg.sender_id === user?.id;
+                  const isSender = msg.sender_id === senderId;
                   return (
                     <div
                       key={msg.id || msg.created_date}
@@ -195,7 +242,7 @@ export default function MessagePopover({ member }) {
                 })}
               </div>
             )}
-          </ScrollArea>
+          </div>
 
           <div className="border-t border-border p-4 space-y-3">
             <Textarea

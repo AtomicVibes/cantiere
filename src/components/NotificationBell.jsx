@@ -85,6 +85,18 @@ export default function NotificationBell() {
     setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
 
     const msg = notification.message.toLowerCase();
+
+    if (msg.includes('received a message from')) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('roles:roles!profiles_role_id_fkey(name)')
+        .eq('id', userId)
+        .single();
+      const roleName = profile?.roles?.name;
+      navigate(roleName === 'super_admin' ? '/admin/messages' : '/messages');
+      return;
+    }
+
     if (msg.includes('project')) {
       navigate('/projects');
     } else if (msg.includes('team') || msg.includes('member')) {
