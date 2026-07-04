@@ -34,7 +34,7 @@ export default function TopBar({ title }) {
   const initials = getInitials(displayName);
 
   return (
-    <header className="h-16 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30 w-full max-w-full overflow-hidden">
+    <header className="h-16 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30 w-full max-w-full">
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-heading font-bold">{title}</h1>
       </div>
