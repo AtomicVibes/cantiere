@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Send, Search, Check, CheckCheck, Mic, Square, ChevronLeft } from 'lucide-react';
+import { MessageSquare, Send, Search, Check, CheckCheck, Mic, Square, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/avatar';
 import AudioMessagePlayer from '@/components/teams/AudioMessagePlayer';
@@ -34,6 +34,7 @@ export default function MessagesPage() {
   const [audioBlob, setAudioBlob] = useState(null);
   const [micError, setMicError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isContactsCollapsed, setIsContactsCollapsed] = useState(false);
 
   const timerRef = useRef(null);
   const mediaRef = useRef(null);
@@ -349,20 +350,32 @@ export default function MessagesPage() {
       <div className="flex flex-1 overflow-hidden w-full max-w-full">
         {/* Contact List */}
         <div className={cn(
-          "flex-col bg-card shrink-0 border-border",
-          "w-full md:w-80 md:flex md:border-r",
-          selectedUserId ? "hidden md:flex" : "flex"
+          "flex-col bg-card shrink-0 border-border transition-all duration-300 ease-in-out",
+          "md:flex md:border-r overflow-hidden",
+          selectedUserId ? "hidden md:flex" : "flex",
+          isContactsCollapsed ? "w-full md:w-16" : "w-full md:w-80"
         )}>
-          <div className="p-3 border-b border-border">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Search contacts..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="pl-9 h-9 bg-secondary border-0"
-              />
-            </div>
+          <div className="p-3 border-b border-border flex items-center gap-2">
+            {isContactsCollapsed ? (
+              <Button variant="ghost" size="icon" onClick={() => setIsContactsCollapsed(false)} className="mx-auto h-8 w-8 shrink-0">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            ) : (
+              <>
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search contacts..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="pl-9 h-9 bg-secondary border-0"
+                  />
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setIsContactsCollapsed(true)} className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground">
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+              </>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -399,7 +412,7 @@ export default function MessagesPage() {
                         </span>
                       )}
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className={cn("flex-1 min-w-0", isContactsCollapsed && "hidden")}>
                       <p className="text-sm font-medium truncate">{contact.full_name || 'Unknown'}</p>
                       <p className="text-xs text-muted-foreground truncate">{contact.email}</p>
                     </div>
