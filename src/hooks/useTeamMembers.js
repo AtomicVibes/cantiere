@@ -42,7 +42,7 @@ function formatMember(p) {
  * @returns {{ members: TeamMember[], isLoading: boolean }}
  */
 export function useTeamMembers({ userRole, isSuperAdmin }) {
-  return useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['teamMembers', { userRole, isSuperAdmin }],
     queryFn: async () => {
       if (isSuperAdmin) {
@@ -65,4 +65,5 @@ export function useTeamMembers({ userRole, isSuperAdmin }) {
     staleTime: 5 * 60 * 1000,
     enabled: !!userRole,
   });
+  return { members: data ?? [], isLoading };
 }
