@@ -18,6 +18,7 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
+import { ROLES } from '@/config/roles';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTeamFormFields } from '@/hooks/useFormSchema';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -25,17 +26,7 @@ import { handleMutationError } from '@/lib/rbac';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { inviteUserByEmail, deleteUser } from '@/services/inviteService';
 
-const TEAM_ROLE_NAMES = ['super_admin', 'admin', 'manager'];
 const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active', role_id: '' };
-
-async function getTeamRoleIds() {
-  const { data, error } = await supabase
-    .from('roles')
-    .select('id, name')
-    .in('name', TEAM_ROLE_NAMES);
-  if (error) throw error;
-  return (data ?? []).map(r => r.id);
-}
 
 export default function Teams() {
   const { t } = useTranslation();
@@ -69,13 +60,13 @@ export default function Teams() {
   const { data: members = [], isLoading } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: async () => {
-      const roleIds = await getTeamRoleIds();
-      if (roleIds.length === 0) return [];
+      const teamRoleIds = [ROLES.SUPER_ADMIN, ROLES.TEAM_MEMBER].filter(Boolean);
+      if (teamRoleIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from('profiles')
         .select('id, email, full_name, phone, job_title, department, role_id')
-        .in('role_id', roleIds)
+        .in('role_id', teamRoleIds)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return (data ?? []).map(p => ({
