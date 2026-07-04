@@ -71,7 +71,6 @@ export default function Teams() {
       if (error) throw error;
       return (data ?? []).map(p => ({
         id: p.id,
-        profile_id: p.id,
         full_name: p.full_name || '',
         email: p.email || '',
         phone: p.phone || '',
@@ -132,7 +131,7 @@ export default function Teams() {
             job_title: form.job_title,
             department: form.department,
           })
-          .eq('id', editMember.profile_id);
+          .eq('id', editMember.id);
         if (profileError) throw profileError;
       } else {
         if (!form.email) {
@@ -153,7 +152,6 @@ export default function Teams() {
         // Optimistic update: show the new member immediately
         const newMember = {
           id: res.user.id,
-          profile_id: res.user.id,
           full_name: form.full_name || '',
           email: form.email,
           phone: form.phone || '',
