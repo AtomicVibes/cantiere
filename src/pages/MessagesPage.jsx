@@ -304,7 +304,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Input area */}
-      <div className="border-t border-border bg-card p-4 space-y-3 shrink-0">
+      <div className="border-t border-border bg-card p-4 space-y-3 shrink-0 w-full">
         {micError && (
           <div className="bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2.5 leading-relaxed">
             {micError}
@@ -343,10 +343,10 @@ export default function MessagesPage() {
   );
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col w-full max-w-full">
       <TopBar title="Messages" />
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden w-full max-w-full">
         {/* Contact List */}
         <div className={cn(
           "flex-col bg-card shrink-0 border-border",
@@ -412,7 +412,7 @@ export default function MessagesPage() {
 
         {/* Conversation Pane */}
         <div className={cn(
-          "flex-1 flex-col bg-background",
+          "flex-1 flex-col bg-background min-w-0",
           "md:flex",
           !selectedUserId ? "hidden md:flex" : "flex"
         )}>
