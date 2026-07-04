@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -158,27 +158,6 @@ export default function Teams() {
   const filtered = members.filter(m =>
     !search || m.full_name?.toLowerCase().includes(search.toLowerCase())
   );
-
-  // 🔍 DIAGNOSTIC: unfiltered profiles dump — remove after debugging
-  useEffect(() => {
-    (async () => {
-      console.log('🔍========== TEAM DIAGNOSTIC START ==========');
-      console.log('🔍 Firing raw query: supabase.from("profiles").select("*")');
-      try {
-        const { data, error } = await supabase.from('profiles').select('*');
-        if (error) {
-          console.error('🔴 DIAGNOSTIC ERROR:', error);
-        } else {
-          console.log(`🔍 Raw profiles count: ${data?.length ?? 0}`);
-          console.log('🔍 Raw profiles data:', data);
-          data?.forEach(p => console.log(`  ├─ ${p.id}: ${p.full_name || '(no name)'} | email: ${p.email || '(no email)'} | role_id: ${p.role_id || 'null'}`));
-        }
-      } catch (err) {
-        console.error('🔴 DIAGNOSTIC UNEXPECTED ERROR:', err);
-      }
-      console.log('🔍========== TEAM DIAGNOSTIC END ==========');
-    })();
-  }, []);
 
   return (
     <div>
