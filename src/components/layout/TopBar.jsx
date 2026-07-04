@@ -1,16 +1,37 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/lib/AuthContext';
+import { supabase } from '@/services/supabase';
 import { useTranslation } from 'react-i18next';
 import NotificationBell from '@/components/NotificationBell';
-import { getAvatarLetters } from '@/lib/avatar';
+import { getInitials } from '@/lib/avatar';
 
 export default function TopBar({ title }) {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const initials = getAvatarLetters(user?.full_name);
+  const [profileName, setProfileName] = useState(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (!cancelled && data?.full_name) {
+          setProfileName(data.full_name);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const displayName = profileName || user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email;
+  const initials = getInitials(displayName);
 
   return (
     <header className="h-16 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between px-6 sticky top-0 z-30">
@@ -35,8 +56,8 @@ export default function TopBar({ title }) {
               {initials}
             </AvatarFallback>
           </Avatar>
-          {user?.full_name && (
-            <span className="text-sm font-medium hidden lg:block">{user.full_name}</span>
+          {displayName && displayName !== user?.email && (
+            <span className="text-sm font-medium hidden lg:block">{displayName}</span>
           )}
         </div>
       </div>

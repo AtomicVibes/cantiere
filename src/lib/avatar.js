@@ -1,22 +1,18 @@
 /**
- * Safely extracts avatar initials from a user's full name or username.
+ * Crash-safe parser that extracts initials from a name string.
  *
  * Multi-word names → first letter of first name + first letter of last name
- * Single-word names → first and last character of the string
+ * Single-word names → first two characters of the word
  * Missing/invalid input → 'U'
  *
- * @param {string|null|undefined} name
+ * @param {string|null|undefined} nameString
  * @returns {string}
  */
-export function getAvatarLetters(name) {
-  if (!name || typeof name !== 'string') return 'U';
-  const trimmed = name.trim();
-  if (!trimmed) return 'U';
-
-  const parts = trimmed.split(/\s+/);
+export function getInitials(nameString) {
+  if (!nameString || typeof nameString !== 'string') return 'U';
+  const parts = nameString.trim().split(/\s+/);
   if (parts.length > 1) {
     return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
   }
-
-  return `${trimmed.charAt(0)}${trimmed.charAt(trimmed.length - 1)}`.toUpperCase();
+  return parts[0].length >= 2 ? parts[0].substring(0, 2).toUpperCase() : 'U';
 }
