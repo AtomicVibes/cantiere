@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Mail, Phone, Pencil, Trash2 } from 'lucide-react';
 import StatusBadge from '@/components/shared/StatusBadge';
 import MessagePopover from '@/components/teams/MessagePopover';
+import { getAvatarLetters } from '@/lib/avatar';
 
 const JOB_TITLES = [
   { value: 'project_manager', label: 'Project Manager' },
@@ -22,8 +23,6 @@ const JOB_TITLES = [
   { value: 'consultant', label: 'Consultant' },
 ];
 
-const getInitials = (name) => name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || '??';
-
 export default function TeamMemberCard({ member, layout = 'grid', onEdit, onDelete, canDelete }) {
   const jobLabel = JOB_TITLES.find(j => j.value === member.job_title)?.label || member.job_title;
   const waLink = member.phone ? `https://wa.me/${member.phone.replace(/\D/g, '')}` : null;
@@ -33,7 +32,7 @@ export default function TeamMemberCard({ member, layout = 'grid', onEdit, onDele
       <div className="bg-card rounded-xl border border-border px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:shadow-md transition-shadow">
         <Avatar className="w-10 h-10 shrink-0">
           <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
-            {getInitials(member.full_name)}
+            {getAvatarLetters(member.full_name)}
           </AvatarFallback>
         </Avatar>
 
@@ -81,7 +80,7 @@ export default function TeamMemberCard({ member, layout = 'grid', onEdit, onDele
         <div className="flex items-center gap-3">
           <Avatar className="w-11 h-11">
             <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
-              {getInitials(member.full_name)}
+              {getAvatarLetters(member.full_name)}
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">

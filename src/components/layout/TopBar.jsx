@@ -5,13 +5,12 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/lib/AuthContext';
 import { useTranslation } from 'react-i18next';
 import NotificationBell from '@/components/NotificationBell';
+import { getAvatarLetters } from '@/lib/avatar';
 
 export default function TopBar({ title }) {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const initials = user?.full_name
-    ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
-    : 'U';
+  const initials = getAvatarLetters(user?.full_name);
 
   return (
     <header className="h-16 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between px-6 sticky top-0 z-30">
