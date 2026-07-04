@@ -19,10 +19,20 @@ export default function AudioMessagePlayer({ audioUrl, sender }) {
   useEffect(() => {
     if (!waveformRef.current || !fullUrl) return;
 
+    const isDark = document.documentElement.classList.contains('dark');
+
     const ws = WaveSurfer.create({
       container: waveformRef.current,
-      waveColor: sender ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.2)',
-      progressColor: sender ? '#ffffff' : 'hsl(var(--primary))',
+      waveColor: sender
+        ? 'rgba(255,255,255,0.5)'
+        : isDark
+          ? 'rgba(255,255,255,0.25)'
+          : 'rgba(0,0,0,0.2)',
+      progressColor: sender
+        ? '#ffffff'
+        : isDark
+          ? '#f43f5e'
+          : 'hsl(var(--primary))',
       cursorColor: 'transparent',
       height: 36,
       barWidth: 2,
