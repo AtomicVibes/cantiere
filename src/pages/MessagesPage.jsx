@@ -60,24 +60,34 @@ export default function MessagesPage() {
     setLoading(true);
 
     Promise.all([
-      supabase.from('roles').select('id').in('name', ['super_admin', 'admin', 'manager']),
-      supabase.from('messages').select('sender_id, receiver_id, is_read').or(`receiver_id.eq.${userId}`).eq('is_read', false),
+      supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
+      supabase.from('messages').select('sender_id').eq('receiver_id', userId).eq('is_read', false),
       supabase
         .from('profiles')
-        .select('id, email, full_name, role_id, roles!inner(name)')
-        .neq('roles.name', 'client')
+        .select('id, email, full_name, role_id, roles(name)')
         .neq('id', userId)
         .order('full_name'),
-    ]).then(([rolesRes, unreadRes, profilesRes]) => {
-      const roleIds = (rolesRes.data ?? []).map(r => r.id);
-      const teamProfiles = (profilesRes.data ?? []).filter(p => roleIds.includes(p.role_id));
+    ]).then(([allMessagesRes, unreadRes, profilesRes]) => {
+      const partnerIds = new Set();
+      (allMessagesRes.data ?? []).forEach(m => {
+        if (m.sender_id === userId) partnerIds.add(m.receiver_id);
+        if (m.receiver_id === userId) partnerIds.add(m.sender_id);
+      });
 
       const counts = {};
       (unreadRes.data ?? []).forEach(m => {
         counts[m.sender_id] = (counts[m.sender_id] || 0) + 1;
       });
 
-      setContacts(teamProfiles);
+      const allProfiles = profilesRes.data ?? [];
+
+      const partnerProfiles = allProfiles.filter(p => partnerIds.has(p.id));
+
+      const availableProfiles = allProfiles.filter(p =>
+        !partnerIds.has(p.id) && p.roles?.name !== 'client'
+      );
+
+      setContacts([...partnerProfiles, ...availableProfiles]);
       setUnreadMap(counts);
       setLoading(false);
     }).catch(() => setLoading(false));
