@@ -18,7 +18,6 @@ import {
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
-import { ROLES } from '@/config/roles';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useTeamFormFields } from '@/hooks/useFormSchema';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -60,7 +59,11 @@ export default function Teams() {
   const { data: members = [], isLoading } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: async () => {
-      const teamRoleIds = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.MANAGER].filter(Boolean);
+      const { data: roleRows } = await supabase
+        .from('roles')
+        .select('id')
+        .in('name', ['super_admin', 'admin', 'manager']);
+      const teamRoleIds = (roleRows ?? []).map(r => r.id);
       if (teamRoleIds.length === 0) return [];
 
       const { data, error } = await supabase
