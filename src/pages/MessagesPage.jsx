@@ -236,15 +236,13 @@ export default function MessagesPage() {
     !search || c.full_name?.toLowerCase().includes(search.toLowerCase()) || c.email?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const renderChatContent = (showBack) => (
+  const renderChatContent = () => (
     <>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
-        {showBack && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setSelectedUserId(null)}>
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-        )}
+        <Button variant="ghost" size="icon" className="md:hidden h-8 w-8 shrink-0" onClick={() => setSelectedUserId(null)}>
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
         <Avatar className="w-8 h-8 shrink-0">
           <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
             {getInitials(selectedContact?.full_name)}
@@ -336,22 +334,14 @@ export default function MessagesPage() {
 
   return (
     <div className="h-screen flex flex-col">
-      {/* Mobile: Full-screen Chat Overlay */}
-      {selectedUserId && (
-        <div className="md:hidden fixed inset-0 z-50 bg-background flex flex-col">
-          {renderChatContent(true)}
-        </div>
-      )}
-
-      {/* Desktop: TopBar */}
       <TopBar title="Messages" />
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Contact List — full width on mobile when no chat is open, sidebar on desktop */}
+        {/* Contact List */}
         <div className={cn(
           "flex-col bg-card shrink-0 border-border",
-          "md:w-80 md:flex md:border-r",
-          selectedUserId ? "hidden md:flex" : "flex w-full"
+          "w-full md:w-80 md:flex md:border-r",
+          selectedUserId ? "hidden md:flex" : "flex"
         )}>
           <div className="p-3 border-b border-border">
             <div className="relative">
@@ -410,10 +400,11 @@ export default function MessagesPage() {
           </div>
         </div>
 
-        {/* Desktop: Conversation Pane (hidden on mobile) */}
+        {/* Conversation Pane */}
         <div className={cn(
           "flex-1 flex-col bg-background",
-          "hidden md:flex"
+          "md:flex",
+          !selectedUserId ? "hidden md:flex" : "flex"
         )}>
           {!selectedUserId ? (
             <div className="flex-1 flex items-center justify-center">
@@ -424,7 +415,7 @@ export default function MessagesPage() {
               </div>
             </div>
           ) : (
-            renderChatContent(false)
+            renderChatContent()
           )}
         </div>
       </div>
