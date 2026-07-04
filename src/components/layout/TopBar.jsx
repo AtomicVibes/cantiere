@@ -1,10 +1,10 @@
 import React from 'react';
-import { Bell, Search } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/lib/AuthContext';
 import { useTranslation } from 'react-i18next';
+import NotificationBell from '@/components/NotificationBell';
 
 export default function TopBar({ title }) {
   const { t } = useTranslation();
@@ -28,10 +28,7 @@ export default function TopBar({ title }) {
           />
         </div>
 
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
-        </Button>
+        <NotificationBell />
 
         <div className="flex items-center gap-2">
           <Avatar className="w-8 h-8">
