@@ -16,6 +16,7 @@ export default function MessagePopover({ member }) {
   const [recording, setRecording] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(60);
   const [audioBlob, setAudioBlob] = useState(null);
+  const [micError, setMicError] = useState(null);
   const [messages, setMessages] = useState([]);
   const timerRef = useRef(null);
   const mediaRef = useRef(null);
@@ -82,7 +83,16 @@ export default function MessagePopover({ member }) {
     };
   }, [senderId, receiverId]);
 
+  const ERROR_MESSAGES = {
+    NotAllowedError: 'Microphone access blocked. Please click the camera/lock icon in your browser address bar and select \'Allow\', or check your System Settings.',
+    NotFoundError: 'No microphone detected. Please plug in a device and try again.',
+    DevicesNotFoundError: 'No microphone detected. Please plug in a device and try again.',
+    NotReadableError: 'Microphone is busy. Please close other applications using your mic.',
+    TrackStartError: 'Microphone is busy. Please close other applications using your mic.',
+  };
+
   const startRecording = async () => {
+    setMicError(null);
     try {
       console.log('[Audio] Requesting mic...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -118,6 +128,8 @@ export default function MessagePopover({ member }) {
       }, 1000);
     } catch (err) {
       console.error('[Audio] startRecording error:', err);
+      const name = err?.name;
+      setMicError(ERROR_MESSAGES[name] || 'Microphone access failed. Please try again.');
     }
   };
 
@@ -135,7 +147,12 @@ export default function MessagePopover({ member }) {
     }
   };
 
-  useEffect(() => () => { clearInterval(timerRef.current); }, []);
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    if (mediaRef.current && mediaRef.current.stream) {
+      mediaRef.current.stream.getTracks().forEach(t => t.stop());
+    }
+  }, []);
 
   const handleSendMessage = async () => {
     if (!senderId || !receiverId) return;
@@ -245,6 +262,11 @@ export default function MessagePopover({ member }) {
           </div>
 
           <div className="border-t border-border p-4 space-y-3">
+            {micError && (
+              <div className="bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2.5 leading-relaxed">
+                {micError}
+              </div>
+            )}
             <Textarea
               placeholder={t('typeAMessage')}
               value={message}
