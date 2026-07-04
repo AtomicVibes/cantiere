@@ -4,6 +4,7 @@ import { signOut as supabaseSignOut } from '@/services/authService';
 import { appParams } from '@/lib/app-params';
 import i18n from '@/i18n';
 import { getProfileLanguage } from '@/services/profileService';
+import { initRoles, ROLES, isAdmin as checkIsAdmin } from '@/config/roles';
 
 const AuthContext = createContext();
 
@@ -17,6 +18,7 @@ const SESSION_EVENT = {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [roleId, setRoleId] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
@@ -30,6 +32,19 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(!!currentUser);
 
     if (currentUser) {
+      let fetchedRoleId = null;
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role_id')
+          .eq('id', currentUser.id)
+          .maybeSingle();
+        fetchedRoleId = profile?.role_id ?? null;
+      } catch {
+        // role_id stays null
+      }
+      setRoleId(fetchedRoleId);
+
       try {
         const preferredLang = await getProfileLanguage(currentUser.id);
         if (preferredLang) {
@@ -38,6 +53,8 @@ export const AuthProvider = ({ children }) => {
       } catch {
         // defaults to i18n fallbackLng
       }
+    } else {
+      setRoleId(null);
     }
 
     setIsLoadingAuth(false);
@@ -96,6 +113,7 @@ export const AuthProvider = ({ children }) => {
     let cancelled = false;
 
     const init = async () => {
+      await initRoles(supabase);
       const { data: { session } } = await supabase.auth.getSession();
       if (cancelled) return;
       await setSession(session);
@@ -138,12 +156,14 @@ export const AuthProvider = ({ children }) => {
   return (
     <AuthContext.Provider value={{
       user,
+      roleId,
       isAuthenticated,
       isLoadingAuth,
       isLoadingPublicSettings,
       authError,
       appPublicSettings,
       authChecked,
+      isAdmin: checkIsAdmin(roleId),
       logout,
       navigateToLogin,
       checkUserAuth,

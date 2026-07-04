@@ -10,32 +10,31 @@ import {
   ClipboardList, ShieldCheck
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useUserRole } from '@/hooks/useUserRole';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCollapsedProp }) {
   const { t } = useTranslation();
-  const { role, isLoading } = useUserRole();
-  const isSuperAdmin = role === 'super_admin';
+  const { isAdmin, isLoadingAuth } = useAuth();
 
   const allNavItems = [
     { label: t('dashboard'), icon: LayoutDashboard, path: '/' },
     { label: t('projects'), icon: FolderKanban, path: '/projects' },
-    { label: t('teams'), icon: Users, path: '/teams', requires: 'super_admin' },
-    { label: t('clients'), icon: UserCircle, path: '/clients', requires: 'super_admin' },
+    { label: t('teams'), icon: Users, path: '/teams', requires: true },
+    { label: t('clients'), icon: UserCircle, path: '/clients', requires: true },
     { label: t('notifications'), icon: Bell, path: '/notifications' },
     { label: t('finance'), icon: DollarSign, path: '/finance' },
     { label: t('calendar'), icon: Calendar, path: '/calendar' },
-    { label: t('reports'), icon: BarChart3, path: '/reports', requires: 'super_admin' },
+    { label: t('reports'), icon: BarChart3, path: '/reports', requires: true },
     { label: t('documents'), icon: FileText, path: '/documents' },
     { label: t('requests'), icon: ClipboardList, path: '/requests' },
-    { label: t('requestManagement'), icon: ShieldCheck, path: '/admin/requests', requires: 'super_admin' },
-    { label: t('logs.auditLogs'), icon: ScrollText, path: '/logs', requires: 'super_admin' },
+    { label: t('requestManagement'), icon: ShieldCheck, path: '/admin/requests', requires: true },
+    { label: t('logs.auditLogs'), icon: ScrollText, path: '/logs', requires: true },
     { label: t('settings'), icon: Settings, path: '/settings' },
   ];
 
-  const navItems = isLoading
+  const navItems = isLoadingAuth
     ? allNavItems.filter((item) => !item.requires)
-    : allNavItems.filter((item) => !item.requires || isSuperAdmin);
+    : allNavItems.filter((item) => !item.requires || isAdmin);
 
   const [collapsedInternal, setCollapsedInternal] = useState(false);
   const collapsed = collapsedProp !== undefined ? collapsedProp : collapsedInternal;

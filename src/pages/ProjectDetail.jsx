@@ -19,17 +19,19 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { findEntity, getEntity, createEntity, updateEntity } from '@/services/dataService';
+import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
+import ProjectAssignmentDropdown from '@/components/projects/ProjectAssignmentDropdown';
 
 export default function ProjectDetail() {
   const { t } = useTranslation();
-  const { role } = useUserRole();
-  const canEdit = PERMISSIONS.canEditProject.includes(role);
-  const canAddEntry = PERMISSIONS.canAddTimelineEntry.includes(role);
-  const isSuperAdmin = role === 'super_admin';
+  const { isAdmin } = useAuth();
+  const { role: userRole } = useUserRole();
+  const canEdit = PERMISSIONS.canEditProject.includes(userRole);
+  const canAddEntry = PERMISSIONS.canAddTimelineEntry.includes(userRole);
   const { id } = useParams();
   const queryClient = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
@@ -66,7 +68,21 @@ export default function ProjectDetail() {
 
   const updateMutation = useMutation({
     mutationFn: (data) => updateEntity('projects', id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', id] }),
+    onMutate: async (data) => {
+      await queryClient.cancelQueries({ queryKey: ['project', id] });
+      const previous = queryClient.getQueryData(['project', id]);
+      queryClient.setQueryData(['project', id], (old) => old ? { ...old, ...data } : old);
+      return { previous };
+    },
+    onError: (_err, _data, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['project', id], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
   });
 
   const archiveMutation = useMutation({
@@ -128,7 +144,7 @@ export default function ProjectDetail() {
             <ArrowLeft className="w-4 h-4" /> {t('backToProjects')}
           </Link>
           <div className="flex items-center gap-2">
-            {isSuperAdmin && (
+            {isAdmin && (
               <Button variant="outline" size="sm" onClick={() => archiveMutation.mutate()} className="gap-2" disabled={archiveMutation.isPending}>
                 <Archive className="w-3.5 h-3.5" /> {t('archive')}
               </Button>
@@ -196,6 +212,20 @@ export default function ProjectDetail() {
             )}
           </div>
         </div>
+
+        {/* Team Assignment */}
+        <section>
+          <h3 className="font-heading font-semibold mb-3">{t('teamAssignment')}</h3>
+          <div className="bg-card rounded-xl border border-border p-4 max-w-sm">
+            <label className="text-xs text-muted-foreground mb-1.5 block">{t('projectManager')}</label>
+            <ProjectAssignmentDropdown
+              value={project.project_manager_id}
+              onChange={(newValue) => {
+                updateMutation.mutate({ project_manager_id: newValue });
+              }}
+            />
+          </div>
+        </section>
 
         {/* Project Timeline Section */}
         <section className="mt-8">
