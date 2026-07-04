@@ -55,7 +55,6 @@ export default function MessagesPage() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Fetch contacts (profiles with team roles, excluding self)
   useEffect(() => {
     if (!userId) return;
     setLoading(true);
@@ -84,7 +83,6 @@ export default function MessagesPage() {
     }).catch(() => setLoading(false));
   }, [userId]);
 
-  // Fetch messages when a contact is selected
   useEffect(() => {
     if (!userId || !selectedUserId) {
       setMessages([]);
@@ -102,7 +100,6 @@ export default function MessagesPage() {
 
     fetchMessages();
 
-    // Mark incoming unread messages as read
     supabase
       .from('messages')
       .update({ is_read: true })
@@ -239,12 +236,123 @@ export default function MessagesPage() {
     !search || c.full_name?.toLowerCase().includes(search.toLowerCase()) || c.email?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const renderChatContent = (showBack) => (
+    <>
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
+        {showBack && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setSelectedUserId(null)}>
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+        )}
+        <Avatar className="w-8 h-8 shrink-0">
+          <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+            {getInitials(selectedContact?.full_name)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{selectedContact?.full_name || 'Unknown'}</p>
+          <p className="text-xs text-muted-foreground truncate">{selectedContact?.email}</p>
+        </div>
+      </div>
+
+      {/* Message feed */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+        {messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-sm text-muted-foreground">No messages yet. Say hello!</p>
+          </div>
+        ) : (
+          messages.map(msg => {
+            const isSender = msg.sender_id === userId;
+            return (
+              <div key={msg.id} className={cn("flex", isSender ? "justify-end" : "justify-start")}>
+                <div className={cn(
+                  "max-w-[75%] rounded-2xl px-3.5 py-2",
+                  isSender
+                    ? "bg-gradient-to-r from-rose-400 to-pink-500 text-white rounded-tr-sm"
+                    : "bg-muted rounded-tl-sm"
+                )}>
+                  {msg.content && (
+                    <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
+                  )}
+                  {msg.audio_url && (
+                    <AudioMessagePlayer audioUrl={msg.audio_url} sender={isSender} />
+                  )}
+                  {isSender && (
+                    <span className="flex justify-end mt-1">
+                      {msg.is_read ? (
+                        <CheckCheck className="w-3.5 h-3.5 text-white/60" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5 text-white/40" />
+                      )}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Input area */}
+      <div className="border-t border-border bg-card p-4 space-y-3 shrink-0">
+        {micError && (
+          <div className="bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2.5 leading-relaxed">
+            {micError}
+          </div>
+        )}
+        <Textarea
+          placeholder="Type a message..."
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+          className="text-sm resize-none h-16 min-h-0"
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={recording ? 'destructive' : 'secondary'}
+            className="gap-1.5 text-xs flex-1"
+            onClick={recording ? stopRecording : startRecording}
+          >
+            {recording ? (
+              <>
+                <Square className="w-3 h-3" />
+                Stop ({secondsLeft}s)
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse ml-1" />
+              </>
+            ) : (
+              <><Mic className="w-3 h-3" /> Voice Note</>
+            )}
+          </Button>
+          <Button size="sm" className="gap-1.5 text-xs" onClick={handleSend} disabled={!text.trim() && !audioBlob}>
+            <Send className="w-3 h-3" /> Send
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="h-screen flex flex-col">
+      {/* Mobile: Full-screen Chat Overlay */}
+      {selectedUserId && (
+        <div className="md:hidden fixed inset-0 z-50 bg-background flex flex-col">
+          {renderChatContent(true)}
+        </div>
+      )}
+
+      {/* Desktop: TopBar */}
       <TopBar title="Messages" />
+
       <div className="flex flex-1 overflow-hidden">
-        {/* Left panel — contact list */}
-        <div className="w-80 border-r border-border flex flex-col bg-card shrink-0">
+        {/* Contact List — full width on mobile when no chat is open, sidebar on desktop */}
+        <div className={cn(
+          "flex-col bg-card shrink-0 border-border",
+          "md:w-80 md:flex md:border-r",
+          selectedUserId ? "hidden md:flex" : "flex w-full"
+        )}>
           <div className="p-3 border-b border-border">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -302,8 +410,11 @@ export default function MessagesPage() {
           </div>
         </div>
 
-        {/* Right panel — conversation */}
-        <div className="flex-1 flex flex-col bg-background">
+        {/* Desktop: Conversation Pane (hidden on mobile) */}
+        <div className={cn(
+          "flex-1 flex-col bg-background",
+          "hidden md:flex"
+        )}>
           {!selectedUserId ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
@@ -313,97 +424,7 @@ export default function MessagesPage() {
               </div>
             </div>
           ) : (
-            <>
-              {/* Conversation header */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card">
-                <Button variant="ghost" size="icon" className="md:hidden h-8 w-8" onClick={() => setSelectedUserId(null)}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Avatar className="w-8 h-8">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                    {getInitials(selectedContact?.full_name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{selectedContact?.full_name || 'Unknown'}</p>
-                  <p className="text-xs text-muted-foreground truncate">{selectedContact?.email}</p>
-                </div>
-              </div>
-
-              {/* Message feed */}
-              <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-                {messages.length === 0 ? (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-sm text-muted-foreground">No messages yet. Say hello!</p>
-                  </div>
-                ) : (
-                  messages.map(msg => {
-                    const isSender = msg.sender_id === userId;
-                    return (
-                      <div key={msg.id} className={cn("flex", isSender ? "justify-end" : "justify-start")}>
-                        <div className={cn(
-                          "max-w-[75%] rounded-2xl px-3.5 py-2",
-                          isSender ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted rounded-tl-sm"
-                        )}>
-                          {msg.content && (
-                            <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                          )}
-                          {msg.audio_url && (
-                            <AudioMessagePlayer audioUrl={msg.audio_url} sender={isSender} />
-                          )}
-                          {isSender && (
-                            <span className="flex justify-end mt-1">
-                              {msg.is_read ? (
-                                <CheckCheck className="w-3.5 h-3.5 text-primary-foreground/60" />
-                              ) : (
-                                <Check className="w-3.5 h-3.5 text-primary-foreground/40" />
-                              )}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Input area */}
-              <div className="border-t border-border bg-card p-4 space-y-3">
-                {micError && (
-                  <div className="bg-destructive/10 border border-destructive/30 text-destructive text-xs rounded-lg px-3 py-2.5 leading-relaxed">
-                    {micError}
-                  </div>
-                )}
-                <Textarea
-                  placeholder="Type a message..."
-                  value={text}
-                  onChange={e => setText(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                  className="text-sm resize-none h-16 min-h-0"
-                />
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant={recording ? 'destructive' : 'secondary'}
-                    className="gap-1.5 text-xs flex-1"
-                    onClick={recording ? stopRecording : startRecording}
-                  >
-                    {recording ? (
-                      <>
-                        <Square className="w-3 h-3" />
-                        Stop ({secondsLeft}s)
-                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse ml-1" />
-                      </>
-                    ) : (
-                      <><Mic className="w-3 h-3" /> Voice Note</>
-                    )}
-                  </Button>
-                  <Button size="sm" className="gap-1.5 text-xs" onClick={handleSend} disabled={!text.trim() && !audioBlob}>
-                    <Send className="w-3 h-3" /> Send
-                  </Button>
-                </div>
-              </div>
-            </>
+            renderChatContent(false)
           )}
         </div>
       </div>
