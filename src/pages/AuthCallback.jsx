@@ -1,21 +1,24 @@
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/services/supabase';
 
 export default function AuthCallback() {
+  const navigate = useNavigate();
+
   useEffect(() => {
     let cancelled = false;
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (cancelled) return;
       if (session?.user) {
-        window.location.href = '/dashboard';
+        navigate('/dashboard', { replace: true });
       }
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
       if (cancelled) return;
       if (event === 'SIGNED_IN') {
-        window.location.href = '/dashboard';
+        navigate('/dashboard', { replace: true });
       }
     });
 
@@ -23,7 +26,7 @@ export default function AuthCallback() {
       cancelled = true;
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-background">
