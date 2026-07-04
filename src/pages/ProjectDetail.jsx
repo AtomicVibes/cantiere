@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
-  Plus, Loader2
+  Plus, Loader2, Archive
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { findEntity, getEntity, createEntity, updateEntity } from '@/services/dataService';
@@ -29,6 +29,7 @@ export default function ProjectDetail() {
   const { role } = useUserRole();
   const canEdit = PERMISSIONS.canEditProject.includes(role);
   const canAddEntry = PERMISSIONS.canAddTimelineEntry.includes(role);
+  const isSuperAdmin = role === 'super_admin';
   const { id } = useParams();
   const queryClient = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
@@ -66,6 +67,16 @@ export default function ProjectDetail() {
   const updateMutation = useMutation({
     mutationFn: (data) => updateEntity('projects', id, data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', id] }),
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: () => supabase.from('projects').update({ status: 'archived' }).eq('id', id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
+      toast.success(t('projectArchived'));
+    },
+    onError: (err) => handleMutationError(err, t, toast),
   });
 
   const createEntryMutation = useMutation({
@@ -116,11 +127,18 @@ export default function ProjectDetail() {
           <Link to="/projects" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" /> {t('backToProjects')}
           </Link>
-          {canEdit && (
-            <Button variant="outline" size="sm" onClick={() => setShowEdit(true)} className="gap-2">
-              <Pencil className="w-3.5 h-3.5" /> {t('edit')}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {isSuperAdmin && (
+              <Button variant="outline" size="sm" onClick={() => archiveMutation.mutate()} className="gap-2" disabled={archiveMutation.isPending}>
+                <Archive className="w-3.5 h-3.5" /> {t('archive')}
+              </Button>
+            )}
+            {canEdit && (
+              <Button variant="outline" size="sm" onClick={() => setShowEdit(true)} className="gap-2">
+                <Pencil className="w-3.5 h-3.5" /> {t('edit')}
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Project Header Card */}

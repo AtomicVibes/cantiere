@@ -21,7 +21,7 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
     { label: t('dashboard'), icon: LayoutDashboard, path: '/' },
     { label: t('projects'), icon: FolderKanban, path: '/projects' },
     { label: t('teams'), icon: Users, path: '/teams', requires: 'super_admin' },
-    { label: t('clients'), icon: UserCircle, path: '/clients' },
+    { label: t('clients'), icon: UserCircle, path: '/clients', requires: 'super_admin' },
     { label: t('notifications'), icon: Bell, path: '/notifications' },
     { label: t('finance'), icon: DollarSign, path: '/finance' },
     { label: t('calendar'), icon: Calendar, path: '/calendar' },
