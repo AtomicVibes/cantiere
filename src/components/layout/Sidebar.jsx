@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FolderKanban, Users, UserCircle,
   Bell, DollarSign, Calendar, BarChart3, FileText,
   Settings, ScrollText, ChevronLeft, ChevronRight, LogOut,
-  ClipboardList, ShieldCheck
+  ClipboardList, ShieldCheck, MessageSquare
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
@@ -21,6 +21,7 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
     { label: t('projects'), icon: FolderKanban, path: '/projects' },
     { label: t('teams'), icon: Users, path: '/teams', requires: true },
     { label: t('clients'), icon: UserCircle, path: '/clients', requires: true },
+    { label: 'Messages', icon: MessageSquare, path: '/messages' },
     { label: t('notifications'), icon: Bell, path: '/notifications' },
     { label: t('finance'), icon: DollarSign, path: '/finance' },
     { label: t('calendar'), icon: Calendar, path: '/calendar' },

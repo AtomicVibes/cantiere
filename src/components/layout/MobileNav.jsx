@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import Logo from '@/components/Logo';
 import {
   LayoutDashboard, FolderKanban, Users, DollarSign,
-  Calendar, Menu
+  Calendar, Menu, MessageSquare
 } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import Sidebar from './Sidebar';
@@ -20,6 +20,7 @@ export default function MobileNav() {
   const bottomItems = [
     { icon: LayoutDashboard, path: '/', label: t('home') },
     { icon: FolderKanban, path: '/projects', label: t('projects') },
+    { icon: MessageSquare, path: '/messages', label: 'Messages' },
     { icon: Users, path: '/teams', label: t('teams'), requires: 'super_admin' },
     { icon: DollarSign, path: '/finance', label: t('finance') },
     { icon: Calendar, path: '/calendar', label: t('calendar') },

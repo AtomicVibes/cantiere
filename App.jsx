@@ -33,6 +33,7 @@ import Settings from '@/pages/Settings';
 import Logs from '@/pages/Logs';
 import ProjectRequests from '@/pages/ProjectRequests';
 import AdminInbox from '@/pages/AdminInbox';
+import MessagesPage from '@/pages/MessagesPage';
 
 const AuthenticatedApp = () => {
   const { t } = useTranslation();
@@ -85,6 +86,8 @@ const AuthenticatedApp = () => {
           <Route path="/logs" element={<Logs />} />
           <Route path="/requests" element={<ProjectRequests />} />
           <Route path="/admin/requests" element={<AdminInbox />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/admin/messages" element={<MessagesPage />} />
         </Route>
       </Route>
 
