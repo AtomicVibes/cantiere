@@ -266,7 +266,7 @@ export default function MessagesPage() {
       </div>
 
       {/* Message feed */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-3">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-muted-foreground">No messages yet. Say hello!</p>
@@ -316,7 +316,7 @@ export default function MessagesPage() {
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-          className="text-sm resize-none h-16 min-h-0"
+          className="text-sm resize-none h-16 min-h-0 w-full"
         />
         <div className="flex items-center gap-2">
           <Button
@@ -425,7 +425,7 @@ export default function MessagesPage() {
 
         {/* Conversation Pane */}
         <div className={cn(
-          "flex-1 flex-col bg-background min-w-0",
+          "flex-1 flex-col bg-background min-w-0 max-w-full w-full overflow-x-hidden",
           "md:flex",
           !selectedUserId ? "hidden md:flex" : "flex"
         )}>

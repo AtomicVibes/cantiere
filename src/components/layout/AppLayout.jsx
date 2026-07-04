@@ -14,7 +14,7 @@ export default function AppLayout() {
       <div className="md:hidden">
         <MobileNav />
       </div>
-      <main className={`min-h-screen transition-all duration-300 pt-14 md:pt-0 pb-16 md:pb-0 w-full max-w-full min-w-0 ${collapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'}`}>
+      <main className={`min-h-screen transition-all duration-300 pt-14 md:pt-0 pb-16 md:pb-0 max-w-full min-w-0 ${collapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'}`}>
         <Outlet />
       </main>
     </div>
