@@ -60,7 +60,7 @@ export default function Teams() {
   const { data: members = [], isLoading } = useQuery({
     queryKey: ['teamMembers'],
     queryFn: async () => {
-      const teamRoleIds = [ROLES.SUPER_ADMIN, ROLES.TEAM_MEMBER].filter(Boolean);
+      const teamRoleIds = [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.MANAGER].filter(Boolean);
       if (teamRoleIds.length === 0) return [];
 
       const { data, error } = await supabase
