@@ -174,7 +174,7 @@ export default function MessagePopover({ member }) {
         .insert({
           sender_id: senderId,
           receiver_id: receiverId,
-          text: text || null,
+          content: text || null,
           audio_url: audioUrl,
         });
       if (insertError) throw insertError;
@@ -230,8 +230,8 @@ export default function MessagePopover({ member }) {
                             : "bg-muted rounded-tl-sm"
                         )}
                       >
-                        {msg.text && (
-                          <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
+                        {msg.content && (
+                          <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                         )}
                         {msg.audio_url && (
                           <AudioMessagePlayer audioUrl={msg.audio_url} sender={isSender} />
