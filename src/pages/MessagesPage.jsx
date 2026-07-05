@@ -148,23 +148,20 @@ export default function MessagesPage() {
 
   // ── Optimistic message delete ───────────────────────────────────────
   const deleteMessage = useCallback(async (messageId) => {
-    if (!userId) return;
-
-    const prevMessages = messagesRef.current;
+    const previousMessages = [...messages];
 
     setMessages(prev => prev.filter(m => m.id !== messageId));
 
-    try {
-      const { error } = await supabase.rpc('delete_single_message', {
-        msg_id: messageId,
-        user_id: userId,
-      });
-      if (error) throw error;
-    } catch (err) {
-      setMessages(prevMessages);
-      console.error('Failed to delete message:', err);
+    const { error } = await supabase.rpc('delete_single_message', {
+      current_user_id: userId,
+      msg_id: messageId,
+    });
+
+    if (error) {
+      setMessages(previousMessages);
+      console.error('Failed to delete message.');
     }
-  }, [userId]);
+  }, [messages, userId]);
 
   // ── Optimistic conversation clear ───────────────────────────────────
   const clearConversation = useCallback(async (peerId) => {

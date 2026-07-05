@@ -3,8 +3,8 @@
 
 -- Deletes a single message by ID, only if the caller is the sender.
 create or replace function public.delete_single_message(
-  msg_id   uuid,
-  user_id  uuid
+  current_user_id uuid,
+  msg_id          uuid
 )
 returns void
 language plpgsql
@@ -14,7 +14,7 @@ as $$
 begin
   delete from public.messages
   where  id        = msg_id
-    and  sender_id = user_id;
+    and  sender_id = current_user_id;
 end;
 $$;
 
