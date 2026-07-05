@@ -158,16 +158,33 @@ export function usePushNotification() {
           await existingPushSub.unsubscribe();
         }
 
-        // 3. Convert the VAPID public key
+        // 3. Verify the VAPID key is present before converting
+        console.log('[PushNotification] VAPID key source:', {
+          present: typeof VAPID_PUBLIC_KEY === 'string' && VAPID_PUBLIC_KEY.length > 0,
+          type: typeof VAPID_PUBLIC_KEY,
+          length: typeof VAPID_PUBLIC_KEY === 'string' ? VAPID_PUBLIC_KEY.length : 0,
+          preview: typeof VAPID_PUBLIC_KEY === 'string' ? VAPID_PUBLIC_KEY.slice(0, 12) + '…' : 'N/A',
+        });
+
         let applicationServerKey;
         try {
           applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
         } catch (keyErr) {
-          console.error('[PushNotification] VAPID key conversion failed — aborting subscribe', keyErr);
+          console.error(
+            '[PushNotification] VAPID key conversion failed — aborting subscribe\n' +
+            '  name: ' + keyErr.name + '\n' +
+            '  message: ' + keyErr.message,
+            JSON.stringify(keyErr, Object.getOwnPropertyNames(keyErr))
+          );
           return;
         }
 
-        // 4. Subscribe
+        // 4. Guard: permission may have been revoked since the earlier check
+        if (Notification.permission === 'denied') {
+          console.warn('[PushNotification] Push notifications are blocked by the user\'s browser settings.');
+          return;
+        }
+
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey,
@@ -188,19 +205,14 @@ export function usePushNotification() {
 
         subscribedRef.current = true;
       } catch (err) {
-        console.error('[PushNotification] Subscription failed', {
-          name: err.name,
-          message: err.message,
-          vapidKey: VAPID_PUBLIC_KEY
-            ? {
-                present: true,
-                length: VAPID_PUBLIC_KEY.length,
-                firstChars: VAPID_PUBLIC_KEY.slice(0, 8),
-                lastChars: VAPID_PUBLIC_KEY.slice(-8),
-                hasPadding: VAPID_PUBLIC_KEY.includes('='),
-              }
-            : { present: false },
-        });
+        console.error(
+          '[PushNotification] Subscription failed\n' +
+          '  name: ' + (err.name || '(no name)') + '\n' +
+          '  message: ' + (err.message || '(no message)') + '\n' +
+          '  VAPID key present: ' + (typeof VAPID_PUBLIC_KEY === 'string' && VAPID_PUBLIC_KEY.length > 0) + '\n' +
+          '  VAPID key length: ' + (typeof VAPID_PUBLIC_KEY === 'string' ? VAPID_PUBLIC_KEY.length : 0),
+          JSON.stringify(err, Object.getOwnPropertyNames(err))
+        );
       }
     }
 
