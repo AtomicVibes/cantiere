@@ -1,8 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/AuthContext';
 
 const VITE_VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+
+// Module-scoped lock — survives React component unmount/remount cycles
+// that destroy useRef state during Supabase auth lifecycle transitions.
+let isPushSubscribingGlobal = false;
 
 function urlB64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -19,7 +23,6 @@ function urlB64ToUint8Array(base64String) {
 export function usePushNotification() {
   const { user, isAuthenticated } = useAuth();
   const [pushError, setPushError] = useState(null);
-  const isSubscribingRef = useRef(false);
 
   useEffect(() => {
     if (!isAuthenticated || !user || !VITE_VAPID_PUBLIC_KEY) return;
@@ -27,14 +30,13 @@ export function usePushNotification() {
     let cancelled = false;
 
     (async () => {
-      // ── In-flight guard ────────────────────────────────────────────
-      // Prevent concurrent subscribe calls from Supabase auth lifecycle
-      // racing each other to the FCM gateway.
-      if (isSubscribingRef.current) {
-        console.log('[PushNotification] Subscription already in progress, skipping duplicate call.');
+      // ── Global in-flight guard ─────────────────────────────────────
+      // Survives React unmount/remount cycles that destroy useRef state.
+      if (isPushSubscribingGlobal) {
+        console.log('[PushNotification] Global lock active. Deflecting duplicate concurrent call.');
         return;
       }
-      isSubscribingRef.current = true;
+      isPushSubscribingGlobal = true;
 
       try {
         console.log('--- Push Subscription Debug ---');
@@ -70,7 +72,7 @@ export function usePushNotification() {
         // the subscribe() call entirely — avoids the FCM gateway race.
         const existingSub = await reg.pushManager.getSubscription();
         if (existingSub) {
-          console.log('Existing subscription found. Skipping push service registration.');
+          console.log('[PushNotification] Existing subscription detected');
           const { error } = await supabase
             .from('push_subscriptions')
             .upsert(
@@ -134,7 +136,7 @@ export function usePushNotification() {
           setPushError(error.name || 'UnknownError');
         }
       } finally {
-        isSubscribingRef.current = false;
+        isPushSubscribingGlobal = false;
       }
     })();
 
