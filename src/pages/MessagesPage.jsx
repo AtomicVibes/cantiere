@@ -41,6 +41,12 @@ export default function MessagesPage() {
   const chunksRef = useRef([]);
   const mimeTypeRef = useRef('audio/webm');
   const scrollRef = useRef(null);
+  const messagesRef = useRef([]);
+  const unreadMapRef = useRef({});
+
+  // Keep refs in sync with state for snapshot/rollback
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { unreadMapRef.current = unreadMap; }, [unreadMap]);
 
   const selectedContact = contacts.find(c => c.id === selectedUserId);
 
@@ -94,31 +100,59 @@ export default function MessagesPage() {
     }).catch(() => setLoading(false));
   }, [userId]);
 
+  // ── Optimistic chat opener ─────────────────────────────────────────
+  // Immediately marks local messages as read before the RPC commits to
+  // the server, preventing the "unread" flicker.  Rolls back on failure.
+  const handleOpenChat = useCallback(async (profileId) => {
+    if (!profileId || !userId) return;
+
+    const prevMessages = messagesRef.current;
+    const prevUnreadMap = unreadMapRef.current;
+
+    // Optimistic UI — remove badge immediately
+    setUnreadMap(prev => ({ ...prev, [profileId]: 0 }));
+    setSelectedUserId(profileId);
+
+    try {
+      // Fetch all messages for this conversation
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`and(sender_id.eq.${userId},receiver_id.eq.${profileId}),and(sender_id.eq.${profileId},receiver_id.eq.${userId})`)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      // Optimistic update — immediately mark incoming messages as read
+      // so the UI shows double-check (read) receipts without waiting.
+      const updated = (data || []).map(m => ({
+        ...m,
+        is_read: m.sender_id === profileId ? true : m.is_read,
+      }));
+      setMessages(updated);
+
+      // Commit to the server via the dedicated RPC
+      const { error: rpcErr } = await supabase.rpc('mark_chat_as_read', {
+        chat_receiver_id: userId,
+        chat_sender_id: profileId,
+      });
+      if (rpcErr) throw rpcErr;
+    } catch (err) {
+      // Rollback — restore the previous state so the UI never shows
+      // false read-receipt data.
+      setMessages(prevMessages);
+      setUnreadMap(prevUnreadMap);
+      console.error('[MessagesPage] mark_chat_as_read failed:', err);
+    }
+  }, [userId]);
+
+  // ── Realtime subscriptions only (fetch + mark-as-read moved into
+  //    handleOpenChat for optimistic control).
   useEffect(() => {
     if (!userId || !selectedUserId) {
       setMessages([]);
       return;
     }
-
-    const fetchMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .or(`and(sender_id.eq.${userId},receiver_id.eq.${selectedUserId}),and(sender_id.eq.${selectedUserId},receiver_id.eq.${userId})`)
-        .order('created_at', { ascending: true });
-      if (!error && data) setMessages(data);
-    };
-
-    fetchMessages();
-
-    supabase
-      .from('messages')
-      .update({ is_read: true })
-      .eq('sender_id', selectedUserId)
-      .eq('receiver_id', userId)
-      .eq('is_read', false);
-
-    setUnreadMap(prev => ({ ...prev, [selectedUserId]: 0 }));
 
     const channel = supabase
       .channel(`messages-full-${userId}-${selectedUserId}`)
@@ -394,7 +428,7 @@ export default function MessagesPage() {
                 return (
                   <button
                     key={contact.id}
-                    onClick={() => setSelectedUserId(contact.id)}
+                    onClick={() => handleOpenChat(contact.id)}
                     className={cn(
                       "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent border-b border-border/50",
                       isSelected && "bg-accent"
