@@ -59,6 +59,7 @@ function isIosStandalone() {
 export function usePushNotification() {
   const { user, isAuthenticated } = useAuth();
   const subscribedRef = useRef(false);
+  const isSubscribingRef = useRef(false);
   const iosToastShown = useRef(false);
 
   useEffect(() => {
@@ -68,6 +69,15 @@ export function usePushNotification() {
     let cancelled = false;
 
     async function initPush() {
+      // ── Execution lock ─────────────────────────────────────────────
+      // Supabase onAuthStateChange / _useSession can fire multiple times
+      // concurrently during init, racing the same async subscription path.
+      // If a call is already in-flight, deflect the duplicate immediately.
+      if (isSubscribingRef.current) {
+        console.log('[PushNotification] Subscription already in progress, skipping duplicate call.');
+        return;
+      }
+      isSubscribingRef.current = true;
       // ── Feature detection ──────────────────────────────────────────
       if (!('Notification' in window)) {
         console.info('[PushNotification] Notifications API unavailable — skipping registration');
@@ -176,6 +186,7 @@ export function usePushNotification() {
 
         subscribedRef.current = true;
       } catch (err) {
+        isSubscribingRef.current = false;
         console.error(
           '[PushNotification] Subscription failed\n' +
           '  name: ' + (err.name || '(no name)') + '\n' +
