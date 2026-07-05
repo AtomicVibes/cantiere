@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/AuthContext';
 
@@ -25,7 +25,13 @@ async function subscribeUserToPush(userId) {
       return;
     }
 
-    console.log('Step 2: Waiting for service worker to be ready...');
+    console.log('Step 2: Registering and waiting for service worker...');
+    try {
+      await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    } catch (swErr) {
+      console.log('Service worker registration error: ' + swErr.message);
+      return;
+    }
     const reg = await navigator.serviceWorker.ready;
     console.log('Service worker is ready! Scope: ' + reg.scope);
 
@@ -56,17 +62,51 @@ async function subscribeUserToPush(userId) {
     } else {
       console.log('Successfully saved token to push_subscriptions table!');
     }
+
+    return 'ok';
   } catch (error) {
-    console.log('Push subscription error: ' + error.message);
+    if (error.name === 'AbortError') {
+      console.log(
+        'Push subscription error: Registration failed - push service error. ' +
+        'This is a network-level failure between the browser and the push ' +
+        'service gateway (FCM/APNs). Common causes:\n' +
+        '  - Firewall or VPN blocking fcm.googleapis.com\n' +
+        '  - Ad-blocker or privacy extension interfering\n' +
+        '  - Corrupted service worker cache (try Clear Site Data in DevTools)\n' +
+        '  - The VAPID key is mathematically invalid (run scripts/validate-vapid-key.mjs to confirm)'
+      );
+    } else if (error.name === 'InvalidStateError') {
+      console.log('Push subscription error: ' + error.message + ' (already has a subscription in a bad state)');
+    } else if (error.name === 'NotAllowedError') {
+      console.log('Push subscription error: ' + error.message + ' (permission denied or blocked)');
+    } else {
+      console.log('Push subscription error: ' + error.message);
+    }
+    return error.name;
   }
 }
 
 export function usePushNotification() {
   const { user, isAuthenticated } = useAuth();
+  const [pushError, setPushError] = useState(null);
 
   useEffect(() => {
     if (!isAuthenticated || !user || !VITE_VAPID_PUBLIC_KEY) return;
 
-    subscribeUserToPush(user.id);
+    let cancelled = false;
+
+    (async () => {
+      const result = await subscribeUserToPush(user.id);
+      if (cancelled) return;
+      if (result && result !== 'ok') {
+        setPushError(result);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [isAuthenticated, user]);
+
+  return { pushError };
 }

@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/toaster"
-import { Toaster as SonnerToaster } from "sonner"
+import { useEffect } from 'react';
+import { Toaster as SonnerToaster, toast } from "sonner"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
@@ -37,9 +38,17 @@ import MessagesPage from '@/pages/MessagesPage';
 import { usePushNotification } from '@/hooks/usePushNotification';
 
 const AuthenticatedApp = () => {
-  usePushNotification();
+  const { pushError } = usePushNotification();
   const { t } = useTranslation();
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
+
+  useEffect(() => {
+    if (pushError === 'AbortError') {
+      toast.warning('Le notifiche push non sono disponibili. Verifica la connessione o gli eventuali blocchi del browser.', {
+        duration: 6000,
+      });
+    }
+  }, [pushError]);
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
