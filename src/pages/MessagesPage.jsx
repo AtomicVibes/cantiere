@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { MessageSquare, Send, Search, Check, CheckCheck, Mic, Square, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MessageSquare, Send, Search, Check, CheckCheck, Mic, Square, ChevronLeft, ChevronRight, Trash2, Trash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/avatar';
 import AudioMessagePlayer from '@/components/teams/AudioMessagePlayer';
@@ -143,6 +143,46 @@ export default function MessagesPage() {
       setMessages(prevMessages);
       setUnreadMap(prevUnreadMap);
       console.error('[MessagesPage] mark_chat_as_read failed:', err);
+    }
+  }, [userId]);
+
+  // ── Optimistic message delete ───────────────────────────────────────
+  const deleteMessage = useCallback(async (messageId) => {
+    if (!userId) return;
+
+    const prevMessages = messagesRef.current;
+
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+
+    try {
+      const { error } = await supabase.rpc('delete_single_message', {
+        msg_id: messageId,
+        user_id: userId,
+      });
+      if (error) throw error;
+    } catch (err) {
+      setMessages(prevMessages);
+      console.error('[MessagesPage] delete_single_message failed:', err);
+    }
+  }, [userId]);
+
+  // ── Optimistic conversation clear ───────────────────────────────────
+  const clearConversation = useCallback(async (peerId) => {
+    if (!peerId || !userId) return;
+
+    const prevMessages = messagesRef.current;
+
+    setMessages([]);
+
+    try {
+      const { error } = await supabase.rpc('clear_conversation', {
+        peer_user_id: peerId,
+        caller_user_id: userId,
+      });
+      if (error) throw error;
+    } catch (err) {
+      setMessages(prevMessages);
+      console.error('[MessagesPage] clear_conversation failed:', err);
     }
   }, [userId]);
 
@@ -297,6 +337,15 @@ export default function MessagesPage() {
           <p className="text-sm font-medium truncate">{selectedContact?.full_name || 'Unknown'}</p>
           <p className="text-xs text-muted-foreground truncate">{selectedContact?.email}</p>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 shrink-0 ml-auto text-muted-foreground hover:text-destructive"
+          onClick={() => clearConversation(selectedUserId)}
+          title="Clear conversation"
+        >
+          <Trash className="w-4 h-4" />
+        </Button>
       </div>
 
       {/* Message feed */}
@@ -309,7 +358,7 @@ export default function MessagesPage() {
           messages.map(msg => {
             const isSender = msg.sender_id === userId;
             return (
-              <div key={msg.id} className={cn("flex", isSender ? "justify-end" : "justify-start")}>
+              <div key={msg.id} className={cn("flex group", isSender ? "justify-end" : "justify-start")}>
                 <div className={cn(
                   "max-w-[75%] rounded-2xl px-3.5 py-2",
                   isSender
@@ -323,7 +372,14 @@ export default function MessagesPage() {
                     <AudioMessagePlayer audioUrl={msg.audio_url} sender={isSender} />
                   )}
                   {isSender && (
-                    <span className="flex justify-end mt-1">
+                    <span className="flex items-center justify-end gap-1.5 mt-1">
+                      <button
+                        onClick={() => deleteMessage(msg.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-white/80"
+                        title="Delete message"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                       {msg.is_read ? (
                         <CheckCheck className="w-3.5 h-3.5 text-white/60" />
                       ) : (
