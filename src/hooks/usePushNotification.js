@@ -1,9 +1,25 @@
 import { useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/AuthContext';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
+/**
+ * Decode a URL-safe Base64-encoded VAPID public key into a Uint8Array.
+ *
+ * The VAPID spec (RFC 8292 §3) uses the "URL and Filename safe" Base64
+ * alphabet (RFC 4648 §5) — `-` → `+`, `_` → `/` — with **omitted** padding.
+ *
+ * Both APNs and FCM expect the raw 65-byte uncompressed P-256 public key
+ * (04 || x-coordinate || y-coordinate).  The steps are identical for every
+ * push service because the algorithm is defined at the spec level.
+ *
+ * 1. Strip any existing `=` padding (some env sources may include it).
+ * 2. Re-add the correct amount so `atob()` decodes without error.
+ * 3. Replace URL-safe characters with standard Base64 equivalents.
+ * 4. Decode and wrap in a Uint8Array.
+ */
 function urlBase64ToUint8Array(base64String) {
   if (!base64String || typeof base64String !== 'string') {
     throw new Error(
@@ -11,7 +27,7 @@ function urlBase64ToUint8Array(base64String) {
     );
   }
 
-  // Strip any existing '=' padding first, then add the correct amount
+  // Strip any existing '=' padding, then add the correct amount
   const withoutPad = base64String.replace(/=+$/, '');
   const padding = '='.repeat((4 - (withoutPad.length % 4)) % 4);
   const base64 = (withoutPad + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -34,12 +50,35 @@ function urlBase64ToUint8Array(base64String) {
   for (let i = 0; i < rawData.length; i++) {
     output[i] = rawData.charCodeAt(i);
   }
+
+  // P-256 uncompressed public key MUST be exactly 65 bytes (04 || x || y)
+  if (output.length !== 65) {
+    console.warn(
+      '[PushNotification] VAPID key has unexpected length — expected 65 bytes for P-256, got ' + output.length,
+      { firstBytes: Array.from(output.slice(0, 4)), totalLength: output.length }
+    );
+  }
+
   return output;
+}
+
+/** True when the user-agent is iOS Safari (not a third-party browser). */
+function isIosSafari() {
+  const ua = navigator.userAgent;
+  return (
+    (/iPhone|iPad|iPod/.test(ua) && /Safari/.test(ua) && !/CriOS|OPiOS|FxiOS|EdgiOS/.test(ua))
+  );
+}
+
+/** True when the iOS PWA is running in standalone (full-screen) mode. */
+function isIosStandalone() {
+  return 'standalone' in navigator && navigator.standalone;
 }
 
 export function usePushNotification() {
   const { user, isAuthenticated } = useAuth();
   const subscribedRef = useRef(false);
+  const iosToastShown = useRef(false);
 
   useEffect(() => {
     if (!isAuthenticated || !user || !VAPID_PUBLIC_KEY) return;
@@ -48,16 +87,47 @@ export function usePushNotification() {
     let cancelled = false;
 
     async function initPush() {
-      if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      // ── Feature detection ──────────────────────────────────────────
+      if (!('Notification' in window)) {
+        console.info('[PushNotification] Notifications API unavailable — skipping registration');
         return;
       }
 
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.info(
+          '[PushNotification] Service Worker / PushManager unavailable — ' +
+          'notifications will only work in-app'
+        );
+        return;
+      }
+
+      // ── iOS Safari standalone guard ────────────────────────────────
+      // Push notifications on iOS Safari only work when the app runs
+      // in PWA standalone mode ("Add to Home Screen").
+      if (isIosSafari() && !isIosStandalone() && !iosToastShown.current) {
+        iosToastShown.current = true;
+        const dismiss = toast.info(
+          'Per attivare le notifiche, aggiungi Geometra alla schermata Home dal menu Condividi di Safari.',
+          {
+            duration: 8000,
+            action: {
+              label: 'OK',
+              onClick: () => dismiss(),
+            },
+          }
+        );
+        return;
+      }
+
+      // ── Permission ─────────────────────────────────────────────────
       if (Notification.permission === 'denied') return;
 
       if (Notification.permission === 'default') {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') return;
       }
+
+      if (cancelled) return;
 
       try {
         // 1. Register the SW and wait until it's fully active
@@ -92,10 +162,6 @@ export function usePushNotification() {
         let applicationServerKey;
         try {
           applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-          console.debug('[PushNotification] VAPID key converted', {
-            byteLength: applicationServerKey.length,
-            firstBytes: Array.from(applicationServerKey.slice(0, 4)),
-          });
         } catch (keyErr) {
           console.error('[PushNotification] VAPID key conversion failed — aborting subscribe', keyErr);
           return;
