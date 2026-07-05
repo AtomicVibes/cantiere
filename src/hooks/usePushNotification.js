@@ -5,61 +5,42 @@ import { useAuth } from '@/lib/AuthContext';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
-/**
- * Decode a URL-safe Base64-encoded VAPID public key into a Uint8Array.
- *
- * The VAPID spec (RFC 8292 §3) uses the "URL and Filename safe" Base64
- * alphabet (RFC 4648 §5) — `-` → `+`, `_` → `/` — with **omitted** padding.
- *
- * Both APNs and FCM expect the raw 65-byte uncompressed P-256 public key
- * (04 || x-coordinate || y-coordinate).  The steps are identical for every
- * push service because the algorithm is defined at the spec level.
- *
- * 1. Strip any existing `=` padding (some env sources may include it).
- * 2. Re-add the correct amount so `atob()` decodes without error.
- * 3. Replace URL-safe characters with standard Base64 equivalents.
- * 4. Decode and wrap in a Uint8Array.
- */
-function urlBase64ToUint8Array(base64String) {
+function urlB64ToUint8Array(base64String) {
   if (!base64String || typeof base64String !== 'string') {
     throw new Error(
       `VAPID key must be a non-empty string, got ${typeof base64String} (length: ${base64String?.length})`
     );
   }
 
-  // Strip any existing '=' padding, then add the correct amount
-  const withoutPad = base64String.replace(/=+$/, '');
-  const padding = '='.repeat((4 - (withoutPad.length % 4)) % 4);
-  const base64 = (withoutPad + padding).replace(/-/g, '+').replace(/_/g, '/');
+  // 1. Replace URL-safe characters with standard Base64 equivalents
+  let base64 = base64String.replace(/-/g, '+').replace(/_/g, '/');
 
+  // 2. Add trailing padding so the length is divisible by 4
+  while (base64.length % 4 !== 0) {
+    base64 += '=';
+  }
+
+  // 3. Decode
   let rawData;
   try {
     rawData = atob(base64);
   } catch (e) {
     console.error('[PushNotification] atob failed', {
       input: base64String,
-      withoutPad: { length: withoutPad.length, chars: withoutPad.slice(0, 8) + '…' + withoutPad.slice(-8) },
       encoded: { length: base64.length, chars: base64.slice(0, 8) + '…' + base64.slice(-8) },
-      paddingAdded: padding.length,
       error: e.message,
     });
     throw e;
   }
 
-  const output = new Uint8Array(rawData.length);
+  // 4. Wrap in Uint8Array
+  const outputArray = new Uint8Array(rawData.length);
   for (let i = 0; i < rawData.length; i++) {
-    output[i] = rawData.charCodeAt(i);
+    outputArray[i] = rawData.charCodeAt(i);
   }
 
-  // P-256 uncompressed public key MUST be exactly 65 bytes (04 || x || y)
-  if (output.length !== 65) {
-    console.warn(
-      '[PushNotification] VAPID key has unexpected length — expected 65 bytes for P-256, got ' + output.length,
-      { firstBytes: Array.from(output.slice(0, 4)), totalLength: output.length }
-    );
-  }
-
-  return output;
+  console.log('Converted array length:', outputArray.length);
+  return outputArray;
 }
 
 /** True when the user-agent is iOS Safari (not a third-party browser). */
@@ -102,8 +83,6 @@ export function usePushNotification() {
       }
 
       // ── iOS Safari standalone guard ────────────────────────────────
-      // Push notifications on iOS Safari only work when the app runs
-      // in PWA standalone mode ("Add to Home Screen").
       if (isIosSafari() && !isIosStandalone() && !iosToastShown.current) {
         iosToastShown.current = true;
         const dismiss = toast.info(
@@ -134,31 +113,14 @@ export function usePushNotification() {
         await navigator.serviceWorker.register('/sw.js', { scope: '/' });
         const registration = await navigator.serviceWorker.ready;
 
-        // 2. Check if we already have a valid subscription stored in our DB
-        const existingPushSub = await registration.pushManager.getSubscription();
-
-        if (existingPushSub) {
-          const subJson = existingPushSub.toJSON();
-          const { data: known } = await supabase
-            .from('push_subscriptions')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('subscription', subJson)
-            .maybeSingle();
-
-          if (known) {
-            // Already subscribed and stored — nothing to do
-            subscribedRef.current = true;
-            return;
-          }
-
-          // Subscription exists in browser but isn't in our DB.
-          // Unsubscribe first, then re-subscribe below so the push
-          // service gets a clean state.
-          await existingPushSub.unsubscribe();
+        // 2. If an old subscription exists, unsubscribe it first so the
+        //    push service starts with a clean slate for the fresh one.
+        const oldSub = await registration.pushManager.getSubscription();
+        if (oldSub) {
+          await oldSub.unsubscribe();
         }
 
-        // 3. Verify the VAPID key is present before converting
+        // 3. Convert the VAPID public key
         console.log('[PushNotification] VAPID key source:', {
           present: typeof VAPID_PUBLIC_KEY === 'string' && VAPID_PUBLIC_KEY.length > 0,
           type: typeof VAPID_PUBLIC_KEY,
@@ -168,7 +130,15 @@ export function usePushNotification() {
 
         let applicationServerKey;
         try {
-          applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+          applicationServerKey = urlB64ToUint8Array(VAPID_PUBLIC_KEY);
+          if (applicationServerKey.length !== 65) {
+            console.warn(
+              '[PushNotification] VAPID key has unexpected byte length — expected 65, got ' + applicationServerKey.length,
+              { firstBytes: Array.from(applicationServerKey.slice(0, 4)), totalLength: applicationServerKey.length }
+            );
+          } else {
+            console.log('[PushNotification] VAPID key confirmed at 65 bytes — valid P-256 uncompressed point');
+          }
         } catch (keyErr) {
           console.error(
             '[PushNotification] VAPID key conversion failed — aborting subscribe\n' +
@@ -185,6 +155,7 @@ export function usePushNotification() {
           return;
         }
 
+        // 5. Subscribe
         const subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey,
@@ -192,7 +163,7 @@ export function usePushNotification() {
 
         if (cancelled) return;
 
-        // 5. Persist to Supabase
+        // 6. Persist to Supabase
         const { error: dbErr } = await supabase.from('push_subscriptions').upsert(
           { user_id: user.id, subscription: subscription.toJSON() },
           { onConflict: 'user_id,subscription' }
