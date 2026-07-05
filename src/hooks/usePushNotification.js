@@ -69,7 +69,7 @@ export function usePushNotification() {
             { onConflict: 'user_id,subscription' }
           );
       } catch {
-        console.error('Push notification setup failed');
+        console.error('Push service unavailable');
       } finally {
         isPushSubscribingGlobal = false;
       }
