@@ -20,3 +20,4 @@ policy = "per_worker"
 "create-client" = {}
 "create-project-request" = {}
 "review-project-request" = {}
+"send-push" = {}

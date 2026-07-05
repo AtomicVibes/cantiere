@@ -34,8 +34,10 @@ import Logs from '@/pages/Logs';
 import ProjectRequests from '@/pages/ProjectRequests';
 import AdminInbox from '@/pages/AdminInbox';
 import MessagesPage from '@/pages/MessagesPage';
+import { usePushNotification } from '@/hooks/usePushNotification';
 
 const AuthenticatedApp = () => {
+  usePushNotification();
   const { t } = useTranslation();
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
