@@ -142,7 +142,7 @@ export default function MessagesPage() {
       // false read-receipt data.
       setMessages(prevMessages);
       setUnreadMap(prevUnreadMap);
-      console.error('[MessagesPage] mark_chat_as_read failed:', err);
+      console.error('Failed to mark chat as read:', err);
     }
   }, [userId]);
 
@@ -162,7 +162,7 @@ export default function MessagesPage() {
       if (error) throw error;
     } catch (err) {
       setMessages(prevMessages);
-      console.error('[MessagesPage] delete_single_message failed:', err);
+      console.error('Failed to delete message:', err);
     }
   }, [userId]);
 
@@ -176,13 +176,13 @@ export default function MessagesPage() {
 
     try {
       const { error } = await supabase.rpc('clear_conversation', {
-        peer_user_id: peerId,
-        caller_user_id: userId,
+        chat_receiver_id: peerId,
+        chat_sender_id: userId,
       });
       if (error) throw error;
     } catch (err) {
       setMessages(prevMessages);
-      console.error('[MessagesPage] clear_conversation failed:', err);
+      console.error('Failed to clear conversation:', err);
     }
   }, [userId]);
 

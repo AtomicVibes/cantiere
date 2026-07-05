@@ -20,8 +20,8 @@ $$;
 
 -- Deletes all messages sent by the caller to a specific peer.
 create or replace function public.clear_conversation(
-  peer_user_id   uuid,
-  caller_user_id uuid
+  chat_receiver_id uuid,
+  chat_sender_id   uuid
 )
 returns void
 language plpgsql
@@ -30,7 +30,7 @@ set search_path = ''
 as $$
 begin
   delete from public.messages
-  where  sender_id   = caller_user_id
-    and  receiver_id = peer_user_id;
+  where  sender_id   = chat_sender_id
+    and  receiver_id = chat_receiver_id;
 end;
 $$;
