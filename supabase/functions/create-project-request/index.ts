@@ -70,7 +70,15 @@ serve(async (req) => {
       return respond({ error: 'Invalid request body.' }, 400);
     }
 
-    const { project_name, description, category, address, budget } = body;
+    const {
+      project_name,
+      description,
+      category,
+      address,
+      budget,
+      estimated_deadline,
+      document_url,
+    } = body;
 
     if (!project_name?.trim()) {
       return respond({ error: 'Project name is required.' }, 400);
@@ -85,6 +93,8 @@ serve(async (req) => {
         category: category || null,
         address: address?.trim() || null,
         budget: budget != null ? Number(budget) : null,
+        estimated_deadline: estimated_deadline || null,
+        document_url: document_url || null,
         status: 'pending',
       })
       .select()
