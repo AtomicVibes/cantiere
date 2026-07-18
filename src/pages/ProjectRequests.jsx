@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,6 +69,28 @@ export default function ProjectRequests() {
     setFormOpen(false);
     queryClient.invalidateQueries({ queryKey: ['projectRequests'] });
   };
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'project_requests' },
+        (payload) => {
+          queryClient.setQueryData(['projectRequests'], (old) => {
+            if (!old) return old;
+            return old.map((req) =>
+              req.id === payload.new.id ? { ...req, ...payload.new } : req
+            );
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   return (
     <div>
