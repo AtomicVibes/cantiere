@@ -19,11 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, ClipboardList, CheckCircle2, XCircle, Clock, ShieldCheck } from 'lucide-react';
+import { Plus, ClipboardList, CheckCircle2, XCircle, Clock, ShieldCheck, Trash2 } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { getRequestStatuses, REQUEST_STATUSES } from '@/constants';
-import { getClientRequests } from '@/services/requestService';
+import { getClientRequests, deleteProjectRequest } from '@/services/requestService';
 import ProjectRequestForm from '@/components/projects/ProjectRequestForm';
 
 const statusConfig = {
@@ -42,6 +42,7 @@ export default function ProjectRequests() {
 
   const effectiveRole = (role || 'client').toLowerCase();
   const canCreate = PERMISSIONS.canCreateRequest.includes(effectiveRole);
+  const canDelete = PERMISSIONS.canDeleteRequest.includes(effectiveRole);
 
   const { data: requests = [] } = useQuery({
     queryKey: ['projectRequests'],
@@ -52,6 +53,16 @@ export default function ProjectRequests() {
   const filtered = statusFilter === 'all'
     ? requests
     : requests.filter(r => r.status === statusFilter);
+
+  const handleDelete = async (requestId) => {
+    if (!window.confirm(t('confirmDeleteRequest'))) return;
+    try {
+      await deleteProjectRequest(requestId);
+      queryClient.invalidateQueries({ queryKey: ['projectRequests'] });
+    } catch {
+      // error handled by caller / already logged
+    }
+  };
 
   const handleFormSuccess = () => {
     setFormOpen(false);
@@ -120,6 +131,16 @@ export default function ProjectRequests() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(req.id)}
+                            title={t('deleteRequest')}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        )}
                         <Badge variant={statusVariant} className="gap-1">
                           <StatusIcon className="w-3 h-3" />
                           {t(req.status)}

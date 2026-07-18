@@ -92,6 +92,15 @@ export async function getClientRequests() {
   return data ?? [];
 }
 
+export async function deleteProjectRequest(requestId) {
+  const { error } = await supabase
+    .from('project_requests')
+    .delete()
+    .eq('id', requestId);
+
+  if (error) throw error;
+}
+
 export async function getPendingRequests() {
   const { data, error } = await supabase
     .from('project_requests')

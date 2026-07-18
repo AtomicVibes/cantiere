@@ -26,5 +26,6 @@ export const PERMISSIONS = {
   canViewFinance: ['super_admin', 'admin', 'manager'],
   canViewReports: ['super_admin', 'admin', 'manager'],
   canCreateRequest: ['super_admin', 'admin', 'client'],
+  canDeleteRequest: ['super_admin'],
   canReviewRequest: ['super_admin', 'admin'],
 };
