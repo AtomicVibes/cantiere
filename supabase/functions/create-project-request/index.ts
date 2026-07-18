@@ -93,7 +93,7 @@ serve(async (req) => {
 
     if (insertError) {
       console.error('Failed to create project request:', insertError);
-      return respond({ error: 'Failed to submit request.' }, 500);
+      return respond({ error: insertError.message, details: insertError.details }, 500);
     }
 
     const { data: adminUser } = await supabaseAdmin
