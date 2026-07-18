@@ -63,13 +63,14 @@ export async function getClientRequests() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Authentication required');
 
+  let isAdmin = false;
   const { data: profile } = await supabase
     .from('profiles')
     .select('roles!inner(name)')
     .eq('id', session.user.id)
-    .single();
+    .maybeSingle();
 
-  const isAdmin = ['super_admin', 'admin'].includes(profile?.roles?.name);
+  isAdmin = ['super_admin', 'admin'].includes(profile?.roles?.name);
 
   let query = supabase
     .from('project_requests')
@@ -81,7 +82,7 @@ export async function getClientRequests() {
       .from('clients')
       .select('id')
       .eq('profile_id', session.user.id)
-      .single();
+      .maybeSingle();
 
     if (!clientRecord) return [];
     query = query.eq('client_id', clientRecord.id);
