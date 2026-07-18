@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-const CREATE_REQUEST_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-project-request`;
+const CREATE_REQUEST_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-project-v2`;
 const REVIEW_REQUEST_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/review-project-request`;
 
 async function callFunction(url, payload) {
