@@ -36,21 +36,7 @@ serve(async (req) => {
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !user) {
-      return respond({ error: 'Session expired. Please log in again.', detail: userError?.message }, 400);
-    }
-
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .select('role_id, roles!inner(name)')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return respond({ error: 'Your profile was not found.' }, 400);
-    }
-
-    if (!['client', 'super_admin', 'admin'].includes(profile.roles.name)) {
-      return respond({ error: 'Only clients and admins can submit project requests.' }, 400);
+      return respond({ error: 'Session expired. Please log in again.' }, 400);
     }
 
     let body;
