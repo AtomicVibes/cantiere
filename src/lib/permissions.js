@@ -15,6 +15,7 @@ export const PERMISSIONS = {
   canCreateClient: ['super_admin', 'admin'],
   canEditClient: ['super_admin', 'admin', 'manager'],
   canDeleteClient: ['super_admin'],
+  canBlockClient: ['super_admin'],
   canCreateInvoice: ['super_admin', 'admin', 'manager'],
   canEditInvoice: ['super_admin', 'admin', 'manager'],
   canDeleteInvoice: ['super_admin'],

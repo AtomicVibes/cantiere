@@ -18,7 +18,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, UserCircle, Pencil, Trash2, Mail, Phone, Building2, Eye, EyeOff, ArrowUpFromLine } from 'lucide-react';
+import { Plus, Search, UserCircle, Pencil, Trash2, Ban, Mail, Phone, Building2, Eye, EyeOff, ArrowUpFromLine } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
@@ -41,6 +41,7 @@ export default function Clients() {
   const { role } = useUserRole();
   const canCreate = PERMISSIONS.canCreateClient.includes(role);
   const canDelete = PERMISSIONS.canDeleteClient.includes(role);
+  const canBlock = PERMISSIONS.canBlockClient.includes(role);
   const [showForm, setShowForm] = useState(false);
   const [editClient, setEditClient] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -62,7 +63,16 @@ export default function Clients() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name, phone, created_at')
+        .select(`
+          id,
+          email,
+          full_name,
+          phone,
+          created_at,
+          clients!inner (
+            is_blocked
+          )
+        `)
         .eq('role_id', clientRoleId)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -73,6 +83,7 @@ export default function Clients() {
         email: p.email || '',
         phone: p.phone || '',
         status: 'active',
+        is_blocked: p.clients?.is_blocked ?? false,
       }));
     },
   });
@@ -141,6 +152,25 @@ export default function Clients() {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['clientCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
+    },
+    onError: (err) => {
+      if (!handleMutationError(err, t, toast)) {
+        toast.error(err.message);
+      }
+    },
+  });
+
+  const blockMutation = useMutation({
+    mutationFn: async (client) => {
+      const newBlocked = !client.is_blocked;
+      const { error } = await supabase
+        .from('clients')
+        .update({ is_blocked: newBlocked })
+        .eq('profile_id', client.profile_id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
     },
     onError: (err) => {
       if (!handleMutationError(err, t, toast)) {
@@ -263,6 +293,17 @@ export default function Clients() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(client)}><Pencil className="w-3.5 h-3.5" /></Button>
+                        {canBlock && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => blockMutation.mutate(client)}
+                            title={client.is_blocked ? t('unblockClient') : t('blockClient')}
+                          >
+                            <Ban className={`w-3.5 h-3.5 ${client.is_blocked ? 'text-destructive' : 'text-muted-foreground'}`} />
+                          </Button>
+                        )}
                         {canDelete && (
                           <>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-primary" onClick={() => { setPromoteTarget(client); setPromoteRole(''); }}><ArrowUpFromLine className="w-3.5 h-3.5" /></Button>

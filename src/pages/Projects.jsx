@@ -38,7 +38,6 @@ export default function Projects() {
         .select('id, company_name');
       if (error) throw error;
       const result = (data ?? []).map(c => ({ id: c.id, company_name: c.company_name || '' }));
-      console.log('Clients dropdown data:', result);
       return result;
     },
     initialData: [],

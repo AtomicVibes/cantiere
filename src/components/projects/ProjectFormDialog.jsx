@@ -108,7 +108,6 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
         client_id: form.client_id && form.client_id !== 'none' ? form.client_id : undefined,
         project_manager_id: form.project_manager_id && form.project_manager_id !== 'none' ? form.project_manager_id : undefined,
       };
-      console.log('ProjectFormDialog payload:', payload);
       await onSave(payload);
       onOpenChange(false);
     } catch (err) {

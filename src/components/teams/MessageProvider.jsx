@@ -94,26 +94,22 @@ export default function MessagePopover({ member }) {
   const startRecording = async () => {
     setMicError(null);
     try {
-      console.log('[Audio] Requesting mic...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunksRef.current = [];
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus'
         : 'audio/webm';
-      console.log('[Audio] Using mimeType:', mimeType);
       mimeTypeRef.current = mimeType;
       mediaRef.current = new MediaRecorder(stream, { mimeType });
 
       mediaRef.current.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          console.log('[Audio] Chunk:', e.data.size, 'bytes');
           chunksRef.current.push(e.data);
         }
       };
 
       mediaRef.current.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: mimeTypeRef.current });
-        console.log('[Audio] Final blob:', blob.size, 'bytes');
         setAudioBlob(blob);
       };
 
@@ -166,8 +162,6 @@ export default function MessagePopover({ member }) {
         return;
       }
 
-      console.log('[Message] Sending to:', receiverId, '| text:', !!text, '| audio:', hasAudio);
-
       let audioUrl = null;
       if (hasAudio) {
         if (audioBlob.size === 0) {
@@ -176,16 +170,13 @@ export default function MessagePopover({ member }) {
         }
         const ext = mimeTypeRef.current.includes('opus') ? 'webm' : 'webm';
         const fileName = `messages/${receiverId}/${Date.now()}.${ext}`;
-        console.log('[Message] Uploading audio to:', fileName);
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('voice-messages')
           .upload(fileName, audioBlob, { contentType: mimeTypeRef.current });
         if (uploadError) throw uploadError;
-        console.log('[Message] Upload success:', uploadData?.path);
         audioUrl = uploadData?.path;
       }
 
-      console.log('[Message] Inserting message record...');
       const { error: insertError } = await supabase
         .from('messages')
         .insert({
@@ -196,7 +187,6 @@ export default function MessagePopover({ member }) {
         });
       if (insertError) throw insertError;
 
-      console.log('[Message] Insert success');
       setMessage('');
       setAudioBlob(null);
     } catch (err) {
