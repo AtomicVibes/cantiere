@@ -107,9 +107,7 @@ serve(async (req) => {
         .from('notifications')
         .insert({
           user_id: adminUser.id,
-          title: 'New Project Request',
-          message: `${project_name.trim()} has been submitted for review.`,
-          type: 'info',
+          message: `New project request: ${project_name.trim()}`,
           is_read: false,
         });
     }
