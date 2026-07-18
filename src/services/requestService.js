@@ -28,8 +28,8 @@ async function callFunction(url, payload) {
   return res.json();
 }
 
-export async function createProjectRequest({ project_name, description, category, address, budget, estimated_deadline, document_url }) {
-  return callFunction(CREATE_REQUEST_URL, { project_name, description, category, address, budget, estimated_deadline, document_url });
+export async function createProjectRequest({ project_name, description, category, address, budget, estimated_deadline, document_url, client_id }) {
+  return callFunction(CREATE_REQUEST_URL, { project_name, description, category, address, budget, estimated_deadline, document_url, client_id });
 }
 
 export async function verifyProjectRequest(request_id) {

@@ -72,6 +72,7 @@ export default function ProjectRequestForm({ onSuccess }) {
         budget: form.budget ? Number(form.budget) : undefined,
         estimated_deadline: form.estimated_deadline || undefined,
         document_url: document_url || undefined,
+        client_id: (await supabase.auth.getUser()).data.user?.id,
       });
 
       setForm({ project_name: '', description: '', category: '', budget: '', estimated_deadline: '' });

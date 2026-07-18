@@ -61,10 +61,24 @@ serve(async (req) => {
       return respond({ error: 'Project name is required.' }, 400);
     }
 
+    let resolvedClientId = client_id || null;
+
+    if (resolvedClientId) {
+      const { data: clientRecord } = await supabaseAdmin
+        .from('clients')
+        .select('id')
+        .eq('profile_id', resolvedClientId)
+        .maybeSingle();
+
+      if (clientRecord) {
+        resolvedClientId = clientRecord.id;
+      }
+    }
+
     const { data: newRequest, error: insertError } = await supabaseAdmin
       .from('project_requests')
       .insert({
-        client_id: client_id || null,
+        client_id: resolvedClientId,
         project_name: project_name.trim(),
         description: description?.trim() || null,
         category: category || null,
