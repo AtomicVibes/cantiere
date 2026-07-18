@@ -276,8 +276,8 @@ export default function Teams() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete team member</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this user from the system,
-              including their auth account and profile. They will lose all access.
+              This will permanently delete this user and all of their associated data
+              (messages, notifications, and assignments). This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

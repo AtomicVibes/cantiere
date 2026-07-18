@@ -126,17 +126,3 @@ export const deleteEntity = (table, id) => {
   });
 };
 
-export async function checkClientDeletePreflight(clientProfileId) {
-  const { data, error } = await supabase
-    .from('projects')
-    .select('id, name')
-    .eq('client_id', clientProfileId);
-
-  if (error) throw error;
-
-  if (data && data.length > 0) {
-    return { canDelete: false, projects: data };
-  }
-
-  return { canDelete: true };
-}

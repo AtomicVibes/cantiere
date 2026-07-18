@@ -11,6 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Search, FileText, Upload, ExternalLink, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -36,6 +41,7 @@ export default function Documents() {
   const [form, setForm] = useState({ name: '', type: 'other', notes: '' });
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const queryClient = useQueryClient();
@@ -53,8 +59,15 @@ export default function Documents() {
   });
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Document.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
-    onError: (err) => handleMutationError(err, t, toast),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      toast.success('Document deleted');
+    },
+    onError: (err) => {
+      if (!handleMutationError(err, t, toast)) {
+        toast.error('Failed to delete document. Please try again.');
+      }
+    },
   });
 
   const handleUpload = async (e) => {
@@ -138,7 +151,7 @@ export default function Documents() {
                       </a>
                     )}
                     {canDelete && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(doc.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(doc.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                     )}
                   </div>
                 </div>
@@ -179,6 +192,30 @@ export default function Documents() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete document</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this document and all associated records.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteTarget) deleteMutation.mutate(deleteTarget);
+                setDeleteTarget(null);
+              }}
+            >
+              Yes, delete it
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

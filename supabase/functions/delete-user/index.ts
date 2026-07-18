@@ -85,22 +85,17 @@ serve(async (req) => {
         details: deleteProfileError.details,
       });
 
-      if (deleteProfileError.code === '23503') {
-        return error(
-          'Cannot delete this client. They are still linked to existing projects. Remove or reassign the projects first.',
-          'This client has projects that reference them. Delete or reassign those projects before deleting the client.',
-          409
-        );
-      }
-
-      return error('Failed to remove user. Please try again.', deleteProfileError.message);
+      return error(
+        'Unable to delete user. Please try again or contact support.',
+        deleteProfileError.message
+      );
     }
 
     const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(user_id);
 
     if (deleteAuthError) {
       console.error('Auth deletion failed', deleteAuthError);
-      return error('Failed to remove user. Please try again.', deleteAuthError.message);
+      return error('User profile was removed but auth cleanup failed. Contact support.', deleteAuthError.message);
     }
 
     return respond({ success: true });

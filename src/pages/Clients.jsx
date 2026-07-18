@@ -23,7 +23,6 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { createClient, deleteUser } from '@/services/inviteService';
-import { checkClientDeletePreflight } from '@/services/dataService';
 
 const emptyForm = { full_name: '', company_name: '', email: '', password: '', phone: '', address: '', vat_number: '', notes: '' };
 
@@ -47,7 +46,6 @@ export default function Clients() {
   const [form, setForm] = useState(emptyForm);
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [blockingProjects, setBlockingProjects] = useState(null);
   const [saving, setSaving] = useState(false);
   const [friendlyError, setFriendlyError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -151,17 +149,8 @@ export default function Clients() {
     },
   });
 
-  const handleDelete = async (client) => {
-    try {
-      const result = await checkClientDeletePreflight(client.profile_id);
-      if (!result.canDelete) {
-        setBlockingProjects({ clientName: client.name, projects: result.projects });
-        return;
-      }
-      setDeleteTarget(client.profile_id);
-    } catch {
-      setDeleteTarget(client.profile_id);
-    }
+  const handleDelete = (client) => {
+    setDeleteTarget(client.profile_id);
   };
 
   const openEdit = (client) => {
@@ -342,8 +331,8 @@ export default function Clients() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete client</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this client from the system,
-              including their auth account and profile. They will lose all access.
+              This will permanently delete this client and all of their associated data
+              (projects, requests, invoices, and messages). This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -357,30 +346,6 @@ export default function Clients() {
             >
               Yes, delete it
             </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!blockingProjects} onOpenChange={() => setBlockingProjects(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cannot delete client</AlertDialogTitle>
-            <AlertDialogDescription>
-              <strong>{blockingProjects?.clientName}</strong> has the following projects assigned. Remove or reassign them before deleting.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {blockingProjects && (
-            <ul className="space-y-1.5 text-sm">
-              {blockingProjects.projects.map((p) => (
-                <li key={p.id} className="flex items-center gap-2 text-muted-foreground">
-                  <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" />
-                  {p.name}
-                </li>
-              ))}
-            </ul>
-          )}
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setBlockingProjects(null)}>Got it</AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
