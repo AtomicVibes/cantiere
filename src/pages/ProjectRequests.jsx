@@ -35,7 +35,7 @@ const statusConfig = {
 
 export default function ProjectRequests() {
   const { t } = useTranslation();
-  const { role } = useUserRole();
+  const { role, isLoading } = useUserRole();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('all');
   const [formOpen, setFormOpen] = useState(false);
@@ -75,7 +75,9 @@ export default function ProjectRequests() {
               </SelectContent>
             </Select>
           </div>
-          {canCreate && (
+          {isLoading ? (
+            <div className="w-32 h-[44px] rounded-md bg-muted animate-pulse" />
+          ) : canCreate && (
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2 min-h-[44px]">

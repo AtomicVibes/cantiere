@@ -49,18 +49,8 @@ serve(async (req) => {
       return respond({ error: 'Your profile was not found.' }, 400);
     }
 
-    if (profile.roles.name !== 'client') {
-      return respond({ error: 'Only clients can submit project requests.' }, 400);
-    }
-
-    const { data: clientRecord, error: clientError } = await supabaseAdmin
-      .from('clients')
-      .select('id')
-      .eq('profile_id', user.id)
-      .single();
-
-    if (clientError || !clientRecord) {
-      return respond({ error: 'Client record not found. Please complete your client profile first.' }, 400);
+    if (!['client', 'super_admin', 'admin'].includes(profile.roles.name)) {
+      return respond({ error: 'Only clients and admins can submit project requests.' }, 400);
     }
 
     let body;
@@ -78,16 +68,33 @@ serve(async (req) => {
       budget,
       estimated_deadline,
       document_url,
+      client_id,
     } = body;
 
     if (!project_name?.trim()) {
       return respond({ error: 'Project name is required.' }, 400);
     }
 
+    let resolvedClientId = client_id || null;
+
+    if (profile.roles.name === 'client') {
+      const { data: clientRecord, error: clientError } = await supabaseAdmin
+        .from('clients')
+        .select('id')
+        .eq('profile_id', user.id)
+        .single();
+
+      if (clientError || !clientRecord) {
+        return respond({ error: 'Client record not found. Please complete your client profile first.' }, 400);
+      }
+
+      resolvedClientId = clientRecord.id;
+    }
+
     const { data: newRequest, error: insertError } = await supabaseAdmin
       .from('project_requests')
       .insert({
-        client_id: clientRecord.id,
+        client_id: resolvedClientId,
         project_name: project_name.trim(),
         description: description?.trim() || null,
         category: category || null,
