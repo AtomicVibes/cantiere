@@ -75,26 +75,10 @@ serve(async (req) => {
       return respond({ error: 'Project name is required.' }, 400);
     }
 
-    let resolvedClientId = client_id || null;
-
-    if (profile.roles.name === 'client') {
-      const { data: clientRecord, error: clientError } = await supabaseAdmin
-        .from('clients')
-        .select('id')
-        .eq('profile_id', user.id)
-        .single();
-
-      if (clientError || !clientRecord) {
-        return respond({ error: 'Client record not found.' }, 400);
-      }
-
-      resolvedClientId = clientRecord.id;
-    }
-
     const { data: newRequest, error: insertError } = await supabaseAdmin
       .from('project_requests')
       .insert({
-        client_id: resolvedClientId,
+        client_id: client_id || null,
         project_name: project_name.trim(),
         description: description?.trim() || null,
         category: category || null,

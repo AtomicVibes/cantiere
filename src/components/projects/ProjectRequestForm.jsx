@@ -52,29 +52,16 @@ export default function ProjectRequestForm({ onSuccess }) {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const getClientId = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error('Authentication required');
-    const { data: clientRecord } = await supabase
-      .from('clients')
-      .select('id')
-      .eq('profile_id', session.user.id)
-      .single();
-    if (!clientRecord) throw new Error('Your client account is not fully set up yet.');
-    return clientRecord.id;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.project_name.trim()) return;
     setSubmitting(true);
 
     try {
-      const clientId = await getClientId();
-
       let document_url = '';
       if (file) {
-        const uploadResult = await uploadProjectDoc(file, clientId);
+        const { data: { session } } = await supabase.auth.getSession();
+        const uploadResult = await uploadProjectDoc(file, session?.user?.id || 'unknown');
         document_url = uploadResult.path;
       }
 
@@ -90,10 +77,26 @@ export default function ProjectRequestForm({ onSuccess }) {
       setForm({ project_name: '', description: '', category: '', budget: '', estimated_deadline: '' });
       clearFile();
       toast.success(t('requestSubmitted'));
-      toast.info(t('companyDetailsNote'));
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: clientRecord } = await supabase
+            .from('clients')
+            .select('id')
+            .eq('profile_id', session.user.id)
+            .maybeSingle();
+          if (!clientRecord) {
+            toast.info(t('companyDetailsNote'));
+          }
+        }
+      } catch {
+        // non-critical post-submission hint
+      }
+
       onSuccess?.();
-    } catch (err) {
-      toast.error(err.message || t('error'));
+    } catch {
+      toast.error(t('submissionError'));
     } finally {
       setSubmitting(false);
     }
