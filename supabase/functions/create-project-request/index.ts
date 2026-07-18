@@ -85,7 +85,7 @@ serve(async (req) => {
         .single();
 
       if (clientError || !clientRecord) {
-        return respond({ error: 'Client record not found. Please complete your client profile first.' }, 400);
+        return respond({ error: 'Client record not found.' }, 400);
       }
 
       resolvedClientId = clientRecord.id;

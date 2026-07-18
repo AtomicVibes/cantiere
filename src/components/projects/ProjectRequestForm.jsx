@@ -60,7 +60,7 @@ export default function ProjectRequestForm({ onSuccess }) {
       .select('id')
       .eq('profile_id', session.user.id)
       .single();
-    if (!clientRecord) throw new Error('Client record not found. Please complete your client profile first.');
+    if (!clientRecord) throw new Error('Your client account is not fully set up yet.');
     return clientRecord.id;
   };
 
@@ -90,9 +90,9 @@ export default function ProjectRequestForm({ onSuccess }) {
       setForm({ project_name: '', description: '', category: '', budget: '', estimated_deadline: '' });
       clearFile();
       toast.success(t('requestSubmitted'));
+      toast.info(t('companyDetailsNote'));
       onSuccess?.();
     } catch (err) {
-      console.error('Failed to create request:', err);
       toast.error(err.message || t('error'));
     } finally {
       setSubmitting(false);
