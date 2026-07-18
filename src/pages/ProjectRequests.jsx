@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
@@ -91,6 +92,30 @@ export default function ProjectRequests() {
       supabase.removeChannel(channel);
     };
   }, [queryClient]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('notifications')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        (payload) => {
+          const notification = payload.new;
+          supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user && notification.user_id === user.id) {
+              toast(notification.title || notification.message, {
+                description: notification.message,
+              });
+            }
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
     <div>
