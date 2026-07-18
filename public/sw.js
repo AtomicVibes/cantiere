@@ -1,4 +1,4 @@
-const PRECACHE = 'geometra-v1';
+const PRECACHE = 'geometra-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
