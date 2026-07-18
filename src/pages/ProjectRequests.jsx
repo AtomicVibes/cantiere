@@ -35,12 +35,13 @@ const statusConfig = {
 
 export default function ProjectRequests() {
   const { t } = useTranslation();
-  const { role, isLoading } = useUserRole();
+  const { role } = useUserRole();
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState('all');
   const [formOpen, setFormOpen] = useState(false);
 
-  const canCreate = PERMISSIONS.canCreateRequest.includes(role);
+  const effectiveRole = (role || 'client').toLowerCase();
+  const canCreate = PERMISSIONS.canCreateRequest.includes(effectiveRole);
 
   const { data: requests = [] } = useQuery({
     queryKey: ['projectRequests'],
@@ -75,9 +76,7 @@ export default function ProjectRequests() {
               </SelectContent>
             </Select>
           </div>
-          {isLoading ? (
-            <div className="w-32 h-[44px] rounded-md bg-muted animate-pulse" />
-          ) : canCreate && (
+          {canCreate && (
             <Dialog open={formOpen} onOpenChange={setFormOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2 min-h-[44px]">
