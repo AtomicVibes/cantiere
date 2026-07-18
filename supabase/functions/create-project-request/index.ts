@@ -96,6 +96,24 @@ serve(async (req) => {
       return respond({ error: 'Failed to submit request.' }, 500);
     }
 
+    const { data: adminUser } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('role', 'super_admin')
+      .single();
+
+    if (adminUser) {
+      await supabaseAdmin
+        .from('notifications')
+        .insert({
+          user_id: adminUser.id,
+          title: 'New Project Request',
+          message: `${project_name.trim()} has been submitted for review.`,
+          type: 'info',
+          is_read: false,
+        });
+    }
+
     return respond({ request: newRequest }, 200);
   } catch (err) {
     console.error('Unexpected error in create-project-request', err);
