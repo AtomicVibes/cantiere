@@ -29,4 +29,5 @@ export const PERMISSIONS = {
   canCreateRequest: ['super_admin', 'admin', 'client'],
   canDeleteRequest: ['super_admin'],
   canReviewRequest: ['super_admin', 'admin'],
+  canViewOrganizationStats: ['super_admin', 'admin'],
 };

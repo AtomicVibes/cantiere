@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { listEntities } from '@/services/dataService';
 import { useDashboardData } from '@/hooks/useDashboardData';
+import { useUserRole } from '@/hooks/useUserRole';
+import { PERMISSIONS } from '@/lib/permissions';
 
 function StatSkeleton() {
   return (
@@ -29,7 +31,9 @@ function StatSkeleton() {
 
 export default function Dashboard() {
   const { t } = useTranslation();
+  const { role } = useUserRole();
   const { clientCount, teamMemberCount, isLoading } = useDashboardData();
+  const canViewOrgStats = PERMISSIONS.canViewOrganizationStats.includes(role);
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: () => listEntities('projects'),
@@ -63,31 +67,33 @@ export default function Dashboard() {
           <StatCard title={t('delayed')} value={delayedProjects.length} icon={AlertTriangle} color="destructive" />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {isLoading ? (
-            <>
-              <StatSkeleton />
-              <StatSkeleton />
-            </>
-          ) : (
-            <>
-              <StatCard title={t('teamMembers')} value={teamMemberCount} icon={Users} color="violet" />
-              <StatCard title={t('clients')} value={clientCount} icon={UserCircle} color="blue" />
-            </>
-          )}
-          <StatCard
-            title={t('revenue')}
-            value={`€${totalRevenue.toLocaleString()}`}
-            icon={DollarSign}
-            color="success"
-          />
-          <StatCard
-            title={t('outstanding')}
-            value={`${outstandingInvoices.length} ${t('invoices')}`}
-            icon={FileWarning}
-            color="warning"
-          />
-        </div>
+        {canViewOrgStats && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {isLoading ? (
+              <>
+                <StatSkeleton />
+                <StatSkeleton />
+              </>
+            ) : (
+              <>
+                <StatCard title={t('teamMembers')} value={teamMemberCount} icon={Users} color="violet" />
+                <StatCard title={t('clients')} value={clientCount} icon={UserCircle} color="blue" />
+              </>
+            )}
+            <StatCard
+              title={t('revenue')}
+              value={`€${totalRevenue.toLocaleString()}`}
+              icon={DollarSign}
+              color="success"
+            />
+            <StatCard
+              title={t('outstanding')}
+              value={`${outstandingInvoices.length} ${t('invoices')}`}
+              icon={FileWarning}
+              color="warning"
+            />
+          </div>
+        )}
 
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
