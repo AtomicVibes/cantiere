@@ -13,7 +13,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 
 export default function MobileNav() {
   const { t } = useTranslation();
-  const { role } = useUserRole();
+  const { role, isAdmin } = useUserRole();
   const isSuperAdmin = role === 'super_admin';
   const location = useLocation();
 
@@ -22,11 +22,15 @@ export default function MobileNav() {
     { icon: FolderKanban, path: '/projects', label: t('projects') },
     { icon: MessageSquare, path: '/messages', label: 'Messages' },
     { icon: Users, path: '/teams', label: t('teams'), requires: 'super_admin' },
-    { icon: DollarSign, path: '/finance', label: t('finance') },
+    { icon: DollarSign, path: '/finance', label: t('finance'), requires: 'admin' },
     { icon: Calendar, path: '/calendar', label: t('calendar') },
   ];
 
-  const bottomNav = bottomItems.filter((item) => !item.requires || isSuperAdmin);
+  const bottomNav = bottomItems.filter((item) => {
+    if (!item.requires) return true;
+    if (item.requires === 'super_admin') return isSuperAdmin;
+    return isAdmin;
+  });
 
   return (
     <>

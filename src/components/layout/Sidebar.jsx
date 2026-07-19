@@ -11,10 +11,12 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
+import { useUserRole } from '@/hooks/useUserRole';
 
 export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCollapsedProp }) {
   const { t } = useTranslation();
-  const { isAdmin, isLoadingAuth } = useAuth();
+  const { isLoadingAuth } = useAuth();
+  const { isAdmin } = useUserRole();
 
   const allNavItems = [
     { label: t('dashboard'), icon: LayoutDashboard, path: '/' },
@@ -23,7 +25,7 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
     { label: t('clients'), icon: UserCircle, path: '/clients', requires: true },
     { label: 'Messages', icon: MessageSquare, path: '/messages' },
     { label: t('notifications'), icon: Bell, path: '/notifications' },
-    { label: t('finance'), icon: DollarSign, path: '/finance' },
+    { label: t('finance'), icon: DollarSign, path: '/finance', requires: true },
     { label: t('calendar'), icon: Calendar, path: '/calendar' },
     { label: t('reports'), icon: BarChart3, path: '/reports', requires: true },
     { label: t('documents'), icon: FileText, path: '/documents' },
