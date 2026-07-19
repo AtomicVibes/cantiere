@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/services/supabase';
 import { updateMember } from '@/services/memberService';
-import { fetchProjectAssignments, fetchAllProjects, syncProjectAssignments, lookupTeamMemberId } from '@/services/projectMemberService';
+import { fetchProjectAssignments, fetchAllProjects, syncProjectAssignments } from '@/services/projectMemberService';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -130,13 +130,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
       }
 
       if (canAssignProjects) {
-        const teamMemberId = await lookupTeamMemberId(member.id);
-        if (!teamMemberId) {
-          toast.error('Team member record not found');
-          setSaving(false);
-          return;
-        }
-        await syncProjectAssignments(member.id, teamMemberId, selectedProjects);
+        await syncProjectAssignments(member.id, selectedProjects);
       }
 
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });

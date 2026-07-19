@@ -1,16 +1,5 @@
 import { supabase } from './supabase';
 
-export async function lookupTeamMemberId(profileId) {
-  const { data, error } = await supabase
-    .from('team_members')
-    .select('id')
-    .eq('user_id', profileId)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.id ?? null;
-}
-
 export async function fetchProjectAssignments(profileId) {
   const { data, error } = await supabase
     .from('project_members')
@@ -31,7 +20,7 @@ export async function fetchAllProjects() {
   return data ?? [];
 }
 
-export async function syncProjectAssignments(profileId, teamMemberId, projectIds) {
+export async function syncProjectAssignments(profileId, projectIds) {
   const { data: existing } = await supabase
     .from('project_members')
     .select('project_id')
@@ -57,7 +46,7 @@ export async function syncProjectAssignments(profileId, teamMemberId, projectIds
       .insert(toInsert.map(projectId => ({
         project_id: projectId,
         profile_id: profileId,
-        team_member_id: teamMemberId,
+        team_member_id: profileId,
       })));
     if (insErr) throw insErr;
   }

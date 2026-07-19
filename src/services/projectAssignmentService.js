@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { toast } from 'sonner';
 
-export async function handleAssignProject(userId, projectId, userRole) {
+export async function handleAssignProject(userId, projectId, userRole, queryClient) {
   if (userRole !== 'super_admin') {
     toast.error('Access Denied: Only Super Admins can assign projects.');
     return;
@@ -32,7 +32,8 @@ export async function handleAssignProject(userId, projectId, userRole) {
     if (insertError) throw insertError;
 
     toast.success('Project assigned successfully!');
-    refreshData();
+    queryClient.invalidateQueries({ queryKey: ['projects'] });
+    queryClient.invalidateQueries({ queryKey: ['project-members'] });
   } catch (err) {
     toast.error(err.message);
   }

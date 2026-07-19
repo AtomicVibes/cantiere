@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.project_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
-  team_member_id UUID NOT NULL REFERENCES public.team_members(id) ON DELETE CASCADE,
+  team_member_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   assigned_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(project_id, team_member_id)
 );
