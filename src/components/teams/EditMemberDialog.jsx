@@ -22,6 +22,8 @@ import { useDirection } from '@/i18n/LanguageProvider';
 import { ChevronsUpDown, X } from 'lucide-react';
 
 const ROLE_RANK = { super_admin: 4, admin: 3, manager: 2, client: 1 };
+const ROLE_LABELS = { super_admin: 'Super Admin', admin: 'Admin', manager: 'User', client: 'Client' };
+const RANK = { SUPER_ADMIN: 4, ADMIN: 3, MANAGER: 2, CLIENT: 1 };
 
 export default function EditMemberDialog({ member, open, onOpenChange }) {
   const { t } = useTranslation();
@@ -33,7 +35,6 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
   const canAssignRole = PERMISSIONS.canAssignProjectRole.includes(currentUserRole);
   const canAssignProjects = PERMISSIONS.canAssignProjects.includes(currentUserRole);
   const canEdit = PERMISSIONS.canEditTeamMember.includes(currentUserRole);
-  const currentUserRank = ROLE_RANK[currentUserRole] ?? 0;
 
   const [form, setForm] = useState({
     full_name: '', phone: '', job_title: '', department: '', status: 'active', role_id: '',
@@ -116,8 +117,12 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
 
       if (canAssignRole && form.role_id && form.role_id !== member.role_id) {
         const selectedRole = roles.find(r => r.id === form.role_id);
-        if (selectedRole && ROLE_RANK[selectedRole.name] > currentUserRank) {
-          toast.error('Cannot assign a role higher than your own');
+        const currentMemberRole = roles.find(r => r.id === member.role_id);
+        const targetRoleRank = selectedRole ? ROLE_RANK[selectedRole.name] ?? 0 : 0;
+        const currentTargetRank = currentMemberRole ? ROLE_RANK[currentMemberRole.name] ?? 0 : 0;
+
+        if (currentUserRole !== 'super_admin' && (targetRoleRank >= RANK.SUPER_ADMIN || currentTargetRank >= RANK.SUPER_ADMIN)) {
+          toast.error('You do not have permission to modify this role.');
           setSaving(false);
           return;
         }
@@ -197,7 +202,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
                 <SelectContent>
                   {availableRoles.map(r => (
                     <SelectItem key={r.id} value={r.id}>
-                      {r.name.replace(/_/g, ' ')}
+                      {ROLE_LABELS[r.name] || r.name.replace(/_/g, ' ')}
                     </SelectItem>
                   ))}
                 </SelectContent>
