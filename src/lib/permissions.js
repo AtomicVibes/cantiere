@@ -30,4 +30,6 @@ export const PERMISSIONS = {
   canDeleteRequest: ['super_admin'],
   canReviewRequest: ['super_admin', 'admin'],
   canViewOrganizationStats: ['super_admin', 'admin'],
+  canAssignProjectRole: ['super_admin', 'admin'],
+  canAssignProjects: ['super_admin', 'admin'],
 };

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/services/supabase';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
 import TeamMemberCard from '@/components/teams/TeamMemberCard';
+import EditMemberDialog from '@/components/teams/EditMemberDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -22,11 +22,10 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { useTeamFormFields } from '@/hooks/useFormSchema';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { PERMISSIONS } from '@/lib/permissions';
-import { handleMutationError } from '@/lib/rbac';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { inviteUserByEmail, deleteUser } from '@/services/inviteService';
 
-const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active', role_id: '' };
+const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active' };
 
 export default function Teams() {
   const { t } = useTranslation();
@@ -36,7 +35,8 @@ export default function Teams() {
   const canDelete = PERMISSIONS.canDeleteTeamMember.includes(role);
   const { fields, jobTitleOptions, statusOptions } = useTeamFormFields();
   const [showForm, setShowForm] = useState(false);
-  const [editMember, setEditMember] = useState(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
   const [form, setForm] = useState(emptyMember);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
@@ -45,17 +45,6 @@ export default function Teams() {
   const [viewMode, setViewMode] = useState('grid');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const queryClient = useQueryClient();
-
-  const { data: roles = [] } = useQuery({
-    queryKey: ['roles'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('roles').select('id, name').order('name');
-      if (error) throw error;
-      return data ?? [];
-    },
-    initialData: [],
-    enabled: isSuperAdmin,
-  });
 
   const { members, isLoading } = useTeamMembers({ userRole: role, isSuperAdmin });
 
@@ -69,29 +58,18 @@ export default function Teams() {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
     },
     onError: (err) => {
-      if (!handleMutationError(err, t, toast)) {
-        toast.error(err.message);
-      }
+      toast.error(err.message);
     },
   });
 
   const openEdit = (member) => {
-    setEditMember(member);
-    setForm({
-      full_name: member.full_name || '',
-      email: member.email || '',
-      phone: member.phone || '',
-      job_title: member.job_title || '',
-      department: member.department || '',
-      status: member.status || 'active',
-      role_id: member.role_id || '',
-    });
-    setShowForm(true);
+    setEditingMember(member);
+    setEditDialogOpen(true);
   };
 
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!canCreate && !editMember) {
+    if (!canCreate) {
       toast.error(t('accessDenied'));
       return;
     }
@@ -99,54 +77,39 @@ export default function Teams() {
     setFriendlyError('');
 
     try {
-      if (editMember) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            full_name: form.full_name,
-            phone: form.phone,
-            job_title: form.job_title,
-            department: form.department,
-          })
-          .eq('id', editMember.id);
-        if (profileError) throw profileError;
-      } else {
-        if (!form.email || !form.full_name) {
-          setFriendlyError(!form.email ? 'Email is required' : 'Full name is required');
-          setSaving(false);
-          return;
-        }
-        const res = await inviteUserByEmail({
-          email: form.email,
-          role_id: form.role_id || null,
-          full_name: form.full_name,
-          phone: form.phone,
-          job_title: form.job_title,
-          department: form.department,
-          mode: inviteMode,
-        });
-
-        // Optimistic update: show the new member immediately
-        const newMember = {
-          id: res.user.id,
-          full_name: form.full_name || '',
-          email: form.email,
-          phone: form.phone || '',
-          job_title: form.job_title || '',
-          department: form.department || '',
-          role_id: form.role_id || '',
-          status: 'active',
-        };
-        queryClient.setQueryData(['teamMembers'], (prev = []) => [newMember, ...prev]);
-
-        toast.success(inviteMode === 'direct' ? `User created (${form.email})` : 'Invite sent!');
+      if (!form.email || !form.full_name) {
+        setFriendlyError(!form.email ? 'Email is required' : 'Full name is required');
+        setSaving(false);
+        return;
       }
+      const res = await inviteUserByEmail({
+        email: form.email,
+        role_id: null,
+        full_name: form.full_name,
+        phone: form.phone,
+        job_title: form.job_title,
+        department: form.department,
+        mode: inviteMode,
+      });
+
+      const newMember = {
+        id: res.user.id,
+        full_name: form.full_name || '',
+        email: form.email,
+        phone: form.phone || '',
+        job_title: form.job_title || '',
+        department: form.department || '',
+        role_id: '',
+        status: 'active',
+      };
+      queryClient.setQueryData(['teamMembers'], (prev = []) => [newMember, ...prev]);
+
+      toast.success(inviteMode === 'direct' ? `User created (${form.email})` : 'Invite sent!');
 
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       setShowForm(false);
-      setEditMember(null);
       setForm(emptyMember);
     } catch (err) {
       setFriendlyError(err.message);
@@ -178,7 +141,7 @@ export default function Teams() {
               </ToggleGroupItem>
             </ToggleGroup>
             {canCreate && (
-              <Button onClick={() => { setEditMember(null); setForm(emptyMember); setShowForm(true); }} className="gap-2">
+              <Button onClick={() => { setForm(emptyMember); setShowForm(true); }} className="gap-2">
                 <Plus className="w-4 h-4" /> {t('addMember')}
               </Button>
             )}
@@ -206,10 +169,10 @@ export default function Teams() {
         )}
       </div>
 
-      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); setFriendlyError(''); if (!v) setEditMember(null); }}>
+      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); setFriendlyError(''); if (!v) setForm(emptyMember); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="font-heading">{editMember ? t('editMember') : t('addMember')}</DialogTitle>
+            <DialogTitle className="font-heading">{t('addMember')}</DialogTitle>
           </DialogHeader>
           {friendlyError && (
             <div className="bg-destructive/10 text-destructive text-sm rounded-lg px-4 py-3 border border-destructive/20" dir={dir}>
@@ -217,14 +180,11 @@ export default function Teams() {
             </div>
           )}
           <form onSubmit={handleSave} className="space-y-4" dir={dir}>
-            {fields.filter(f => editMember ? f.key !== 'role_id' : true).map(field => {
+            {fields.filter(f => f.key !== 'role_id').map(field => {
               if (field.type === 'select') {
                 let options = [];
                 if (field.key === 'job_title') options = jobTitleOptions;
-                else if (field.key === 'role_id') options = roles.map(r => ({ value: r.id, label: r.name.replace(/_/g, ' ') }));
                 else if (field.key === 'status') options = statusOptions;
-
-                if (field.key === 'role_id' && !isSuperAdmin) return null;
 
                 return (
                   <div key={field.key}>
@@ -250,19 +210,17 @@ export default function Teams() {
                 </div>
               );
             })}
-            {!editMember && (
-              <div>
-                <Label>{t('provisioning')}</Label>
-                <select
-                  value={inviteMode}
-                  onChange={e => setInviteMode(e.target.value)}
-                  className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <option value="direct">{t('directCreation')}</option>
-                  <option value="invite">{t('sendInvitation')}</option>
-                </select>
-              </div>
-            )}
+            <div>
+              <Label>{t('provisioning')}</Label>
+              <select
+                value={inviteMode}
+                onChange={e => setInviteMode(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="direct">{t('directCreation')}</option>
+                <option value="invite">{t('sendInvitation')}</option>
+              </select>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={saving || !form.full_name}>{saving ? t('saving') : t('save')}</Button>
@@ -270,6 +228,12 @@ export default function Teams() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <EditMemberDialog
+        member={editingMember}
+        open={editDialogOpen}
+        onOpenChange={(v) => { setEditDialogOpen(v); if (!v) setEditingMember(null); }}
+      />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
