@@ -1,8 +1,3 @@
-// Global type declarations to suppress prop-type mismatches for third-party / generated UI components.
-// These declarations avoid IntrinsicAttributes errors without modifying component source logic.
-// Intended as a stability bridge during migration from Base44 to local Vite.
-// Safe to extend as new component usages appear — no business-logic files touched.
-
 declare module '@/api/base44Client' {
   export const base44: any;
 }
