@@ -1,40 +1,24 @@
 import { supabase } from './supabase';
-import { toast } from 'sonner';
 
-export async function handleAssignProject(userId, projectId, userRole, queryClient) {
-  if (userRole !== 'super_admin') {
-    toast.error('Access Denied: Only Super Admins can assign projects.');
-    return;
-  }
-
+export const handleAssignProject = async (formData) => {
   try {
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('job_title')
-      .eq('id', userId)
-      .single();
-
-    if (profileError) throw profileError;
-
-    if (!profile?.job_title) {
-      toast.error('Please assign a Job Title to this user before adding them to a project.');
+    if (!formData.job_title || formData.job_title === "") {
+      alert("Please assign a job title to the user before adding them to a project.");
       return;
     }
 
-    const { error: insertError } = await supabase
+    const { data, error } = await supabase
       .from('project_members')
-      .insert([{
-        project_id: projectId,
-        team_member_id: userId,
-        profile_id: userId,
-      }]);
+      .insert([formData]);
 
-    if (insertError) throw insertError;
-
-    toast.success('Project assigned successfully!');
-    queryClient.invalidateQueries({ queryKey: ['projects'] });
-    queryClient.invalidateQueries({ queryKey: ['project-members'] });
+    if (error) {
+      console.error("Supabase Database Error:", error);
+      alert("An unexpected error occurred. Please try again later.");
+    } else {
+      alert("User successfully assigned to project!");
+    }
+    
   } catch (err) {
-    toast.error(err.message);
+    console.error("Unexpected Application Error:", err);
   }
-}
+};
