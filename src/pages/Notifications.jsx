@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/services/supabase';
 import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
@@ -35,11 +37,59 @@ export default function Notifications() {
   const { role } = useUserRole();
   const canManage = PERMISSIONS.canManageNotifications.includes(role);
 
+  const navigate = useNavigate();
+
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => base44.entities.Notification.list('-created_date'),
     initialData: [],
   });
+
+  const handleNotificationClick = useCallback(async (notif) => {
+    if (!notif.is_read && canManage) {
+      await base44.entities.Notification.update(notif.id, { is_read: true });
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    }
+
+    if (notif.url) {
+      navigate(notif.url);
+      return;
+    }
+
+    const type = notif.type;
+
+    if (type === 'role_update' || type === 'status_change') {
+      navigate('/settings');
+      return;
+    }
+
+    if (type === 'project_assignment' || type === 'project_update') {
+      navigate('/projects');
+      return;
+    }
+
+    if (type === 'message' || type === 'new_message') {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('roles:roles!profiles_role_id_fkey(name)')
+        .eq('id', notif.user_id)
+        .single();
+      const roleName = profile?.roles?.name;
+      navigate(roleName === 'super_admin' ? '/admin/messages' : '/messages');
+      return;
+    }
+
+    const msg = (notif.message || '').toLowerCase();
+    if (msg.includes('project')) {
+      navigate('/projects');
+    } else if (msg.includes('team') || msg.includes('member')) {
+      navigate('/teams');
+    } else if (msg.includes('invoice') || msg.includes('finance') || msg.includes('budget')) {
+      navigate('/finance');
+    } else {
+      navigate('/dashboard');
+    }
+  }, [navigate, canManage, queryClient]);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Notification.update(id, data),
@@ -86,8 +136,12 @@ export default function Notifications() {
               return (
                 <div
                   key={notif.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleNotificationClick(notif)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleNotificationClick(notif); }}
                   className={cn(
-                    "bg-card rounded-lg border border-border border-l-4 p-4 flex items-start gap-3 transition-colors",
+                    "bg-card rounded-lg border border-border border-l-4 p-4 flex items-start gap-3 transition-colors cursor-pointer hover:bg-accent/50",
                     !notif.is_read && "bg-primary/[0.02]",
                     PRIORITY_STYLES[notif.priority] || PRIORITY_STYLES.low
                   )}
@@ -108,8 +162,8 @@ export default function Notifications() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-xs flex-shrink-0"
-                      onClick={() => updateMutation.mutate({ id: notif.id, data: { is_read: true } })}
+                      className="text-xs flex-shrink-0 z-10"
+                      onClick={(e) => { e.stopPropagation(); updateMutation.mutate({ id: notif.id, data: { is_read: true } }); }}
                     >
                       Mark read
                     </Button>
