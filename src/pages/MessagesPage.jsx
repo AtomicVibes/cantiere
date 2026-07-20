@@ -97,6 +97,17 @@ export default function MessagesPage() {
       setContacts([...partnerProfiles, ...availableProfiles]);
       setUnreadMap(counts);
       setLoading(false);
+
+      const openId = new URLSearchParams(window.location.search).get('user');
+      if (openId) {
+        const target = allProfiles.find(p => p.id === openId);
+        if (target) {
+          if (!partnerIds.has(openId)) {
+            setContacts(prev => [target, ...prev]);
+          }
+          handleOpenChat(openId);
+        }
+      }
     }).catch(() => setLoading(false));
   }, [userId]);
 
@@ -250,6 +261,15 @@ export default function MessagesPage() {
           is_read: false,
         });
       if (insertError) throw insertError;
+
+      const senderName = user?.user_metadata?.full_name || user?.email || 'Someone';
+      await supabase.from('notifications').insert({
+        user_id: selectedUserId,
+        type: 'message',
+        message: `${senderName} sent you a message`,
+        url: `/messages?user=${userId}`,
+        is_read: false,
+      });
 
       setText('');
       setAudioBlob(null);

@@ -46,7 +46,7 @@ serve(async (req) => {
       return respond({ error: 'Invalid authorization' }, 401);
     }
 
-    const { title, body, receiver_id, type, notification_id } = await req.json();
+    const { title, body, receiver_id, type, url, notification_id } = await req.json();
 
     if (!title || !receiver_id) {
       return respond({ error: 'Missing required fields: title, receiver_id' }, 400);
@@ -67,7 +67,7 @@ serve(async (req) => {
     }
 
     const displayBody = body && body.length > 200 ? body.substring(0, 200) + '…' : body || '';
-    const payload = JSON.stringify({ title, body: displayBody, type, notification_id });
+    const payload = JSON.stringify({ title, body: displayBody, type, url, notification_id });
 
     const results = await Promise.allSettled(
       subscriptions.map((sub) =>

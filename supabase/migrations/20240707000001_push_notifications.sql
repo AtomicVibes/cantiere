@@ -65,6 +65,7 @@ begin
     'body',           new.message,
     'receiver_id',    new.user_id,
     'type',           new.type,
+    'url',            new.url,
     'notification_id', new.id
   )::text;
 

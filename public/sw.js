@@ -19,6 +19,9 @@ self.addEventListener('push', (event) => {
     }
   }
 
+  const targetUrl = data.url ||
+    (data.type === 'message' ? '/messages' : '/notifications');
+
   const options = {
     body: data.body,
     icon: '/icon-192.png',
@@ -28,7 +31,7 @@ self.addEventListener('push', (event) => {
     renotify: true,
     requireInteraction: true,
     data: {
-      url: data.type === 'message' ? '/messages' : '/notifications',
+      url: targetUrl,
       notification_id: data.notification_id,
       type: data.type,
     },
