@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { supabase } from '@/services/supabase';
+import { subscribeUserToPush } from '@/hooks/usePushNotification';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +27,7 @@ export default function Settings() {
     email_notifications: true,
   });
   const [saving, setSaving] = useState(false);
+  const [pushState, setPushState] = useState({ loading: false, enabled: null });
 
   const applyTheme = (theme) => {
     const root = document.documentElement;
@@ -55,6 +57,16 @@ export default function Settings() {
       applyTheme(savedTheme);
     }
   }, [user]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      navigator.serviceWorker.ready.then((reg) =>
+        reg.pushManager.getSubscription().then((sub) =>
+          setPushState((s) => ({ ...s, enabled: !!sub }))
+        )
+      ).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     if (preferences.theme !== 'system') return;
@@ -129,6 +141,19 @@ export default function Settings() {
     }
   };
 
+  const handleEnablePush = async () => {
+    if (pushState.enabled) return;
+    setPushState((s) => ({ ...s, loading: true }));
+    const sub = await subscribeUserToPush(user?.id);
+    if (sub) {
+      setPushState({ loading: false, enabled: true });
+      toast.success('Push notifications enabled');
+    } else {
+      setPushState((s) => ({ ...s, loading: false }));
+      toast.error('Could not enable push notifications. Check browser permissions.');
+    }
+  };
+
   return (
     <div>
       <TopBar title={t('settings')} />
@@ -199,6 +224,20 @@ export default function Settings() {
                 checked={preferences.email_notifications}
                 onCheckedChange={v => setPreferences({...preferences, email_notifications: v})}
               />
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <div>
+                <p className="font-medium">Push Notifications</p>
+                <p className="text-sm text-muted-foreground">Receive alerts via browser push</p>
+              </div>
+              <Button
+                size="sm"
+                variant={pushState.enabled ? 'outline' : 'default'}
+                onClick={handleEnablePush}
+                disabled={pushState.loading || pushState.enabled}
+              >
+                {pushState.loading ? 'Enabling...' : pushState.enabled ? 'Enabled' : 'Enable'}
+              </Button>
             </div>
           </div>
         </div>
