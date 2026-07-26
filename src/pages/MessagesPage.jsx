@@ -125,8 +125,8 @@ export default function MessagesPage() {
         .then(({ data }) => {
           if (data) {
             setContacts(prev => [data, ...prev]);
-            handleOpenChatRef.current(openId);
           }
+          handleOpenChatRef.current(openId);
         });
     }
   }, [location.search, userId, contacts, selectedUserId]);
