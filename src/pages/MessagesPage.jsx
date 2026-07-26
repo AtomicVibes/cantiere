@@ -45,25 +45,6 @@ export default function MessagesPage() {
     });
   }, [userId]);
 
-  // Sync selectedUserId to URL so AppLayout can detect open chat.
-  // Skip clearing on mount: the deep-link effect may already be handling ?user=xxx
-  const mountedRef = useRef(false);
-  useEffect(() => {
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      return;
-    }
-
-    if (selectedUserId) {
-      const params = new URLSearchParams(location.search);
-      if (params.get('user') !== selectedUserId) {
-        navigate({ search: `?user=${selectedUserId}` }, { replace: true });
-      }
-    } else if (location.pathname.includes('/messages')) {
-      navigate({ search: '' }, { replace: true });
-    }
-  }, [selectedUserId, navigate, location.pathname]);
-
   const [contacts, setContacts] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -92,6 +73,25 @@ export default function MessagesPage() {
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { unreadMapRef.current = unreadMap; }, [unreadMap]);
   useEffect(() => { selectedUserIdRef.current = selectedUserId; }, [selectedUserId]);
+
+  // Sync selectedUserId to URL so AppLayout can detect open chat.
+  // Skip clearing on mount: the deep-link effect may already be handling ?user=xxx
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+
+    if (selectedUserId) {
+      const params = new URLSearchParams(location.search);
+      if (params.get('user') !== selectedUserId) {
+        navigate({ search: `?user=${selectedUserId}` }, { replace: true });
+      }
+    } else if (location.pathname.includes('/messages')) {
+      navigate({ search: '' }, { replace: true });
+    }
+  }, [selectedUserId, navigate, location.pathname]);
 
   const selectedContact = contacts.find(c => c.id === selectedUserId);
 
