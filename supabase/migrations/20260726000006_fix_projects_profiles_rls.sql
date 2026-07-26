@@ -73,6 +73,10 @@ CREATE POLICY "Profiles admin read"
 --    Only admins can mutate projects. Regular users see only
 --    assigned projects via the existing SELECT policies.
 
+DROP POLICY IF EXISTS "Admins can create projects" ON public.projects;
+DROP POLICY IF EXISTS "Admins can update projects" ON public.projects;
+DROP POLICY IF EXISTS "Admins can delete projects" ON public.projects;
+
 CREATE POLICY "Admins can create projects"
   ON public.projects FOR INSERT
   WITH CHECK (public.is_admin());
