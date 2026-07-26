@@ -16,7 +16,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ScrollText, Search, User, Archive, Trash2, Loader2 } from 'lucide-react';
+import { ScrollText, Search, User, Archive, Trash2, Loader2, RotateCcw } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -37,6 +37,7 @@ export default function Logs() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [view, setView] = useState('active'); // 'active' | 'archived'
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [mutating, setMutating] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -52,11 +53,14 @@ export default function Logs() {
       const from = (page - 1) * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
 
-      const { data, count, error } = await supabase
+      let query = supabase
         .from('audit_logs')
         .select('*', { count: 'exact', head: false })
+        .eq('archived', view === 'archived')
         .order('created_at', { ascending: false })
         .range(from, to);
+
+      const { data, count, error } = await query;
 
       if (!error && data) {
         setLogs(data);
@@ -65,7 +69,7 @@ export default function Logs() {
     } catch { } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, view]);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
@@ -152,6 +156,33 @@ export default function Logs() {
     }
   };
 
+  const handleViewChange = (newView) => {
+    if (newView !== view) {
+      setView(newView);
+      setPage(1);
+      setSelectedIds(new Set());
+    }
+  };
+
+  const executeRestore = async (ids) => {
+    setMutating(true);
+    try {
+      const idsArr = Array.isArray(ids) ? ids : [ids];
+      const { error } = await supabase
+        .from('audit_logs')
+        .update({ archived: false })
+        .in('id', idsArr);
+      if (error) throw error;
+      toast.success(`Restored ${idsArr.length} audit log${idsArr.length !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      fetchLogs();
+    } catch (err) {
+      toast.error(err.message || 'Failed to restore');
+    } finally {
+      setMutating(false);
+    }
+  };
+
   const executeArchive = async (ids) => {
     setMutating(true);
     try {
@@ -200,6 +231,32 @@ export default function Logs() {
           />
         </div>
 
+        {/* View toggle */}
+        {isSuperAdmin && (
+          <div className="flex items-center gap-1 border-b border-border pb-3">
+            <button
+              onClick={() => handleViewChange('active')}
+              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                view === 'active'
+                  ? 'bg-primary/10 text-primary font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Active
+            </button>
+            <button
+              onClick={() => handleViewChange('archived')}
+              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
+                view === 'archived'
+                  ? 'bg-primary/10 text-primary font-semibold'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Archived
+            </button>
+          </div>
+        )}
+
         {/* Action bar — super admin only */}
         {isSuperAdmin && visibleLogs.length > 0 && (
           <div className="flex items-center gap-3 flex-wrap">
@@ -209,27 +266,53 @@ export default function Logs() {
             </label>
 
             <div className="flex items-center gap-2 ml-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                disabled={mutating || selectedIds.size === 0}
-                onClick={() => executeArchive([...selectedIds])}
-              >
-                <Archive className="w-3.5 h-3.5" />
-                Archive Selected
-              </Button>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                disabled={mutating}
-                onClick={() => executeArchive(visibleLogs.map((l) => l.id))}
-              >
-                <Archive className="w-3.5 h-3.5" />
-                Archive All
-              </Button>
+              {view === 'active' ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    disabled={mutating || selectedIds.size === 0}
+                    onClick={() => executeArchive([...selectedIds])}
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    Archive Selected
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    disabled={mutating}
+                    onClick={() => executeArchive(visibleLogs.map((l) => l.id))}
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    Archive All
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    disabled={mutating || selectedIds.size === 0}
+                    onClick={() => executeRestore([...selectedIds])}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Restore Selected
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    disabled={mutating}
+                    onClick={() => executeRestore(visibleLogs.map((l) => l.id))}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Restore All
+                  </Button>
+                </>
+              )}
 
               <Button
                 variant="destructive"
@@ -264,7 +347,7 @@ export default function Logs() {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : visibleLogs.length === 0 ? (
-          <EmptyState icon={ScrollText} title="Audit Logs" description="No audit logs recorded yet" />
+          <EmptyState icon={ScrollText} title="Audit Logs" description={view === 'archived' ? 'No archived logs' : 'No audit logs recorded yet'} />
         ) : (
           <>
             <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -318,14 +401,25 @@ export default function Logs() {
                       {isSuperAdmin && (
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => executeArchive(log.id)}
-                              disabled={mutating}
-                              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                              title="Archive"
-                            >
-                              <Archive className="w-3.5 h-3.5" />
-                            </button>
+                            {view === 'active' ? (
+                              <button
+                                onClick={() => executeArchive(log.id)}
+                                disabled={mutating}
+                                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                                title="Archive"
+                              >
+                                <Archive className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => executeRestore(log.id)}
+                                disabled={mutating}
+                                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                                title="Restore"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDeleteConfirm('single', log.id)}
                               disabled={mutating}
