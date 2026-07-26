@@ -1,19 +1,39 @@
-import { useEffect } from 'react';
 import { supabase } from '@/services/supabase';
-import { useAuth } from '@/lib/AuthContext';
 
 const VITE_VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
-let isPushSubscribingGlobal = false;
-
 function urlB64ToUint8Array(base64String) {
+  if (!base64String || typeof base64String !== 'string') {
+    console.error('Push: VAPID key is empty or not a string');
+    return null;
+  }
+
+  const urlSafe = /^[A-Za-z0-9\-_]+$/;
+  if (!urlSafe.test(base64String.replace(/=+$/, ''))) {
+    console.error('Push: VAPID key contains invalid characters (not URL-safe base64)');
+    return null;
+  }
+
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
+  let rawData;
+  try {
+    rawData = window.atob(base64);
+  } catch (e) {
+    console.error('Push: VAPID key base64 decode failed', e.message);
+    return null;
+  }
+
   const outputArray = new Uint8Array(rawData.length);
   for (let i = 0; i < rawData.length; ++i) {
     outputArray[i] = rawData.charCodeAt(i);
   }
+
+  if (outputArray.length !== 65) {
+    console.error('Push: VAPID key decoded to', outputArray.length, 'bytes (expected 65)');
+    return null;
+  }
+
   return outputArray;
 }
 
@@ -28,6 +48,12 @@ export async function subscribeUserToPush(userId) {
   }
   if (!VITE_VAPID_PUBLIC_KEY) {
     console.warn('Push: VITE_VAPID_PUBLIC_KEY not configured');
+    return null;
+  }
+
+  const applicationServerKey = urlB64ToUint8Array(VITE_VAPID_PUBLIC_KEY);
+  if (!applicationServerKey) {
+    console.error('Push: cannot subscribe — invalid VAPID public key');
     return null;
   }
 
@@ -46,38 +72,31 @@ export async function subscribeUserToPush(userId) {
     return null;
   }
 
-  let permission;
+  let existingSub;
   try {
-    permission = await Notification.requestPermission();
+    existingSub = await reg.pushManager.getSubscription();
   } catch (err) {
-    console.error('Push: permission request failed', err);
-    return null;
+    console.error('Push: getSubscription failed', err);
   }
-  if (permission !== 'granted') {
-    console.warn('Push: permission not granted', permission);
-    return null;
-  }
-
-  try {
-    const existingSub = await reg.pushManager.getSubscription();
-    if (existingSub) {
+  if (existingSub) {
+    try {
       await supabase
         .from('push_subscriptions')
         .upsert(
           { user_id: userId, subscription: existingSub.toJSON() },
           { onConflict: 'user_id,subscription' }
         );
-      return existingSub;
+    } catch (err) {
+      console.error('Push: DB upsert of existing sub failed', err);
     }
-  } catch (err) {
-    console.error('Push: getSubscription failed', err);
+    return existingSub;
   }
 
   let sub;
   try {
     sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlB64ToUint8Array(VITE_VAPID_PUBLIC_KEY),
+      applicationServerKey,
     });
   } catch (err) {
     console.error('Push: subscribe failed', err.name, err.message);
@@ -106,32 +125,4 @@ export async function subscribeUserToPush(userId) {
   }
 
   return sub;
-}
-
-export function usePushNotification() {
-  const { user, isAuthenticated } = useAuth();
-
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-
-    let cancelled = false;
-
-    (async () => {
-      if (isPushSubscribingGlobal) return;
-      isPushSubscribingGlobal = true;
-
-      try {
-        const sub = await subscribeUserToPush(user.id);
-        if (cancelled || sub) return;
-      } catch (err) {
-        console.error('Push service unavailable:', err);
-      } finally {
-        isPushSubscribingGlobal = false;
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isAuthenticated, user]);
 }
