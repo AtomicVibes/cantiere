@@ -4,8 +4,6 @@ import { useAuth } from '@/lib/AuthContext';
 
 const VITE_VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
-// Module-scoped lock — survives React component unmount/remount cycles
-// that destroy useRef state during Supabase auth lifecycle transitions.
 let isPushSubscribingGlobal = false;
 
 function urlB64ToUint8Array(base64String) {
@@ -19,11 +17,102 @@ function urlB64ToUint8Array(base64String) {
   return outputArray;
 }
 
+export async function subscribeUserToPush(userId) {
+  if (!('serviceWorker' in navigator)) {
+    console.warn('Push: serviceWorker not available');
+    return null;
+  }
+  if (!('PushManager' in window)) {
+    console.warn('Push: PushManager not available');
+    return null;
+  }
+  if (!VITE_VAPID_PUBLIC_KEY) {
+    console.warn('Push: VITE_VAPID_PUBLIC_KEY not configured');
+    return null;
+  }
+
+  let reg;
+  try {
+    reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  } catch (err) {
+    console.error('Push: SW registration failed', err);
+    return null;
+  }
+
+  try {
+    reg = await navigator.serviceWorker.ready;
+  } catch (err) {
+    console.error('Push: SW ready failed', err);
+    return null;
+  }
+
+  let permission;
+  try {
+    permission = await Notification.requestPermission();
+  } catch (err) {
+    console.error('Push: permission request failed', err);
+    return null;
+  }
+  if (permission !== 'granted') {
+    console.warn('Push: permission not granted', permission);
+    return null;
+  }
+
+  try {
+    const existingSub = await reg.pushManager.getSubscription();
+    if (existingSub) {
+      await supabase
+        .from('push_subscriptions')
+        .upsert(
+          { user_id: userId, subscription: existingSub.toJSON() },
+          { onConflict: 'user_id,subscription' }
+        );
+      return existingSub;
+    }
+  } catch (err) {
+    console.error('Push: getSubscription failed', err);
+  }
+
+  let sub;
+  try {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlB64ToUint8Array(VITE_VAPID_PUBLIC_KEY),
+    });
+  } catch (err) {
+    console.error('Push: subscribe failed', err.name, err.message);
+    if (err.code === 20 || err.name === 'AbortError') {
+      console.warn('Push: subscription aborted (AbortError) — browser may require user gesture');
+    }
+    if (err.name === 'NotSupportedError') {
+      console.warn('Push: encryption not supported on this browser');
+    }
+    if (err.name === 'InvalidStateError') {
+      console.warn('Push: subscription already exists or service worker not activated');
+    }
+    return null;
+  }
+
+  try {
+    await supabase
+      .from('push_subscriptions')
+      .upsert(
+        { user_id: userId, subscription: sub.toJSON() },
+        { onConflict: 'user_id,subscription' }
+      );
+  } catch (err) {
+    console.error('Push: DB upsert failed', err);
+    return null;
+  }
+
+  return sub;
+}
+
 export function usePushNotification() {
   const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated || !user || !VITE_VAPID_PUBLIC_KEY) return;
+    if (!isAuthenticated || !user) return;
 
     let cancelled = false;
 
@@ -32,44 +121,10 @@ export function usePushNotification() {
       isPushSubscribingGlobal = true;
 
       try {
-        if (!('serviceWorker' in navigator)) return;
-
-        try {
-          await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-        } catch {
-          return;
-        }
-        const reg = await navigator.serviceWorker.ready;
-
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') return;
-
-        const existingSub = await reg.pushManager.getSubscription();
-        if (existingSub) {
-          await supabase
-            .from('push_subscriptions')
-            .upsert(
-              { user_id: user.id, subscription: existingSub.toJSON() },
-              { onConflict: 'user_id,subscription' }
-            );
-          return;
-        }
-
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlB64ToUint8Array(VITE_VAPID_PUBLIC_KEY),
-        });
-
-        if (cancelled) return;
-
-        await supabase
-          .from('push_subscriptions')
-          .upsert(
-            { user_id: user.id, subscription: sub.toJSON() },
-            { onConflict: 'user_id,subscription' }
-          );
-      } catch {
-        console.error('Push service unavailable');
+        const sub = await subscribeUserToPush(user.id);
+        if (cancelled || sub) return;
+      } catch (err) {
+        console.error('Push service unavailable:', err);
       } finally {
         isPushSubscribingGlobal = false;
       }

@@ -6,6 +6,7 @@
   "scope": "/",
   "id": "/",
   "display": "standalone",
+  "gcm_sender_id": "103953800507",
   "background_color": "#D51C39",
   "theme_color": "#D51C39",
   "icons": [
