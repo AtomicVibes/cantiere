@@ -21,6 +21,7 @@ import { supabase } from '@/services/supabase';
 import { findEntity, getEntity, createEntity, updateEntity } from '@/services/dataService';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
@@ -33,6 +34,7 @@ export default function ProjectDetail() {
   const canEdit = PERMISSIONS.canEditProject.includes(userRole);
   const canAddEntry = PERMISSIONS.canAddTimelineEntry.includes(userRole);
   const { id } = useParams();
+  const { isSuperAdmin: isSuperAdminLive } = useIsSuperAdmin();
   const queryClient = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
   const [newEntry, setNewEntry] = useState({ title: '', description: '', date: '' });
@@ -212,7 +214,8 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Team Assignment */}
+        {/* Team Assignment — super admin only */}
+        {isSuperAdminLive && (
         <section>
           <h3 className="font-heading font-semibold mb-3">{t('teamAssignment')}</h3>
           <div className="bg-card rounded-xl border border-border p-4 max-w-sm">
@@ -225,6 +228,7 @@ export default function ProjectDetail() {
             />
           </div>
         </section>
+        )}
 
         {/* Project Timeline Section */}
         <section className="mt-8">

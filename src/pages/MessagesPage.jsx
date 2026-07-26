@@ -40,7 +40,7 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (!userId) return;
-    supabase.rpc('is_super_admin').then(({ data }) => {
+    supabase.rpc('auth_user_is_super_admin').then(({ data }) => {
       if (data === true) setIsSuperAdmin(true);
     });
   }, [userId]);

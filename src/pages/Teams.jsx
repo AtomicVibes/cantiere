@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useTeamFormFields } from '@/hooks/useFormSchema';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -30,7 +31,8 @@ const emptyMember = { full_name: '', email: '', phone: '', job_title: '', depart
 export default function Teams() {
   const { t } = useTranslation();
   const { dir } = useDirection();
-  const { role, isSuperAdmin } = useUserRole();
+  const { role } = useUserRole();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const canCreate = PERMISSIONS.canCreateTeamMember.includes(role);
   const canDelete = PERMISSIONS.canDeleteTeamMember.includes(role);
   const { fields, jobTitleOptions, statusOptions } = useTeamFormFields();

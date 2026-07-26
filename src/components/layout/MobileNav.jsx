@@ -10,11 +10,12 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import Sidebar from './Sidebar';
 import { useTranslation } from 'react-i18next';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
 export default function MobileNav() {
   const { t } = useTranslation();
-  const { role, isAdmin } = useUserRole();
-  const isSuperAdmin = role === 'super_admin';
+  const { isAdmin } = useUserRole();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const location = useLocation();
 
   const bottomItems = [
