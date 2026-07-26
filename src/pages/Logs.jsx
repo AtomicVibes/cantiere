@@ -4,10 +4,22 @@ import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
-import { ScrollText, Search, User } from 'lucide-react';
+import {
+  Pagination, PaginationContent, PaginationItem, PaginationLink,
+  PaginationNext, PaginationPrevious,
+} from '@/components/ui/pagination';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { ScrollText, Search, User, Archive, Trash2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 
 const PAGE_SIZE = 25;
 
@@ -25,6 +37,12 @@ export default function Logs() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [mutating, setMutating] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { mode: 'selected'|'all'|'single', id?: string }
+
+  const { isSuperAdmin } = useIsSuperAdmin();
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
@@ -66,7 +84,7 @@ export default function Logs() {
 
   useEffect(() => { setPage(1); }, [search]);
 
-  const filteredLogs = useMemo(() => {
+  const visibleLogs = useMemo(() => {
     if (!search) return logs;
     const q = search.toLowerCase();
     return logs.filter(
@@ -77,8 +95,80 @@ export default function Logs() {
     );
   }, [logs, search]);
 
+  const allVisibleSelected = visibleLogs.length > 0 && visibleLogs.every((log) => selectedIds.has(log.id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(visibleLogs.map((log) => log.id)));
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const handlePageChange = (p) => {
-    if (p >= 1 && p <= totalPages) setPage(p);
+    if (p >= 1 && p <= totalPages) {
+      setPage(p);
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleDeleteConfirm = (mode, id) => {
+    setDeleteTarget({ mode, id });
+    setConfirmDeleteOpen(true);
+  };
+
+  const executeDelete = async () => {
+    setMutating(true);
+    try {
+      let query = supabase.from('audit_logs').delete();
+      let count = 0;
+      if (deleteTarget.mode === 'selected') {
+        query = query.in('id', [...selectedIds]);
+        count = selectedIds.size;
+      } else if (deleteTarget.mode === 'single') {
+        query = query.eq('id', deleteTarget.id);
+        count = 1;
+      }
+      const { error } = await query;
+      if (error) throw error;
+      toast.success(`Deleted ${count} audit log${count !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      fetchLogs();
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete');
+    } finally {
+      setMutating(false);
+      setConfirmDeleteOpen(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const executeArchive = async (ids) => {
+    setMutating(true);
+    try {
+      const idsArr = Array.isArray(ids) ? ids : [ids];
+      const { error } = await supabase
+        .from('audit_logs')
+        .update({ archived: true })
+        .in('id', idsArr);
+      if (error) throw error;
+      toast.success(`Archived ${idsArr.length} audit log${idsArr.length !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      fetchLogs();
+    } catch (err) {
+      toast.error(err.message || 'Failed to archive');
+    } finally {
+      setMutating(false);
+    }
   };
 
   const renderPageNumbers = () => {
@@ -99,6 +189,7 @@ export default function Logs() {
     <div>
       <TopBar title="Audit Logs" />
       <div className="p-6 space-y-6">
+        {/* Search bar */}
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -109,11 +200,70 @@ export default function Logs() {
           />
         </div>
 
+        {/* Action bar — super admin only */}
+        {isSuperAdmin && visibleLogs.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={allVisibleSelected} onCheckedChange={toggleSelectAll} />
+              Select All
+            </label>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={mutating || selectedIds.size === 0}
+                onClick={() => executeArchive([...selectedIds])}
+              >
+                <Archive className="w-3.5 h-3.5" />
+                Archive Selected
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={mutating}
+                onClick={() => executeArchive(visibleLogs.map((l) => l.id))}
+              >
+                <Archive className="w-3.5 h-3.5" />
+                Archive All
+              </Button>
+
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                disabled={mutating || selectedIds.size === 0}
+                onClick={() => handleDeleteConfirm('selected')}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete Selected
+              </Button>
+
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                disabled={mutating}
+                onClick={() => handleDeleteConfirm('all')}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete All
+              </Button>
+
+              {mutating && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            </div>
+          </div>
+        )}
+
+        {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-        ) : filteredLogs.length === 0 ? (
+        ) : visibleLogs.length === 0 ? (
           <EmptyState icon={ScrollText} title="Audit Logs" description="No audit logs recorded yet" />
         ) : (
           <>
@@ -121,17 +271,27 @@ export default function Logs() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
+                    {isSuperAdmin && <TableHead className="w-10" />}
                     <TableHead>Timestamp</TableHead>
                     <TableHead>Action</TableHead>
                     <TableHead className="hidden sm:table-cell">Table</TableHead>
                     <TableHead className="hidden md:table-cell">Record</TableHead>
                     <TableHead className="hidden lg:table-cell">User</TableHead>
                     <TableHead className="hidden lg:table-cell">Message</TableHead>
+                    {isSuperAdmin && <TableHead className="w-24" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLogs.map((log) => (
+                  {visibleLogs.map((log) => (
                     <TableRow key={log.id} className="hover:bg-muted/30">
+                      {isSuperAdmin && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(log.id)}
+                            onCheckedChange={() => toggleSelect(log.id)}
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                         {log.created_at ? format(new Date(log.created_at), 'MMM dd, yyyy HH:mm') : '-'}
                       </TableCell>
@@ -155,6 +315,28 @@ export default function Logs() {
                       <TableCell className="hidden lg:table-cell text-sm text-muted-foreground max-w-xs truncate">
                         {log.message || '-'}
                       </TableCell>
+                      {isSuperAdmin && (
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => executeArchive(log.id)}
+                              disabled={mutating}
+                              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                              title="Archive"
+                            >
+                              <Archive className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteConfirm('single', log.id)}
+                              disabled={mutating}
+                              className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>
@@ -177,6 +359,29 @@ export default function Logs() {
           </>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Permanent Deletion</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action is permanent and will delete everything permanently. Do you still wish to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={mutating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeDelete}
+              disabled={mutating}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {mutating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
