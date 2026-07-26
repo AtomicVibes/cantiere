@@ -19,9 +19,9 @@ function respond(data, status = 200) {
   });
 }
 
-function error(message, detail, status = 400) {
-  console.error(`[delete-user] ${status}`, { message, detail });
-  return respond({ message, detail }, status);
+function error(message, detail, status = 400, extra = {}) {
+  console.error(`[delete-user] ${status}`, { message, detail, ...extra });
+  return respond({ message, detail, ...extra }, status);
 }
 
 serve(async (req) => {
@@ -80,23 +80,23 @@ serve(async (req) => {
       .eq('id', user_id);
 
     if (deleteProfileError) {
-      console.error('Profile deletion failed', {
-        code: deleteProfileError.code,
-        message: deleteProfileError.message,
-        details: deleteProfileError.details,
-      });
-
       return error(
-        'Unable to delete user. Please try again or contact support.',
-        deleteProfileError.message
+        'Profile deletion failed',
+        deleteProfileError.message,
+        400,
+        { code: deleteProfileError.code, details: deleteProfileError.details, hint: deleteProfileError.hint }
       );
     }
 
     const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(user_id);
 
     if (deleteAuthError) {
-      console.error('Auth deletion failed', deleteAuthError);
-      return error('User profile was removed but auth cleanup failed. Contact support.', deleteAuthError.message);
+      return error(
+        'Auth deletion failed',
+        deleteAuthError.message,
+        400,
+        { code: deleteAuthError.code, details: deleteAuthError.details, hint: deleteAuthError.hint }
+      );
     }
 
     return respond({ success: true });
