@@ -65,10 +65,12 @@ export default function MessagesPage() {
   const messagesRef = useRef([]);
   const unreadMapRef = useRef({});
   const handleOpenChatRef = useRef(null);
+  const selectedUserIdRef = useRef(null);
 
   // Keep refs in sync with state for snapshot/rollback
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { unreadMapRef.current = unreadMap; }, [unreadMap]);
+  useEffect(() => { selectedUserIdRef.current = selectedUserId; }, [selectedUserId]);
 
   const selectedContact = contacts.find(c => c.id === selectedUserId);
 
@@ -88,52 +90,59 @@ export default function MessagesPage() {
     if (!userId) return;
     setLoading(true);
 
-    Promise.all([
-      supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
-      supabase.from('messages').select('sender_id').eq('receiver_id', userId).eq('is_read', false),
-      supabase.from('hidden_conversations').select('other_user_id').eq('user_id', userId),
-    ]).then(([allMessagesRes, unreadRes, hiddenRes]) => {
-      const hiddenIds = new Set((hiddenRes.data ?? []).map(h => h.other_user_id));
+    (async () => {
+      try {
+        const [allMessagesRes, unreadRes] = await Promise.all([
+          supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
+          supabase.from('messages').select('sender_id').eq('receiver_id', userId).eq('is_read', false),
+        ]);
 
-      const partnerIds = new Set();
-      (allMessagesRes.data ?? []).forEach(m => {
-        if (m.sender_id === userId && !hiddenIds.has(m.receiver_id)) partnerIds.add(m.receiver_id);
-        if (m.receiver_id === userId && !hiddenIds.has(m.sender_id)) partnerIds.add(m.sender_id);
-      });
-
-      const counts = {};
-      (unreadRes.data ?? []).forEach(m => {
-        if (!hiddenIds.has(m.sender_id)) {
-          counts[m.sender_id] = (counts[m.sender_id] || 0) + 1;
-        }
-      });
-      setUnreadMap(counts);
-
-      const partnerArray = [...partnerIds];
-      if (partnerArray.length === 0) {
-        setContacts([]);
-        setLoading(false);
-        return;
-      }
-
-      supabase
-        .from('profiles')
-        .select('id, email, full_name, role_id, roles(name)')
-        .in('id', partnerArray)
-        .then(({ data: profiles }) => {
-          setContacts(partnerArray.map(id => {
-            const profile = profiles?.find(p => p.id === id);
-            return profile || { id, full_name: null, email: null };
-          }));
-          setLoading(false);
+        const partnerIds = new Set();
+        (allMessagesRes.data ?? []).forEach(m => {
+          partnerIds.add(m.sender_id === userId ? m.receiver_id : m.sender_id);
         });
-    }).catch(() => setLoading(false));
+
+        const counts = {};
+        (unreadRes.data ?? []).forEach(m => {
+          counts[m.sender_id] = (counts[m.sender_id] || 0) + 1;
+        });
+
+        // hidden_conversations table may not exist yet — gracefully ignore
+        let hiddenIds = new Set();
+        try {
+          const { data } = await supabase.from('hidden_conversations').select('other_user_id').eq('user_id', userId);
+          hiddenIds = new Set((data ?? []).map(h => h.other_user_id));
+        } catch {}
+
+        const partnerArray = [...partnerIds].filter(id => !hiddenIds.has(id));
+        if (partnerArray.length === 0) {
+          setContacts([]);
+          setUnreadMap(counts);
+          setLoading(false);
+          return;
+        }
+
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, email, full_name, role_id, roles(name)')
+          .in('id', partnerArray);
+
+        setContacts(partnerArray.map(id => {
+          const profile = profiles?.find(p => p.id === id);
+          return profile || { id, full_name: null, email: null };
+        }));
+        setUnreadMap(counts);
+      } catch (err) {
+        console.error('Failed to load contacts:', err);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [userId]);
 
   // ── Realtime contact list refresh ──────────────────────────────────
-  // When a new message arrives from a previously unknown sender, refetch
-  // the partner list so they appear as an active chat partner without
-  // requiring a manual page reload.
+  // When a new message arrives, increment the sender's unread count and
+  // refetch the partner list so new conversations appear immediately.
   useEffect(() => {
     if (!userId) return;
 
@@ -142,33 +151,46 @@ export default function MessagesPage() {
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages',
           filter: `receiver_id=eq.${userId}` },
-        () => {
-          Promise.all([
-            supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
-            supabase.from('hidden_conversations').select('other_user_id').eq('user_id', userId),
-          ]).then(([messagesRes, hiddenRes]) => {
-            const hiddenIds = new Set((hiddenRes.data ?? []).map(h => h.other_user_id));
+        async (payload) => {
+          const senderId = payload.new.sender_id;
+
+          // Increment unread for the sender (skip if viewing that chat)
+          if (senderId !== selectedUserIdRef.current) {
+            setUnreadMap(prev => ({ ...prev, [senderId]: (prev[senderId] || 0) + 1 }));
+          }
+
+          // Refresh contact list
+          try {
+            const { data: msgs } = await supabase
+              .from('messages')
+              .select('sender_id, receiver_id')
+              .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`);
 
             const partnerIds = new Set();
-            (messagesRes.data ?? []).forEach(m => {
-              if (m.sender_id === userId && !hiddenIds.has(m.receiver_id)) partnerIds.add(m.receiver_id);
-              if (m.receiver_id === userId && !hiddenIds.has(m.sender_id)) partnerIds.add(m.sender_id);
+            (msgs ?? []).forEach(m => {
+              partnerIds.add(m.sender_id === userId ? m.receiver_id : m.sender_id);
             });
 
-            const partnerArray = [...partnerIds];
+            // hidden_conversations table may not exist — graceful fallback
+            let hiddenIds = new Set();
+            try {
+              const { data } = await supabase.from('hidden_conversations').select('other_user_id').eq('user_id', userId);
+              hiddenIds = new Set((data ?? []).map(h => h.other_user_id));
+            } catch {}
+
+            const partnerArray = [...partnerIds].filter(id => !hiddenIds.has(id));
             if (partnerArray.length === 0) return;
 
-            supabase
+            const { data: profiles } = await supabase
               .from('profiles')
               .select('id, email, full_name, role_id, roles(name)')
-              .in('id', partnerArray)
-              .then(({ data: profiles }) => {
-                setContacts(partnerArray.map(id => {
-                  const profile = profiles?.find(p => p.id === id);
-                  return profile || { id, full_name: null, email: null };
-                }));
-              });
-          });
+              .in('id', partnerArray);
+
+            setContacts(partnerArray.map(id => {
+              const profile = profiles?.find(p => p.id === id);
+              return profile || { id, full_name: null, email: null };
+            }));
+          } catch {}
         })
       .subscribe();
 
