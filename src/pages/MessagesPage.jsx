@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
@@ -36,12 +36,33 @@ export default function MessagesPage() {
   const location = useLocation();
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
+  const navigate = useNavigate();
+
   useEffect(() => {
     if (!userId) return;
     supabase.rpc('is_super_admin').then(({ data }) => {
       if (data === true) setIsSuperAdmin(true);
     });
   }, [userId]);
+
+  // Sync selectedUserId to URL so AppLayout can detect open chat.
+  // Skip clearing on mount: the deep-link effect may already be handling ?user=xxx
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+
+    if (selectedUserId) {
+      const params = new URLSearchParams(location.search);
+      if (params.get('user') !== selectedUserId) {
+        navigate({ search: `?user=${selectedUserId}` }, { replace: true });
+      }
+    } else if (location.pathname.includes('/messages')) {
+      navigate({ search: '' }, { replace: true });
+    }
+  }, [selectedUserId, navigate, location.pathname]);
 
   const [contacts, setContacts] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
