@@ -98,6 +98,17 @@ serve(async (req) => {
       return error('User profile was removed but auth cleanup failed. Contact support.', deleteAuthError.message);
     }
 
+    try {
+      await supabaseAdmin.from('audit_logs').insert({
+        user_id: user.id,
+        action_type: 'USER_DELETE',
+        message: `Deleted user ${user_id}`,
+        details: { target_user_id: user_id },
+      });
+    } catch (auditErr) {
+      console.warn('Audit log insert skipped (non-fatal):', auditErr);
+    }
+
     return respond({ success: true });
   } catch (err) {
     console.error('Unexpected delete error', err);
