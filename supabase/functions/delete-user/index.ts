@@ -100,6 +100,7 @@ serve(async (req) => {
 
     const { error: auditError } = await supabaseAdmin.from('audit_logs').insert({
       user_id: user.id,
+      changed_by: user.id,
       action: 'USER_DELETE',
       table_name: 'profiles',
       record_id: user_id,
