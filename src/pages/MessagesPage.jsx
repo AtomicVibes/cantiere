@@ -11,6 +11,17 @@ import { MessageSquare, Send, Search, Check, CheckCheck, Mic, Square, ChevronLef
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/avatar';
 import AudioMessagePlayer from '@/components/teams/AudioMessagePlayer';
+import { useUserRole } from '@/hooks/useUserRole';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 
 const ERROR_MESSAGES = {
   NotAllowedError: 'Microphone access blocked. Please click the camera/lock icon in your browser address bar and select \'Allow\', or check your System Settings.',
@@ -23,6 +34,7 @@ const ERROR_MESSAGES = {
 export default function MessagesPage() {
   const { user } = useAuth();
   const userId = user?.id;
+  const { isSuperAdmin } = useUserRole();
   const location = useLocation();
 
   const [contacts, setContacts] = useState([]);
@@ -37,6 +49,7 @@ export default function MessagesPage() {
   const [micError, setMicError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isContactsCollapsed, setIsContactsCollapsed] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const timerRef = useRef(null);
   const mediaRef = useRef(null);
@@ -72,16 +85,21 @@ export default function MessagesPage() {
     Promise.all([
       supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
       supabase.from('messages').select('sender_id').eq('receiver_id', userId).eq('is_read', false),
-    ]).then(([allMessagesRes, unreadRes]) => {
+      supabase.from('hidden_conversations').select('other_user_id').eq('user_id', userId),
+    ]).then(([allMessagesRes, unreadRes, hiddenRes]) => {
+      const hiddenIds = new Set((hiddenRes.data ?? []).map(h => h.other_user_id));
+
       const partnerIds = new Set();
       (allMessagesRes.data ?? []).forEach(m => {
-        if (m.sender_id === userId) partnerIds.add(m.receiver_id);
-        if (m.receiver_id === userId) partnerIds.add(m.sender_id);
+        if (m.sender_id === userId && !hiddenIds.has(m.receiver_id)) partnerIds.add(m.receiver_id);
+        if (m.receiver_id === userId && !hiddenIds.has(m.sender_id)) partnerIds.add(m.sender_id);
       });
 
       const counts = {};
       (unreadRes.data ?? []).forEach(m => {
-        counts[m.sender_id] = (counts[m.sender_id] || 0) + 1;
+        if (!hiddenIds.has(m.sender_id)) {
+          counts[m.sender_id] = (counts[m.sender_id] || 0) + 1;
+        }
       });
       setUnreadMap(counts);
 
@@ -119,31 +137,32 @@ export default function MessagesPage() {
         { event: 'INSERT', schema: 'public', table: 'messages',
           filter: `receiver_id=eq.${userId}` },
         () => {
-          supabase
-            .from('messages')
-            .select('sender_id, receiver_id')
-            .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
-            .then(({ data: messages }) => {
-              const partnerIds = new Set();
-              (messages ?? []).forEach(m => {
-                if (m.sender_id === userId) partnerIds.add(m.receiver_id);
-                if (m.receiver_id === userId) partnerIds.add(m.sender_id);
-              });
+          Promise.all([
+            supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
+            supabase.from('hidden_conversations').select('other_user_id').eq('user_id', userId),
+          ]).then(([messagesRes, hiddenRes]) => {
+            const hiddenIds = new Set((hiddenRes.data ?? []).map(h => h.other_user_id));
 
-              const partnerArray = [...partnerIds];
-              if (partnerArray.length === 0) return;
-
-              supabase
-                .from('profiles')
-                .select('id, email, full_name, role_id, roles(name)')
-                .in('id', partnerArray)
-                .then(({ data: profiles }) => {
-                  setContacts(partnerArray.map(id => {
-                    const profile = profiles?.find(p => p.id === id);
-                    return profile || { id, full_name: null, email: null };
-                  }));
-                });
+            const partnerIds = new Set();
+            (messagesRes.data ?? []).forEach(m => {
+              if (m.sender_id === userId && !hiddenIds.has(m.receiver_id)) partnerIds.add(m.receiver_id);
+              if (m.receiver_id === userId && !hiddenIds.has(m.sender_id)) partnerIds.add(m.sender_id);
             });
+
+            const partnerArray = [...partnerIds];
+            if (partnerArray.length === 0) return;
+
+            supabase
+              .from('profiles')
+              .select('id, email, full_name, role_id, roles(name)')
+              .in('id', partnerArray)
+              .then(({ data: profiles }) => {
+                setContacts(partnerArray.map(id => {
+                  const profile = profiles?.find(p => p.id === id);
+                  return profile || { id, full_name: null, email: null };
+                }));
+              });
+          });
         })
       .subscribe();
 
@@ -267,6 +286,39 @@ export default function MessagesPage() {
       console.error('Failed to clear conversation:', err);
     }
   }, [userId]);
+
+  // ── Delete conversation (role-based) ──────────────────────────────
+  const deleteConversation = useCallback(async (peerId) => {
+    if (!peerId || !userId) return;
+
+    try {
+      if (isSuperAdmin) {
+        const { error } = await supabase.rpc('delete_conversation', {
+          current_user_id: userId,
+          peer_id: peerId,
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('hidden_conversations').insert({
+          user_id: userId,
+          other_user_id: peerId,
+        });
+        if (error) throw error;
+      }
+
+      setDeleteTarget(null);
+      setSelectedUserId(null);
+      setMessages([]);
+      setContacts(prev => prev.filter(c => c.id !== peerId));
+      setUnreadMap(prev => {
+        const next = { ...prev };
+        delete next[peerId];
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to delete conversation:', err);
+    }
+  }, [userId, isSuperAdmin]);
 
   // ── Realtime subscriptions only (fetch + mark-as-read moved into
   //    handleOpenChat for optimistic control).
@@ -450,8 +502,8 @@ export default function MessagesPage() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0 ml-auto text-muted-foreground hover:text-destructive"
-          onClick={() => clearConversation(selectedUserId)}
-          title="Clear conversation"
+          onClick={() => setDeleteTarget(selectedUserId)}
+          title="Delete conversation"
         >
           <Trash className="w-4 h-4" />
         </Button>
@@ -641,6 +693,23 @@ export default function MessagesPage() {
           )}
         </div>
       </div>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete conversation</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isSuperAdmin
+                ? 'Are you sure you want to permanently delete this conversation for everyone?'
+                : 'Are you sure you want to delete this conversation? It will be removed from your view.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>No, Keep it!</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteConversation(deleteTarget)}>Yes, delete it!</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
