@@ -535,7 +535,7 @@ export default function MessagesPage() {
     <>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
-        <Button variant="ghost" size="icon" className="md:hidden h-8 w-8 shrink-0" onClick={() => setSelectedUserId(null)}>
+        <Button variant="ghost" size="icon" className="md:hidden h-8 w-8 shrink-0" onClick={() => { setSelectedUserId(null); navigate({ search: '' }, { replace: true }); }}>
           <ChevronLeft className="w-4 h-4" />
         </Button>
         <Avatar className="w-8 h-8 shrink-0">
