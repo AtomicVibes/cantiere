@@ -7,29 +7,16 @@ export default function ProjectAssignmentDropdown({ value, onChange, disabled })
   const { t } = useTranslation();
 
   const { data: teamMembers = [], isLoading } = useQuery({
-    queryKey: ['projectAssignments', 'all-eligible'],
+    queryKey: ['projectAssignments', 'all-profiles'],
     queryFn: async () => {
-      const { data: roles, error: rolesError } = await supabase
-        .from('roles')
-        .select('id')
-        .in('name', ['super_admin', 'admin', 'manager']);
-      if (rolesError) {
-        console.error('ProjectAssignmentDropdown roles error', rolesError);
-        return [];
-      }
-      const roleIds = (roles ?? []).map(r => r.id);
-      if (roleIds.length === 0) return [];
-      const { data, error: profilesError } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, email')
-        .in('role_id', roleIds)
-        .order('full_name')
-        .limit(1000);
-      if (profilesError) {
-        console.error('ProjectAssignmentDropdown profiles error', profilesError);
+        .order('full_name');
+      if (error) {
+        console.error('ProjectAssignmentDropdown error', error);
         return [];
       }
-      console.log('ProjectAssignmentDropdown found profiles:', data?.length);
       return (data ?? []).map(p => ({ id: p.id, full_name: p.full_name || p.email || '' }));
     },
     staleTime: 30_000,
