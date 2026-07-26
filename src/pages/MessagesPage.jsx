@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
@@ -22,6 +23,7 @@ const ERROR_MESSAGES = {
 export default function MessagesPage() {
   const { user } = useAuth();
   const userId = user?.id;
+  const location = useLocation();
 
   const [contacts, setContacts] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
@@ -43,10 +45,12 @@ export default function MessagesPage() {
   const scrollRef = useRef(null);
   const messagesRef = useRef([]);
   const unreadMapRef = useRef({});
+  const handleOpenChatRef = useRef(handleOpenChat);
 
   // Keep refs in sync with state for snapshot/rollback
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { unreadMapRef.current = unreadMap; }, [unreadMap]);
+  useEffect(() => { handleOpenChatRef.current = handleOpenChat; }, [handleOpenChat]);
 
   const selectedContact = contacts.find(c => c.id === selectedUserId);
 
@@ -91,7 +95,7 @@ export default function MessagesPage() {
       const partnerProfiles = allProfiles.filter(p => partnerIds.has(p.id));
 
       const availableProfiles = allProfiles.filter(p =>
-        !partnerIds.has(p.id) && p.roles?.name !== 'client'
+        !partnerIds.has(p.id)
       );
 
       setContacts([...partnerProfiles, ...availableProfiles]);
@@ -105,11 +109,45 @@ export default function MessagesPage() {
           if (!partnerIds.has(openId)) {
             setContacts(prev => [target, ...prev]);
           }
-          handleOpenChat(openId);
+          handleOpenChatRef.current(openId);
         }
       }
     }).catch(() => setLoading(false));
   }, [userId]);
+
+  // ── Watch for URL param changes (notification deep-links) ──────────
+  // Handles the case where the user is already on /messages and clicks
+  // a push notification that navigates to /messages?user=SENDER_ID.
+  // The initial mount case is handled by the main contacts effect above.
+  const initialUrlHandled = useRef(false);
+  useEffect(() => {
+    if (!userId) return;
+    const openId = new URLSearchParams(location.search).get('user');
+    if (!openId || openId === selectedUserId) return;
+
+    // Skip the first run — the main contacts effect handles initial URL.
+    if (!initialUrlHandled.current) {
+      initialUrlHandled.current = true;
+      return;
+    }
+
+    const existingContact = contacts.find(c => c.id === openId);
+    if (existingContact) {
+      handleOpenChatRef.current(openId);
+    } else {
+      supabase
+        .from('profiles')
+        .select('id, email, full_name, role_id, roles(name)')
+        .eq('id', openId)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setContacts(prev => [data, ...prev]);
+            handleOpenChatRef.current(openId);
+          }
+        });
+    }
+  }, [location.search, userId, contacts, selectedUserId]);
 
   // ── Optimistic chat opener ─────────────────────────────────────────
   // Immediately marks local messages as read before the RPC commits to
