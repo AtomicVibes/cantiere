@@ -73,21 +73,6 @@ serve(async (req) => {
       return error('You cannot delete your own account.', 'Self-deletion blocked');
     }
 
-    try {
-      const { error: auditError } = await supabaseAdmin.from('audit_logs').insert({
-        user_id: user.id,
-        changed_by: user.id,
-        action: 'USER_DELETE',
-        table_name: 'profiles',
-        record_id: user_id,
-        details: { target_user_id: user_id, message: `Deleted user ${user_id}` },
-      });
-      if (auditError) {
-        console.warn('Audit log insert skipped (non-fatal):', auditError);
-      }
-    } catch (auditErr) {
-      console.warn('Audit log insert threw (non-fatal):', auditErr);
-    }
 
     const { error: deleteProfileError } = await supabaseAdmin
       .from('profiles')
