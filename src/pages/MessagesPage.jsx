@@ -623,10 +623,10 @@ export default function MessagesPage() {
   );
 
   return (
-    <div className="h-screen flex flex-col w-full max-w-full">
+    <div className="h-dvh flex flex-col overflow-hidden w-full max-w-full">
       <TopBar title="Messages" />
 
-      <div className="flex flex-1 overflow-hidden w-full max-w-full">
+      <div className="flex flex-1 min-h-0 overflow-hidden w-full max-w-full">
         {/* Contact List */}
         <div className={cn(
           "flex-col bg-card shrink-0 border-border transition-all duration-300 ease-in-out",
