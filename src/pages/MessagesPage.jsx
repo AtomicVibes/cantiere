@@ -72,12 +72,7 @@ export default function MessagesPage() {
     Promise.all([
       supabase.from('messages').select('sender_id, receiver_id').or(`sender_id.eq.${userId},receiver_id.eq.${userId}`),
       supabase.from('messages').select('sender_id').eq('receiver_id', userId).eq('is_read', false),
-      supabase
-        .from('profiles')
-        .select('id, email, full_name, role_id, roles(name)')
-        .neq('id', userId)
-        .order('full_name'),
-    ]).then(([allMessagesRes, unreadRes, profilesRes]) => {
+    ]).then(([allMessagesRes, unreadRes]) => {
       const partnerIds = new Set();
       (allMessagesRes.data ?? []).forEach(m => {
         if (m.sender_id === userId) partnerIds.add(m.receiver_id);
@@ -88,19 +83,71 @@ export default function MessagesPage() {
       (unreadRes.data ?? []).forEach(m => {
         counts[m.sender_id] = (counts[m.sender_id] || 0) + 1;
       });
-
-      const allProfiles = profilesRes.data ?? [];
-
-      const partnerProfiles = allProfiles.filter(p => partnerIds.has(p.id));
-
-      const availableProfiles = allProfiles.filter(p =>
-        !partnerIds.has(p.id)
-      );
-
-      setContacts([...partnerProfiles, ...availableProfiles]);
       setUnreadMap(counts);
-      setLoading(false);
+
+      const partnerArray = [...partnerIds];
+      if (partnerArray.length === 0) {
+        setContacts([]);
+        setLoading(false);
+        return;
+      }
+
+      supabase
+        .from('profiles')
+        .select('id, email, full_name, role_id, roles(name)')
+        .in('id', partnerArray)
+        .then(({ data: profiles }) => {
+          setContacts(partnerArray.map(id => {
+            const profile = profiles?.find(p => p.id === id);
+            return profile || { id, full_name: null, email: null };
+          }));
+          setLoading(false);
+        });
     }).catch(() => setLoading(false));
+  }, [userId]);
+
+  // ── Realtime contact list refresh ──────────────────────────────────
+  // When a new message arrives from a previously unknown sender, refetch
+  // the partner list so they appear as an active chat partner without
+  // requiring a manual page reload.
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`contacts-${userId}`)
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages',
+          filter: `receiver_id=eq.${userId}` },
+        () => {
+          supabase
+            .from('messages')
+            .select('sender_id, receiver_id')
+            .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+            .then(({ data: messages }) => {
+              const partnerIds = new Set();
+              (messages ?? []).forEach(m => {
+                if (m.sender_id === userId) partnerIds.add(m.receiver_id);
+                if (m.receiver_id === userId) partnerIds.add(m.sender_id);
+              });
+
+              const partnerArray = [...partnerIds];
+              if (partnerArray.length === 0) return;
+
+              supabase
+                .from('profiles')
+                .select('id, email, full_name, role_id, roles(name)')
+                .in('id', partnerArray)
+                .then(({ data: profiles }) => {
+                  setContacts(partnerArray.map(id => {
+                    const profile = profiles?.find(p => p.id === id);
+                    return profile || { id, full_name: null, email: null };
+                  }));
+                });
+            });
+        })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [userId]);
 
   // ── URL param deep-linking (single source of truth) ─────────────────
@@ -283,6 +330,17 @@ export default function MessagesPage() {
           is_read: false,
         });
       if (insertError) throw insertError;
+
+      if (!contacts.some(c => c.id === selectedUserId)) {
+        supabase
+          .from('profiles')
+          .select('id, email, full_name, role_id, roles(name)')
+          .eq('id', selectedUserId)
+          .single()
+          .then(({ data }) => {
+            if (data) setContacts(prev => [...prev, data]);
+          });
+      }
 
       const senderName = user?.user_metadata?.full_name || user?.email || 'Someone';
       await supabase.from('notifications').insert({
