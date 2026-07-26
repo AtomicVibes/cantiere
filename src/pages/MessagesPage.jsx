@@ -11,7 +11,6 @@ import { MessageSquare, Send, Search, Check, CheckCheck, Mic, Square, ChevronLef
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/avatar';
 import AudioMessagePlayer from '@/components/teams/AudioMessagePlayer';
-import { useUserRole } from '@/hooks/useUserRole';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -34,8 +33,15 @@ const ERROR_MESSAGES = {
 export default function MessagesPage() {
   const { user } = useAuth();
   const userId = user?.id;
-  const { isSuperAdmin } = useUserRole();
   const location = useLocation();
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase.rpc('is_super_admin').then(({ data }) => {
+      if (data === true) setIsSuperAdmin(true);
+    });
+  }, [userId]);
 
   const [contacts, setContacts] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
@@ -676,7 +682,7 @@ export default function MessagesPage() {
 
         {/* Conversation Pane */}
         <div className={cn(
-          "flex-1 flex-col bg-background min-w-0 max-w-full w-full overflow-x-hidden",
+          "flex-1 flex-col bg-background min-w-0 max-w-full w-full min-h-0 overflow-hidden",
           "md:flex",
           !selectedUserId ? "hidden md:flex" : "flex"
         )}>
