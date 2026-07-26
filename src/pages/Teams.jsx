@@ -55,12 +55,16 @@ export default function Teams() {
       await deleteUser(id);
     },
     onSuccess: () => {
+      toast.success('User deleted successfully');
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
     },
     onError: (err) => {
       toast.error(err.message);
+    },
+    onSettled: () => {
+      setDeleteTarget(null);
     },
   });
 
@@ -237,7 +241,7 @@ export default function Teams() {
         onOpenChange={(v) => { setEditDialogOpen(v); if (!v) setEditingMember(null); }}
       />
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete team member</AlertDialogTitle>
@@ -247,15 +251,15 @@ export default function Teams() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Keep it</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
               onClick={() => {
                 if (deleteTarget) deleteMutation.mutate(deleteTarget);
-                setDeleteTarget(null);
               }}
             >
-              Yes, delete it
+              {deleteMutation.isPending ? 'Deleting...' : 'Yes, delete it'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
