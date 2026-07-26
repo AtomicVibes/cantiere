@@ -8,18 +8,23 @@ export default function ProjectAssignmentDropdown({ value, onChange, disabled })
   const { t } = useTranslation();
 
   const { data: teamMembers = [], isLoading } = useQuery({
-    queryKey: ['projectAssignments', ROLES.TEAM_MEMBER],
+    queryKey: ['projectAssignments', 'all-eligible'],
     queryFn: async () => {
-      if (!ROLES.TEAM_MEMBER) return [];
+      const { data: roles } = await supabase
+        .from('roles')
+        .select('id')
+        .in('name', ['super_admin', 'admin', 'manager']);
+      const roleIds = (roles ?? []).map(r => r.id);
+      if (roleIds.length === 0) return [];
       const { data } = await supabase
         .from('profiles')
         .select('id, full_name, email')
-        .eq('role_id', ROLES.TEAM_MEMBER)
+        .in('role_id', roleIds)
         .order('full_name');
       return (data ?? []).map(p => ({ id: p.id, full_name: p.full_name || p.email || '' }));
     },
     staleTime: 30_000,
-    enabled: !!ROLES.TEAM_MEMBER,
+    enabled: true,
   });
 
   const selectValue = value || '';

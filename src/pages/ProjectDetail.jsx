@@ -22,6 +22,8 @@ import { findEntity, getEntity, createEntity, updateEntity } from '@/services/da
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { getInitials } from '@/lib/avatar';
 import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
@@ -29,7 +31,8 @@ import ProjectAssignmentDropdown from '@/components/projects/ProjectAssignmentDr
 
 export default function ProjectDetail() {
   const { t } = useTranslation();
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
+  const userId = user?.id;
   const { role: userRole } = useUserRole();
   const canEdit = PERMISSIONS.canEditProject.includes(userRole);
   const canAddEntry = PERMISSIONS.canAddTimelineEntry.includes(userRole);
@@ -66,6 +69,35 @@ export default function ProjectDetail() {
   });
 
   const { data: managers = [] } = useManagers();
+
+  const { data: projectMembers = [] } = useQuery({
+    queryKey: ['project-members-list', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('project_members')
+        .select('id, assigned_at, profiles!profile_id(id, full_name, email, roles(name))')
+        .eq('project_id', id);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!id,
+  });
+
+  const { data: currentMember } = useQuery({
+    queryKey: ['current-project-member', id, userId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('project_members')
+        .select('id')
+        .eq('project_id', id)
+        .eq('profile_id', userId)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!id && !!userId,
+  });
+
+  const canSeeTeam = isSuperAdminLive || !!currentMember;
 
   const updateMutation = useMutation({
     mutationFn: (data) => updateEntity('projects', id, data),
@@ -226,6 +258,37 @@ export default function ProjectDetail() {
                 updateMutation.mutate({ manager_id: newValue });
               }}
             />
+          </div>
+        </section>
+        )}
+
+        {/* Assigned Team Members — super admin or project member */}
+        {canSeeTeam && projectMembers.length > 0 && (
+        <section>
+          <h3 className="font-heading font-semibold mb-3">{t('teamMembers')}</h3>
+          <div className="space-y-2">
+            {projectMembers.map((pm) => {
+              const profile = pm.profiles;
+              const roleName = profile?.roles?.name || '';
+              return (
+                <div key={pm.id} className="bg-card rounded-xl border border-border p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-9 h-9">
+                      <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                        {getInitials(profile?.full_name || profile?.email || '?')}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium text-sm">{profile?.full_name || profile?.email || t('unknown')}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{roleName.replace(/_/g, ' ')}</p>
+                    </div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {pm.assigned_at ? format(new Date(pm.assigned_at), 'MMM d, yyyy') : ''}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </section>
         )}
