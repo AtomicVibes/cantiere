@@ -96,20 +96,31 @@ serve(async (req) => {
       return respond({ error: insertError.message, details: insertError.details }, 500);
     }
 
-    const { data: adminUser } = await supabaseAdmin
-      .from('profiles')
+    // Look up super_admin role ID, then notify all super admins
+    const { data: superAdminRole } = await supabaseAdmin
+      .from('roles')
       .select('id')
-      .eq('role', 'super_admin')
+      .eq('name', 'super_admin')
       .single();
 
-    if (adminUser) {
-      await supabaseAdmin
-        .from('notifications')
-        .insert({
-          user_id: adminUser.id,
-          message: `New project request: ${project_name.trim()}`,
-          is_read: false,
-        });
+    if (superAdminRole) {
+      const { data: adminUsers } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .eq('role_id', superAdminRole.id);
+
+      if (adminUsers) {
+        for (const adminUser of adminUsers) {
+          await supabaseAdmin
+            .from('notifications')
+            .insert({
+              user_id: adminUser.id,
+              type: 'project_assignment',
+              message: `New project request: ${project_name.trim()}`,
+              is_read: false,
+            });
+        }
+      }
     }
 
     return respond({ request: newRequest }, 200);
