@@ -172,6 +172,11 @@ export default function MessagesPage() {
         .then(({ data }) => {
           if (data) {
             setContacts(prev => [data, ...prev]);
+          } else {
+            setContacts(prev => {
+              if (prev.some(c => c.id === openId)) return prev;
+              return [...prev, { id: openId, full_name: null, email: null }];
+            });
           }
           handleOpenChatRef.current(openId);
         });
@@ -338,7 +343,14 @@ export default function MessagesPage() {
           .eq('id', selectedUserId)
           .single()
           .then(({ data }) => {
-            if (data) setContacts(prev => [...prev, data]);
+            if (data) {
+              setContacts(prev => [...prev, data]);
+            } else {
+              setContacts(prev => {
+                if (prev.some(c => c.id === selectedUserId)) return prev;
+                return [...prev, { id: selectedUserId, full_name: null, email: null }];
+              });
+            }
           });
       }
 
@@ -431,8 +443,8 @@ export default function MessagesPage() {
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{selectedContact?.full_name || 'Unknown'}</p>
-          <p className="text-xs text-muted-foreground truncate">{selectedContact?.email}</p>
+          <p className="text-sm font-medium truncate">{selectedContact?.full_name || selectedContact?.email || 'Unknown'}</p>
+          <p className="text-xs text-muted-foreground truncate">{selectedContact?.full_name ? selectedContact?.email : ''}</p>
         </div>
         <Button
           variant="ghost"
@@ -600,8 +612,8 @@ export default function MessagesPage() {
                       )}
                     </div>
                     <div className={cn("flex-1 min-w-0", isContactsCollapsed && "hidden")}>
-                      <p className="text-sm font-medium truncate">{contact.full_name || 'Unknown'}</p>
-                      <p className="text-xs text-muted-foreground truncate">{contact.email}</p>
+                      <p className="text-sm font-medium truncate">{contact.full_name || contact.email || 'Unknown'}</p>
+                      <p className="text-xs text-muted-foreground truncate">{contact.full_name ? contact.email : ''}</p>
                     </div>
                   </button>
                 );
