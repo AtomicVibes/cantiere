@@ -45,12 +45,11 @@ export default function MessagesPage() {
   const scrollRef = useRef(null);
   const messagesRef = useRef([]);
   const unreadMapRef = useRef({});
-  const handleOpenChatRef = useRef(handleOpenChat);
+  const handleOpenChatRef = useRef(null);
 
   // Keep refs in sync with state for snapshot/rollback
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { unreadMapRef.current = unreadMap; }, [unreadMap]);
-  useEffect(() => { handleOpenChatRef.current = handleOpenChat; }, [handleOpenChat]);
 
   const selectedContact = contacts.find(c => c.id === selectedUserId);
 
@@ -194,6 +193,8 @@ export default function MessagesPage() {
       console.error('Failed to mark chat as read:', err);
     }
   }, [userId]);
+
+  handleOpenChatRef.current = handleOpenChat;
 
   // ── Optimistic message delete ───────────────────────────────────────
   const deleteMessage = useCallback(async (messageId) => {
