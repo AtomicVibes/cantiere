@@ -63,7 +63,6 @@ export const AuthProvider = ({ children }) => {
 
   const checkAppState = useCallback(async () => {
     if (!appParams.appId) {
-      console.warn('AuthContext: appId is not configured — skipping public settings check');
       setIsLoadingPublicSettings(false);
       return;
     }
