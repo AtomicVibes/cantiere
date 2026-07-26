@@ -511,7 +511,7 @@ export default function MessagesPage() {
   );
 
   const renderChatContent = () => (
-    <>
+    <div className="flex flex-col min-h-0 flex-1">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
         <Button variant="ghost" size="icon" className="md:hidden h-8 w-8 shrink-0" onClick={() => setSelectedUserId(null)}>
@@ -537,8 +537,8 @@ export default function MessagesPage() {
         </Button>
       </div>
 
-      {/* Message feed */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-3">
+      {/* Message feed — only this scrolls */}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-4 space-y-3">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-muted-foreground">No messages yet. Say hello!</p>
@@ -619,14 +619,14 @@ export default function MessagesPage() {
           </Button>
         </div>
       </div>
-    </>
+    </div>
   );
 
   return (
     <div className="h-dvh flex flex-col overflow-hidden w-full max-w-full">
       <TopBar title="Messages" />
 
-      <div className="flex flex-1 min-h-0 overflow-hidden w-full max-w-full">
+      <div className="flex flex-1 overflow-hidden w-full max-w-full">
         {/* Contact List */}
         <div className={cn(
           "flex-col bg-card shrink-0 border-border transition-all duration-300 ease-in-out",
