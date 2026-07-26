@@ -218,9 +218,9 @@ export default function ProjectDetail() {
           <div className="bg-card rounded-xl border border-border p-4 max-w-sm">
             <label className="text-xs text-muted-foreground mb-1.5 block">{t('projectManager')}</label>
             <ProjectAssignmentDropdown
-              value={project.project_manager_id}
+              value={project.manager_id}
               onChange={(newValue) => {
-                updateMutation.mutate({ project_manager_id: newValue });
+                updateMutation.mutate({ manager_id: newValue });
               }}
             />
           </div>

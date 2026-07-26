@@ -29,7 +29,7 @@ const defaultForm = {
   priority: 'medium',
   description: '',
   client_id: '',
-  project_manager_id: '',
+  manager_id: '',
   start_date: '',
   end_date: '',
   location: '',
@@ -79,7 +79,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           priority: project.priority || 'medium',
           description: project.description || '',
           client_id: project.client_id || '',
-          project_manager_id: project.project_manager_id || '',
+          manager_id: project.manager_id || '',
           start_date: project.start_date || '',
           end_date: project.end_date || '',
           location: project.location || '',
@@ -106,7 +106,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
         budget: form.budget ? Number(form.budget) : undefined,
         status: form.status || undefined,
         client_id: form.client_id && form.client_id !== 'none' ? form.client_id : undefined,
-        project_manager_id: form.project_manager_id && form.project_manager_id !== 'none' ? form.project_manager_id : undefined,
+        manager_id: form.manager_id && form.manager_id !== 'none' ? form.manager_id : undefined,
       };
       await onSave(payload);
       onOpenChange(false);
@@ -163,7 +163,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
             </div>
             <div className="space-y-2">
               <Label htmlFor="manager">{t('projectManager')}</Label>
-              <Select value={form.project_manager_id} onValueChange={set('project_manager_id')}>
+              <Select value={form.manager_id} onValueChange={set('manager_id')}>
                 <SelectTrigger id="manager">
                   <SelectValue placeholder={t('none')} />
                 </SelectTrigger>
