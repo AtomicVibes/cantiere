@@ -511,7 +511,7 @@ export default function MessagesPage() {
   );
 
   const renderChatContent = () => (
-    <div className="flex flex-col min-h-0 flex-1">
+    <>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card shrink-0">
         <Button variant="ghost" size="icon" className="md:hidden h-8 w-8 shrink-0" onClick={() => setSelectedUserId(null)}>
@@ -619,11 +619,11 @@ export default function MessagesPage() {
           </Button>
         </div>
       </div>
-    </div>
+    </>
   );
 
   return (
-    <div className="h-dvh flex flex-col overflow-hidden w-full max-w-full">
+    <div className="flex flex-col h-[100dvh] overflow-hidden w-full max-w-full">
       <TopBar title="Messages" />
 
       <div className="flex flex-1 overflow-hidden w-full max-w-full">
