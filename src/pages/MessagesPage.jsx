@@ -100,35 +100,18 @@ export default function MessagesPage() {
       setContacts([...partnerProfiles, ...availableProfiles]);
       setUnreadMap(counts);
       setLoading(false);
-
-      const openId = new URLSearchParams(window.location.search).get('user');
-      if (openId) {
-        const target = allProfiles.find(p => p.id === openId);
-        if (target) {
-          if (!partnerIds.has(openId)) {
-            setContacts(prev => [target, ...prev]);
-          }
-          handleOpenChatRef.current(openId);
-        }
-      }
     }).catch(() => setLoading(false));
   }, [userId]);
 
-  // ── Watch for URL param changes (notification deep-links) ──────────
-  // Handles the case where the user is already on /messages and clicks
-  // a push notification that navigates to /messages?user=SENDER_ID.
-  // The initial mount case is handled by the main contacts effect above.
-  const initialUrlHandled = useRef(false);
+  // ── URL param deep-linking (single source of truth) ─────────────────
+  // Handles both initial mount and subsequent URL changes (e.g., push
+  // notification click while on /messages).  If the contact is already
+  // loaded, opens the chat immediately.  Otherwise fetches the profile
+  // from the DB and adds them to the contact list.
   useEffect(() => {
     if (!userId) return;
     const openId = new URLSearchParams(location.search).get('user');
     if (!openId || openId === selectedUserId) return;
-
-    // Skip the first run — the main contacts effect handles initial URL.
-    if (!initialUrlHandled.current) {
-      initialUrlHandled.current = true;
-      return;
-    }
 
     const existingContact = contacts.find(c => c.id === openId);
     if (existingContact) {
