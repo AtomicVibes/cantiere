@@ -1,16 +1,16 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import webpush from 'npm:web-push';
+import { sendNotification } from 'https://esm.sh/web-push-neo@0.1.2';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')!;
-const vapidSubject = Deno.env.get('VAPID_SUBJECT') || 'mailto:notifications@geometra.app';
+const vapidSubject = Deno.env.get('VAPID_SUBJECT') || Deno.env.get('VAPID_CONTACT_EMAIL') || 'mailto:notifications@geometra.app';
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
-webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+const vapidOptions = { subject: vapidSubject, publicKey: vapidPublicKey, privateKey: vapidPrivateKey };
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -54,7 +54,7 @@ serve(async (req) => {
 
     const { data: subscriptions, error: subError } = await supabase
       .from('push_subscriptions')
-      .select('subscription')
+      .select('id, subscription')
       .eq('user_id', receiver_id);
 
     if (subError) {
@@ -71,13 +71,13 @@ serve(async (req) => {
 
     const results = await Promise.allSettled(
       subscriptions.map((sub) =>
-        webpush.sendNotification(sub.subscription, payload).catch(async (err) => {
+        sendNotification(sub.subscription, payload, { vapidDetails: vapidOptions }).catch(async (err) => {
           if (err.statusCode === 410 || err.statusCode === 404) {
             await supabase
               .from('push_subscriptions')
               .delete()
-              .eq('id', sub.id)
-              .then(() => console.log('Deleted expired subscription', sub.id));
+              .eq('id', sub.id);
+            console.log('Deleted expired subscription', sub.id);
           } else {
             console.error('Push send error:', err.message);
           }
