@@ -73,12 +73,22 @@ export default function ProjectDetail() {
   const { data: projectMembers = [] } = useQuery({
     queryKey: ['project-members-list', id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: members, error: membersErr } = await supabase
         .from('project_members')
-        .select('id, assigned_at, profiles!profile_id(id, full_name, email, roles(name))')
+        .select('id, assigned_at, profile_id')
         .eq('project_id', id);
-      if (error) throw error;
-      return data ?? [];
+      if (membersErr) throw membersErr;
+      if (!members?.length) return [];
+      const profileIds = [...new Set(members.map(m => m.profile_id))];
+      const { data: profiles, error: profilesErr } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, roles(name)')
+        .in('id', profileIds);
+      if (profilesErr) throw profilesErr;
+      return members.map(m => ({
+        ...m,
+        profiles: (profiles ?? []).find(p => p.id === m.profile_id),
+      }));
     },
     enabled: !!id,
   });
