@@ -70,28 +70,33 @@ serve(async (req) => {
     const payload = JSON.stringify({ title, body: displayBody, type, url, notification_id });
 
     const results = await Promise.allSettled(
-      subscriptions.map((sub) =>
-        sendNotification(sub.subscription, payload, { vapidDetails: vapidOptions }).catch(async (err) => {
+      subscriptions.map(async (sub) => {
+        console.log('Processing subscription structure:', JSON.stringify(sub.subscription));
+
+        try {
+          const res = await sendNotification(sub.subscription, payload, { vapidDetails: vapidOptions });
+          return res;
+        } catch (err) {
+          console.error('Detailed push error for endpoint:', sub.subscription?.endpoint, err);
           if (err.statusCode === 410 || err.statusCode === 404) {
             await supabase
               .from('push_subscriptions')
               .delete()
               .eq('id', sub.id);
             console.log('Deleted expired subscription', sub.id);
-          } else {
-            console.error('Push send error:', err.message);
           }
-          return null;
-        })
-      )
+          throw err;
+        }
+      })
     );
 
-    const successful = results.filter((r) => r.status === 'fulfilled' && r.value !== null).length;
+    const successful = results.filter((r) => r.status === 'fulfilled').length;
 
     return respond({
       sent: successful,
       total: subscriptions.length,
       failed: subscriptions.length - successful,
+      details: results.map(r => r.status === 'rejected' ? r.reason?.message : 'success'),
     });
   } catch (err) {
     console.error('Unexpected error:', err);
