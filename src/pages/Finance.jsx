@@ -8,6 +8,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
 import StatCard from '@/components/dashboard/StatCard';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -18,9 +19,10 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Archive, RotateCcw, Trash2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useInvoiceFormFields } from '@/hooks/useFormSchema';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -36,6 +38,7 @@ export default function Finance() {
   const { t } = useTranslation();
   const { dir } = useDirection();
   const { role } = useUserRole();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const canCreate = PERMISSIONS.canCreateInvoice.includes(role);
   const canDelete = PERMISSIONS.canDeleteInvoice.includes(role);
   const { fields, categoryOptions, statusOptions } = useInvoiceFormFields();
@@ -44,8 +47,12 @@ export default function Finance() {
   const [form, setForm] = useState(emptyInvoice);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [saving, setSaving] = useState(false);
+  const [view, setView] = useState('active');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [mutating, setMutating] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: invoices = [] } = useQuery({
@@ -112,6 +119,36 @@ export default function Finance() {
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: async (ids) => {
+      const idsArr = Array.isArray(ids) ? ids : [ids];
+      const { error } = await supabase.from('invoices').update({ archived: true }).in('id', idsArr);
+      if (error) throw error;
+    },
+    onSuccess: (_data, ids) => {
+      const count = Array.isArray(ids) ? ids.length : 1;
+      toast.success(`Archived ${count} invoice${count !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async (ids) => {
+      const idsArr = Array.isArray(ids) ? ids : [ids];
+      const { error } = await supabase.from('invoices').update({ archived: false }).in('id', idsArr);
+      if (error) throw error;
+    },
+    onSuccess: (_data, ids) => {
+      const count = Array.isArray(ids) ? ids.length : 1;
+      toast.success(`Restored ${count} invoice${count !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const openEdit = (inv) => {
     setEditInvoice(inv);
     setForm({
@@ -139,15 +176,62 @@ export default function Finance() {
     setForm(emptyInvoice);
   };
 
-  const totalRevenue = invoices.filter(i => i.payment_status === 'paid').reduce((s, i) => s + (i.total || 0), 0);
-  const totalPending = invoices.filter(i => i.payment_status === 'pending' || i.payment_status === 'partially_paid').reduce((s, i) => s + (i.total || 0), 0);
-  const totalOverdue = invoices.filter(i => i.payment_status === 'overdue').reduce((s, i) => s + (i.total || 0), 0);
+  const currentInvoices = invoices.filter(i => view === 'archived' ? i.archived : !i.archived);
 
-  const filtered = invoices.filter(i => {
+  const totalRevenue = currentInvoices.filter(i => i.payment_status === 'paid').reduce((s, i) => s + (i.total || 0), 0);
+  const totalPending = currentInvoices.filter(i => i.payment_status === 'pending' || i.payment_status === 'partially_paid').reduce((s, i) => s + (i.total || 0), 0);
+  const totalOverdue = currentInvoices.filter(i => i.payment_status === 'overdue').reduce((s, i) => s + (i.total || 0), 0);
+
+  const filtered = currentInvoices.filter(i => {
     const matchesSearch = !search || i.invoice_number?.toLowerCase().includes(search.toLowerCase()) || i.supplier?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || i.payment_status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every(i => selectedIds.has(i.id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map(i => i.id)));
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleViewChange = (v) => {
+    setView(v);
+    setSelectedIds(new Set());
+  };
+
+  const handleDeleteConfirm = (mode, id) => {
+    setDeleteTarget({ mode, id });
+    setConfirmDeleteOpen(true);
+  };
+
+  const executeBulkDelete = async () => {
+    setMutating(true);
+    try {
+      let ids = [];
+      if (deleteTarget.mode === 'selected') ids = [...selectedIds];
+      else if (deleteTarget.mode === 'single') ids = [deleteTarget.id];
+      await Promise.all(ids.map(id => supabase.from('invoices').delete().eq('id', id)));
+      toast.success(`Deleted ${ids.length} invoice${ids.length !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete');
+    } finally {
+      setMutating(false);
+      setConfirmDeleteOpen(false);
+      setDeleteTarget(null);
+    }
+  };
 
   return (
     <div>
@@ -180,25 +264,82 @@ export default function Finance() {
           )}
         </div>
 
+        {isSuperAdmin && (
+          <div className="flex items-center gap-1 border-b border-border pb-3">
+            <button
+              onClick={() => handleViewChange('active')}
+              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${view === 'active' ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Active
+            </button>
+            <button
+              onClick={() => handleViewChange('archived')}
+              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${view === 'archived' ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Archived
+            </button>
+          </div>
+        )}
+
+        {isSuperAdmin && filtered.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={allVisibleSelected} onCheckedChange={toggleSelectAll} />
+              Select All
+            </label>
+            <div className="flex items-center gap-2 ml-auto">
+              {view === 'active' ? (
+                <>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => archiveMutation.mutate([...selectedIds])}>
+                    <Archive className="w-3.5 h-3.5" /> Archive Selected
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={mutating} onClick={() => archiveMutation.mutate(filtered.map(i => i.id))}>
+                    <Archive className="w-3.5 h-3.5" /> Archive All
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => restoreMutation.mutate([...selectedIds])}>
+                    <RotateCcw className="w-3.5 h-3.5" /> Restore Selected
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={mutating} onClick={() => restoreMutation.mutate(filtered.map(i => i.id))}>
+                    <RotateCcw className="w-3.5 h-3.5" /> Restore All
+                  </Button>
+                </>
+              )}
+              <Button variant="destructive" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => handleDeleteConfirm('selected')}>
+                <Trash2 className="w-3.5 h-3.5" /> Delete Selected
+              </Button>
+              {mutating && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            </div>
+          </div>
+        )}
+
         {filtered.length === 0 ? (
-          <EmptyState icon={Receipt} title={t('noDocuments')} description="Create your first invoice" actionLabel={canCreate ? t('newInvoice') : undefined} onAction={canCreate ? () => setShowForm(true) : undefined} />
+          <EmptyState icon={Receipt} title={t('noDocuments')} description={view === 'archived' ? 'No archived invoices' : 'Create your first invoice'} actionLabel={canCreate && view === 'active' ? t('newInvoice') : undefined} onAction={canCreate && view === 'active' ? () => setShowForm(true) : undefined} />
         ) : (
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  {isSuperAdmin && <TableHead className="w-10" />}
                   <TableHead>{t('invoiceNumber')}</TableHead>
                   <TableHead className="hidden md:table-cell">{t('client')}</TableHead>
                   <TableHead className="hidden lg:table-cell">{t('filter')}</TableHead>
                   <TableHead>{t('amount')}</TableHead>
                   <TableHead className="hidden md:table-cell">{t('dueDate')}</TableHead>
                   <TableHead>{t('status')}</TableHead>
-                  <TableHead className="w-20">{t('actions')}</TableHead>
+                  <TableHead className="w-28">{t('actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filtered.map(inv => (
                   <TableRow key={inv.id} className="hover:bg-muted/30">
+                    {isSuperAdmin && (
+                      <TableCell>
+                        <Checkbox checked={selectedIds.has(inv.id)} onCheckedChange={() => toggleSelect(inv.id)} />
+                      </TableCell>
+                    )}
                     <TableCell className="font-medium">{inv.invoice_number}</TableCell>
                     <TableCell className="hidden md:table-cell">{clientMap[inv.client_id] || '-'}</TableCell>
                     <TableCell className="hidden lg:table-cell capitalize">{inv.category?.replace(/_/g, ' ')}</TableCell>
@@ -208,8 +349,21 @@ export default function Finance() {
                     <TableCell>
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(inv)}><Pencil className="w-3.5 h-3.5" /></Button>
+                        {isSuperAdmin && (
+                          view === 'active' ? (
+                            <button onClick={() => archiveMutation.mutate(inv.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Archive">
+                              <Archive className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button onClick={() => restoreMutation.mutate(inv.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Restore">
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          )
+                        )}
                         {canDelete && (
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(inv.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                          <button onClick={() => handleDeleteConfirm('single', inv.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         )}
                       </div>
                     </TableCell>
@@ -281,25 +435,23 @@ export default function Finance() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete invoice</AlertDialogTitle>
+            <AlertDialogTitle>Confirm Permanent Deletion</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this invoice and all associated records.
-              This action cannot be undone.
+              This action is permanent and will delete everything permanently. Do you still wish to proceed?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Keep it</AlertDialogCancel>
+            <AlertDialogCancel disabled={mutating}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              onClick={executeBulkDelete}
+              disabled={mutating}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (deleteTarget) deleteMutation.mutate(deleteTarget);
-                setDeleteTarget(null);
-              }}
             >
-              Yes, delete it
+              {mutating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

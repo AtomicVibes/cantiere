@@ -6,6 +6,7 @@ import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -16,9 +17,10 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, FileText, Upload, ExternalLink, Trash2 } from 'lucide-react';
+import { Search, FileText, Upload, ExternalLink, Archive, RotateCcw, Trash2, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useDocumentFormFields } from '@/hooks/useFormSchema';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -34,6 +36,7 @@ export default function Documents() {
   const docTypeOptions = useMemo(() => DOC_CATEGORIES.map(c => ({ value: c, label: t(c) })), [t]);
   const { dir } = useDirection();
   const { role } = useUserRole();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const canUpload = PERMISSIONS.canUploadDocument.includes(role);
   const canDelete = PERMISSIONS.canDeleteDocument.includes(role);
   const { fields, typeOptions } = useDocumentFormFields();
@@ -41,9 +44,13 @@ export default function Documents() {
   const [form, setForm] = useState({ name: '', type: 'other', notes: '' });
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [view, setView] = useState('active');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [mutating, setMutating] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: documents = [] } = useQuery({
@@ -94,17 +101,95 @@ export default function Documents() {
       setForm({ name: '', type: 'other', notes: '' });
       setFile(null);
     } catch {
-      // error handled by mutation onError
     } finally {
       setUploading(false);
     }
   };
 
-  const filtered = documents.filter(d => {
+  const currentDocs = useMemo(() => {
+    return documents.filter(d => view === 'archived' ? d.archived : !d.archived);
+  }, [documents, view]);
+
+  const filtered = currentDocs.filter(d => {
     const matchesSearch = !search || d.name?.toLowerCase().includes(search.toLowerCase());
     const matchesType = typeFilter === 'all' || d.type === typeFilter;
     return matchesSearch && matchesType;
   });
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every(d => selectedIds.has(d.id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filtered.map(d => d.id)));
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleViewChange = (v) => {
+    setView(v);
+    setSelectedIds(new Set());
+  };
+
+  const executeArchive = async (ids) => {
+    setMutating(true);
+    try {
+      const idsArr = Array.isArray(ids) ? ids : [ids];
+      await Promise.all(idsArr.map(id => base44.entities.Document.update(id, { archived: true })));
+      toast.success(`Archived ${idsArr.length} document${idsArr.length !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    } catch (err) {
+      toast.error(err.message || 'Failed to archive');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const executeRestore = async (ids) => {
+    setMutating(true);
+    try {
+      const idsArr = Array.isArray(ids) ? ids : [ids];
+      await Promise.all(idsArr.map(id => base44.entities.Document.update(id, { archived: false })));
+      toast.success(`Restored ${idsArr.length} document${idsArr.length !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    } catch (err) {
+      toast.error(err.message || 'Failed to restore');
+    } finally {
+      setMutating(false);
+    }
+  };
+
+  const handleBulkDeleteConfirm = (mode, id) => {
+    setDeleteTarget({ mode, id });
+    setConfirmDeleteOpen(true);
+  };
+
+  const executeBulkDelete = async () => {
+    setMutating(true);
+    try {
+      let ids = [];
+      if (deleteTarget.mode === 'selected') ids = [...selectedIds];
+      else if (deleteTarget.mode === 'single') ids = [deleteTarget.id];
+      await Promise.all(ids.map(id => base44.entities.Document.delete(id)));
+      toast.success(`Deleted ${ids.length} document${ids.length !== 1 ? 's' : ''}`);
+      setSelectedIds(new Set());
+      setConfirmDeleteOpen(false);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete');
+    } finally {
+      setMutating(false);
+    }
+  };
 
   const getTypeLabel = (type) => docTypeOptions.find(t => t.value === type)?.label || type;
 
@@ -133,14 +218,68 @@ export default function Documents() {
           )}
         </div>
 
+        {isSuperAdmin && (
+          <div className="flex items-center gap-1 border-b border-border pb-3">
+            <button
+              onClick={() => handleViewChange('active')}
+              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${view === 'active' ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Active
+            </button>
+            <button
+              onClick={() => handleViewChange('archived')}
+              className={`px-4 py-1.5 text-sm rounded-md transition-colors ${view === 'archived' ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              Archived
+            </button>
+          </div>
+        )}
+
+        {isSuperAdmin && filtered.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <Checkbox checked={allVisibleSelected} onCheckedChange={toggleSelectAll} />
+              Select All
+            </label>
+            <div className="flex items-center gap-2 ml-auto">
+              {view === 'active' ? (
+                <>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => executeArchive([...selectedIds])}>
+                    <Archive className="w-3.5 h-3.5" /> Archive Selected
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={mutating} onClick={() => executeArchive(filtered.map(d => d.id))}>
+                    <Archive className="w-3.5 h-3.5" /> Archive All
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => executeRestore([...selectedIds])}>
+                    <RotateCcw className="w-3.5 h-3.5" /> Restore Selected
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" disabled={mutating} onClick={() => executeRestore(filtered.map(d => d.id))}>
+                    <RotateCcw className="w-3.5 h-3.5" /> Restore All
+                  </Button>
+                </>
+              )}
+              <Button variant="destructive" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => handleBulkDeleteConfirm('selected')}>
+                <Trash2 className="w-3.5 h-3.5" /> Delete Selected
+              </Button>
+              {mutating && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            </div>
+          </div>
+        )}
+
         {filtered.length === 0 ? (
-          <EmptyState icon={FileText} title={t('noDocuments')} description={t('uploadFirstDocument')} actionLabel={canUpload ? t('uploadDocument') : undefined} onAction={canUpload ? () => setShowUpload(true) : undefined} />
+          <EmptyState icon={FileText} title={t('noDocuments')} description={view === 'archived' ? 'No archived documents' : t('uploadFirstDocument')} actionLabel={canUpload && view === 'active' ? t('uploadDocument') : undefined} onAction={canUpload && view === 'active' ? () => setShowUpload(true) : undefined} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(doc => (
               <div key={doc.id} className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow">
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2 min-w-0">
+                    {isSuperAdmin && (
+                      <Checkbox checked={selectedIds.has(doc.id)} onCheckedChange={() => toggleSelect(doc.id)} className="mr-1" />
+                    )}
                     <FileText className="w-5 h-5 text-primary flex-shrink-0" />
                     <h3 className="font-medium truncate">{doc.name}</h3>
                   </div>
@@ -150,8 +289,21 @@ export default function Documents() {
                         <Button variant="ghost" size="icon" className="h-7 w-7"><ExternalLink className="w-3.5 h-3.5" /></Button>
                       </a>
                     )}
+                    {isSuperAdmin && (
+                      view === 'active' ? (
+                        <button onClick={() => executeArchive(doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Archive">
+                          <Archive className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <button onClick={() => executeRestore(doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Restore">
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      )
+                    )}
                     {canDelete && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(doc.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                      <button onClick={() => handleBulkDeleteConfirm('single', doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40" title="Delete">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>
@@ -193,25 +345,23 @@ export default function Documents() {
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+      <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete document</AlertDialogTitle>
+            <AlertDialogTitle>Confirm Permanent Deletion</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this document and all associated records.
-              This action cannot be undone.
+              This action is permanent and will delete everything permanently. Do you still wish to proceed?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setDeleteTarget(null)}>Keep it</AlertDialogCancel>
+            <AlertDialogCancel disabled={mutating}>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              onClick={executeBulkDelete}
+              disabled={mutating}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (deleteTarget) deleteMutation.mutate(deleteTarget);
-                setDeleteTarget(null);
-              }}
             >
-              Yes, delete it
+              {mutating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Confirm Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
