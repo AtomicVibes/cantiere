@@ -161,8 +161,12 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
                 </SelectContent>
               </Select>
             </div>
+            </div>
+
+          <div className="space-y-3 p-4 rounded-lg border border-border bg-card mb-6">
+            <Label className="text-sm font-semibold">{t('teamAssignment') || 'Team Assignment'}</Label>
             <div className="space-y-2">
-              <Label htmlFor="manager">{t('projectManager')}</Label>
+              <Label className="text-xs text-muted-foreground">{t('projectManager') || 'Project Manager'}</Label>
               <Select value={form.manager_id} onValueChange={set('manager_id')}>
                 <SelectTrigger id="manager">
                   <SelectValue placeholder={t('none')} />
@@ -244,7 +248,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
             <Input id="progress" type="number" min="0" max="100" value={form.progress} onChange={(e) => set('progress')(e.target.value)} />
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
               {t('cancel')}
             </Button>
