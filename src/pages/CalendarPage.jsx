@@ -25,6 +25,30 @@ import { cn } from '@/lib/utils';
 import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
+// ─────────── TEMP LOOP DETECTOR ───────────
+// Remove after fixing the infinite loop.
+const __loopState = new Map();
+function useLoopDetector(name, value) {
+  const serialized = (() => {
+    try { return JSON.stringify(value); }
+    catch { return String(value); }
+  })();
+  const prev = __loopState.get(name);
+  if (prev && prev.serialized === serialized) {
+    prev.count++;
+    if (prev.count === 50 || prev.count === 200) {
+      console.error(
+        `🔄 [LOOP DETECTED] "${name}" has not changed in ${prev.count} renders.\n` +
+        `Current value:`, value,
+        `\nThis state/prop is being set every render by an effect or handler.`
+      );
+    }
+  } else {
+    __loopState.set(name, { serialized, count: 0 });
+  }
+}
+// ─────────── END TEMP LOOP DETECTOR ───────────
+
 const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '', visibility: 'private', project_id: 'none' };
 
 const toPgTime = (t) => {
@@ -55,6 +79,14 @@ export default function CalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const queryClient = useQueryClient();
+
+  useLoopDetector('currentDate', currentDate);
+  useLoopDetector('showForm', showForm);
+  useLoopDetector('form', form);
+  useLoopDetector('selectedAudience', selectedAudience);
+  useLoopDetector('audienceSearch', audienceSearch);
+  useLoopDetector('selectedDate', selectedDate);
+  useLoopDetector('selectedEvent', selectedEvent);
 
   const { data: authUser } = useQuery({
     queryKey: ['authUser'],
@@ -122,7 +154,6 @@ export default function CalendarPage() {
           };
         });
 
-      // Fallback: also include profiles not yet in team_members
       const existingUserIds = new Set(combined.map(c => c.user_id));
       for (const p of (profiles || [])) {
         if (p.id && !existingUserIds.has(p.id)) {
