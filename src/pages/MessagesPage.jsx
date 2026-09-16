@@ -655,7 +655,12 @@ export default function MessagesPage() {
   );
 
   return (
-    <div className="flex flex-col h-[100dvh] overflow-hidden w-full max-w-full">
+    <div className={cn(
+      "flex flex-col overflow-hidden w-full max-w-full",
+      new URLSearchParams(location.search).has('user')
+        ? "h-[100dvh]"
+        : "h-[calc(100dvh-7.5rem)] md:h-[100dvh]"
+    )}>
       <TopBar title="Messages" />
 
       <div className="flex flex-1 overflow-hidden w-full max-w-full">
@@ -689,7 +694,7 @@ export default function MessagesPage() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
