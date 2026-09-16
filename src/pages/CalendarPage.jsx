@@ -10,8 +10,19 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle, 
+  AlertDialogTrigger 
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
 const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '', visibility: 'private', project_id: 'none' };
@@ -42,7 +53,17 @@ export default function CalendarPage() {
   const [saving, setSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const queryClient = useQueryClient();
+
+  // Get current user id for ownership checks
+  const { data: authUser } = useQuery({
+    queryKey: ['authUser'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser();
+      return data?.user || null;
+    },
+  });
 
   // 1. Fetch Events with project join
   const { data: events = [], isLoading } = useQuery({
@@ -105,7 +126,6 @@ export default function CalendarPage() {
           };
         });
 
-      // Deduplicate by user_id
       const unique = Array.from(new Map(combined.map(item => [item.user_id, item])).values());
       return unique;
     },
@@ -190,6 +210,43 @@ export default function CalendarPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('events').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
+      setShowDeleteDialog(false);
+      setSelectedEvent(null);
+    },
+    onError: (err) => {
+      console.error('[CalendarPage] delete error:', err);
+      alert(`Could not delete event: ${err.message}`);
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: async ({ id, archived }) => {
+      const { data, error } = await supabase
+        .from('events')
+        .update({ archived })
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
+      setSelectedEvent(null);
+    },
+    onError: (err) => {
+      console.error('[CalendarPage] archive error:', err);
+      alert(`Could not update archive status: ${err.message}`);
+    },
+  });
+
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
@@ -237,6 +294,8 @@ export default function CalendarPage() {
       setSaving(false);
     }
   };
+
+  const isOwner = selectedEvent && authUser && selectedEvent.user_id === authUser.id;
 
   return (
     <div>
@@ -552,8 +611,8 @@ export default function CalendarPage() {
       {/* Event Detail Dialog */}
       <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
         {selectedEvent && (
-          <DialogContent className="max-w-md">
-            <DialogHeader>
+          <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0">
+            <DialogHeader className="p-6 pb-2">
               <DialogTitle className="font-heading flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className={cn("w-3 h-3 rounded-full flex-shrink-0", getEventColor(selectedEvent.type))} />
@@ -561,7 +620,8 @@ export default function CalendarPage() {
                 </div>
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 text-sm">
+
+            <div className="p-6 pt-2 space-y-4 text-sm overflow-y-auto flex-1">
               {/* Badges Row */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
@@ -632,8 +692,56 @@ export default function CalendarPage() {
                 </div>
               )}
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSelectedEvent(null)}>{t('close') || 'Close'}</Button>
+
+            <DialogFooter className="p-6 pt-3 border-t border-border flex flex-col-reverse sm:flex-row sm:justify-between gap-2 bg-card">
+              {isOwner ? (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={archiveMutation.isPending}
+                  onClick={() => archiveMutation.mutate({ id: selectedEvent.id, archived: !selectedEvent.archived })}
+                >
+                  <Archive className="w-4 h-4" />
+                  {selectedEvent.archived ? (t('unarchive') || 'Unarchive') : (t('archive') || 'Archive')}
+                </Button>
+              ) : <div />}
+
+              <div className="flex flex-col-reverse sm:flex-row gap-2">
+                {isOwner && (
+                  <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" className="gap-2">
+                        <Trash2 className="w-4 h-4" />
+                        {t('cancelEvent') || 'Cancel Event'}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{t('confirmDeleteTitle') || 'Delete this event permanently?'}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          {t('confirmDeleteDesc') || 'This action cannot be undone. The event and its audience list will be removed.'}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleteMutation.isPending}>{t('cancel') || 'Cancel'}</AlertDialogCancel>
+                        <AlertDialogAction
+                          disabled={deleteMutation.isPending}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            deleteMutation.mutate(selectedEvent.id);
+                          }}
+                        >
+                          {deleteMutation.isPending ? (t('deleting') || 'Deleting...') : (t('delete') || 'Delete')}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <Button variant="outline" onClick={() => setSelectedEvent(null)}>
+                  {t('close') || 'Close'}
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         )}
