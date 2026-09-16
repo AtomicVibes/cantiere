@@ -56,7 +56,6 @@ export default function CalendarPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const queryClient = useQueryClient();
 
-  // Get current user id for ownership checks
   const { data: authUser } = useQuery({
     queryKey: ['authUser'],
     queryFn: async () => {
@@ -65,7 +64,6 @@ export default function CalendarPage() {
     },
   });
 
-  // 1. Fetch Events with project join
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['calendarEvents'],
     queryFn: async () => {
@@ -84,7 +82,6 @@ export default function CalendarPage() {
     initialData: [],
   });
 
-  // 2. Fetch Projects for dropdown
   const { data: projects = [] } = useQuery({
     queryKey: ['projectsList'],
     queryFn: async () => {
@@ -97,7 +94,6 @@ export default function CalendarPage() {
     },
   });
 
-  // 3. Fetch Team Members & Profiles for audience picker
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['teamMembersAudience'],
     queryFn: async () => {
@@ -131,7 +127,6 @@ export default function CalendarPage() {
     },
   });
 
-  // 4. Fetch Event Audience for selectedEvent detail modal
   const { data: eventAudienceList = [] } = useQuery({
     queryKey: ['eventAudience', selectedEvent?.id],
     enabled: !!selectedEvent && selectedEvent.visibility === 'selected',
@@ -523,9 +518,9 @@ export default function CalendarPage() {
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="private">{t('privateOption') || 'Private (only me)'}</SelectItem>
-                  <SelectItem value="public">{t('publicOption') || 'Public (all authenticated users)'}</SelectItem>
-                  <SelectItem value="selected">{t('selectedOption') || 'Selected audience'}</SelectItem>
+                  <SelectItem value="private">{t('visibility.private') || 'Private'}</SelectItem>
+                  <SelectItem value="public">{t('visibility.public') || 'Public'}</SelectItem>
+                  <SelectItem value="selected">{t('visibility.selected') || 'Selected Audience'}</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
