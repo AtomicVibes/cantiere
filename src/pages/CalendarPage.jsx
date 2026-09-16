@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabaseClient';
 import TopBar from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -10,10 +10,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns';
+import { ChevronLeft, ChevronRight, Plus, Clock, MapPin } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
 const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '' };
+
+const toPgTime = (t) => {
+  if (!t) return null;
+  return t.length === 5 ? `${t}:00` : t;
+};
+
+const fromPgTime = (t) => (t ? t.slice(0, 5) : '');
 
 export default function CalendarPage() {
   const { t } = useTranslation();
@@ -31,16 +38,53 @@ export default function CalendarPage() {
   const [form, setForm] = useState(emptyEvent);
   const [saving, setSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedEvent, setSelectedEvent] = useState(null);
   const queryClient = useQueryClient();
 
-  const { data: events = [] } = useQuery({
+  const { data: events = [], isLoading } = useQuery({
     queryKey: ['calendarEvents'],
-    queryFn: () => base44.entities.CalendarEvent.list('-date'),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('date', { ascending: true })
+        .order('time', { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
     initialData: [],
   });
 
   const createMutation = useMutation({
-    mutationFn: (data) => base44.entities.CalendarEvent.create(data),
+    mutationFn: async (payload) => {
+      const { data: userData, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !userData?.user) {
+        throw new Error('Not authenticated — cannot save event');
+      }
+
+      const row = {
+        user_id: userData.user.id,
+        title: payload.title?.trim(),
+        description: payload.description ? payload.description.trim().slice(0, 150) : null,
+        type: payload.type || 'other',
+        date: payload.date,
+        time: toPgTime(payload.time),
+        location: payload.location?.trim() || null,
+      };
+
+      if (!row.time) {
+        throw new Error('Time is required');
+      }
+
+      const { data, error } = await supabase
+        .from('events')
+        .insert(row)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
       setShowForm(false);
@@ -48,7 +92,7 @@ export default function CalendarPage() {
     },
     onError: (err) => {
       console.error('[CalendarPage] create error:', err);
-      alert(`Failed to save event: ${err.message || JSON.stringify(err)}`);
+      alert(`Could not save event: ${err.message}`);
     },
   });
 
@@ -60,11 +104,29 @@ export default function CalendarPage() {
 
   const getEventsForDay = (day) => events.filter(e => e.date && isSameDay(new Date(e.date), day));
   const getEventColor = (type) => EVENT_TYPES.find(t => t.value === type)?.color || 'bg-slate-500';
+  const getEventLabel = (type) => EVENT_TYPES.find(t => t.value === type)?.label || type;
+
+  // Filtered events for the right-hand panel
+  const panelEvents = React.useMemo(() => {
+    const today = startOfDay(new Date());
+    if (selectedDate) {
+      return events
+        .filter(e => e.date && isSameDay(new Date(e.date), selectedDate))
+        .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+    } else {
+      return events
+        .filter(e => {
+          if (!e.date) return false;
+          const d = startOfDay(new Date(e.date));
+          return isSameDay(d, today) || isAfter(d, today);
+        })
+        .slice(0, 20);
+    }
+  }, [events, selectedDate]);
 
   const handleDayClick = (day) => {
     setSelectedDate(day);
     setForm({ ...emptyEvent, date: format(day, 'yyyy-MM-dd') });
-    setShowForm(true);
   };
 
   const handleSave = async (e) => {
@@ -94,56 +156,152 @@ export default function CalendarPage() {
               <ChevronRight className="w-5 h-5" />
             </Button>
           </div>
-          <Button onClick={() => { setForm(emptyEvent); setShowForm(true); }} className="gap-2 w-full md:w-auto">
+          <Button onClick={() => { setForm({ ...emptyEvent, date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '' }); setShowForm(true); }} className="gap-2 w-full md:w-auto">
             <Plus className="w-4 h-4" /> {t('addEvent')}
           </Button>
         </div>
 
-        {/* Calendar Grid */}
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
-          <div className="grid grid-cols-7 border-b border-border">
-            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
-              <div key={d} className="p-3 text-center text-xs font-semibold text-muted-foreground uppercase">{d}</div>
-            ))}
+        {/* Two-Column Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Calendar Grid (Left: 2 cols) */}
+          <div className="lg:col-span-2 bg-card rounded-xl border border-border overflow-hidden">
+            <div className="grid grid-cols-7 border-b border-border">
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
+                <div key={d} className="p-3 text-center text-xs font-semibold text-muted-foreground uppercase">{d}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {days.map((day, i) => {
+                const dayEvents = getEventsForDay(day);
+                const isToday = isSameDay(day, new Date());
+                const isSelected = selectedDate && isSameDay(day, selectedDate);
+                const inMonth = isSameMonth(day, currentDate);
+                return (
+                  <div
+                    key={i}
+                    className={cn(
+                      "min-h-[100px] p-2 border-b border-r border-border cursor-pointer hover:bg-muted/50 transition-colors relative",
+                      !inMonth && "opacity-40",
+                      isSelected && "bg-primary/10 ring-1 ring-primary ring-inset"
+                    )}
+                    onClick={() => handleDayClick(day)}
+                  >
+                    <span className={cn(
+                      "text-sm font-medium inline-flex items-center justify-center w-7 h-7 rounded-full",
+                      isToday && "bg-primary text-primary-foreground"
+                    )}>
+                      {format(day, 'd')}
+                    </span>
+                    <div className="mt-1 space-y-1">
+                      {dayEvents.slice(0, 3).map(ev => (
+                        <div key={ev.id} className="flex items-center gap-1">
+                          <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", getEventColor(ev.type))} />
+                          <span className="text-xs truncate">{ev.title}</span>
+                        </div>
+                      ))}
+                      {dayEvents.length > 3 && (
+                        <span className="text-xs text-muted-foreground">+{dayEvents.length - 3} {t('more')}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="grid grid-cols-7">
-            {days.map((day, i) => {
-              const dayEvents = getEventsForDay(day);
-              const isToday = isSameDay(day, new Date());
-              const inMonth = isSameMonth(day, currentDate);
-              return (
-                <div
-                  key={i}
-                  className={cn(
-                    "min-h-[100px] p-2 border-b border-r border-border cursor-pointer hover:bg-muted/50 transition-colors",
-                    !inMonth && "opacity-40"
-                  )}
-                  onClick={() => handleDayClick(day)}
+
+          {/* Events Sub-Window (Right: 1 col) */}
+          <div className="lg:col-span-1 bg-card rounded-xl border border-border flex flex-col overflow-hidden">
+            {/* Panel Header */}
+            <div className="bg-accent px-4 py-3 border-b border-border flex items-center justify-between">
+              <h3 className="font-heading font-semibold text-sm text-accent-foreground">
+                {selectedDate ? format(selectedDate, 'EEEE, d MMM') : (t('upcomingEvents') || 'Upcoming Events')}
+              </h3>
+              {selectedDate && (
+                <button
+                  onClick={() => setSelectedDate(null)}
+                  className="text-xs text-primary hover:underline font-medium"
                 >
-                  <span className={cn(
-                    "text-sm font-medium inline-flex items-center justify-center w-7 h-7 rounded-full",
-                    isToday && "bg-primary text-primary-foreground"
-                  )}>
-                    {format(day, 'd')}
-                  </span>
-                  <div className="mt-1 space-y-1">
-                    {dayEvents.slice(0, 3).map(ev => (
-                      <div key={ev.id} className="flex items-center gap-1">
-                        <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", getEventColor(ev.type))} />
-                        <span className="text-xs truncate">{ev.title}</span>
-                      </div>
-                    ))}
-                    {dayEvents.length > 3 && (
-                      <span className="text-xs text-muted-foreground">+{dayEvents.length - 3} {t('more')}</span>
+                  {t('showAllUpcoming') || 'Show all upcoming'}
+                </button>
+              )}
+            </div>
+
+            {/* Sub-header info */}
+            <div className="px-4 py-2 border-b border-border bg-card text-xs text-muted-foreground flex justify-between items-center">
+              <span>{panelEvents.length} {panelEvents.length === 1 ? 'event' : 'events'}</span>
+              {selectedDate && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-primary hover:bg-primary/10"
+                  onClick={() => { setForm({ ...emptyEvent, date: format(selectedDate, 'yyyy-MM-dd') }); setShowForm(true); }}
+                >
+                  <Plus className="w-3 h-3 mr-1" /> {t('addEvent')}
+                </Button>
+              )}
+            </div>
+
+            {/* Scrollable Event List */}
+            <div className="p-3 space-y-2 overflow-y-auto max-h-[580px]">
+              {isLoading && (
+                <div className="text-center py-12 text-sm text-muted-foreground">{t('loading') || 'Loading…'}</div>
+              )}
+
+              {!isLoading && panelEvents.length === 0 && (
+                <div className="text-center py-12 text-sm text-muted-foreground">
+                  {selectedDate ? (t('noEventsOnThisDay') || 'No events on this day.') : (t('noUpcomingEvents') || 'No upcoming events.')}
+                </div>
+              )}
+
+              {!isLoading && panelEvents.map(ev => (
+                <button
+                  key={ev.id}
+                  onClick={() => setSelectedEvent(ev)}
+                  className="w-full text-left p-3 rounded-lg border border-border bg-card hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-primary space-y-2 group"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={cn("w-2 h-2 rounded-full flex-shrink-0", getEventColor(ev.type))} />
+                      <h4 className="font-medium text-sm text-foreground truncate group-hover:text-foreground">{ev.title}</h4>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    {ev.time && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                        {fromPgTime(ev.time)}
+                      </span>
+                    )}
+                    {ev.date && (
+                      <span>{format(new Date(ev.date), 'MMM d, yyyy')}</span>
                     )}
                   </div>
-                </div>
-              );
-            })}
+
+                  {ev.location && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground truncate">
+                      <MapPin className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="truncate">{ev.location}</span>
+                    </div>
+                  )}
+
+                  {ev.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">{ev.description}</p>
+                  )}
+
+                  <div className="pt-1">
+                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
+                      {getEventLabel(ev.type)}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Add Event Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
         <DialogContent>
           <DialogHeader><DialogTitle className="font-heading">{t('newEvent')}</DialogTitle></DialogHeader>
@@ -179,6 +337,52 @@ export default function CalendarPage() {
             </DialogFooter>
           </form>
         </DialogContent>
+      </Dialog>
+
+      {/* Event Detail Dialog */}
+      <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+        {selectedEvent && (
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="font-heading flex items-center gap-2">
+                <div className={cn("w-3 h-3 rounded-full flex-shrink-0", getEventColor(selectedEvent.type))} />
+                <span className="truncate">{selectedEvent.title}</span>
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <span>{selectedEvent.date ? format(new Date(selectedEvent.date), 'EEEE, MMMM d, yyyy') : ''}</span>
+                  {selectedEvent.time && <span>at {fromPgTime(selectedEvent.time)}</span>}
+                </div>
+              </div>
+
+              {selectedEvent.location && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <span>{selectedEvent.location}</span>
+                </div>
+              )}
+
+              <div>
+                <span className="inline-block px-2.5 py-1 rounded text-xs font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
+                  {getEventLabel(selectedEvent.type)}
+                </span>
+              </div>
+
+              {selectedEvent.description && (
+                <div className="pt-2 border-t border-border">
+                  <h5 className="text-xs font-semibold text-muted-foreground uppercase mb-1">{t('description') || 'Description'}</h5>
+                  <p className="text-foreground whitespace-pre-wrap text-sm">{selectedEvent.description}</p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSelectedEvent(null)}>{t('close') || 'Close'}</Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
       </Dialog>
     </div>
   );
