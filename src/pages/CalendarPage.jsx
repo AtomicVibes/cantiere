@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/api/supabaseClient';
+import { base44 } from '@/api/base44Client';
 import TopBar from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -14,14 +14,6 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek } from 'date-fns';
 
 const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '' };
-
-// "14:30" -> "14:30:00" (Postgres `time` needs seconds)
-const toPgTime = (t) => {
-  if (!t) return null;
-  return t.length === 5 ? `${t}:00` : t;
-};
-// "14:30:00" -> "14:30" for <input type="time">
-const fromPgTime = (t) => (t ? t.slice(0, 5) : '');
 
 export default function CalendarPage() {
   const { t } = useTranslation();
@@ -41,68 +33,22 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(null);
   const queryClient = useQueryClient();
 
-  // ── LIST ───────────────────────────────────────────
   const { data: events = [] } = useQuery({
     queryKey: ['calendarEvents'],
-    queryFn: async () => {
-      console.log('[events] list: fetching…');
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('date', { ascending: false });
-      console.log('[events] list result:', { data, error });
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => base44.entities.CalendarEvent.list('-date'),
     initialData: [],
   });
 
-  // ── CREATE ─────────────────────────────────────────
   const createMutation = useMutation({
-    mutationFn: async (payload) => {
-      console.log('🚨 [events] create: start', payload);
-
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      console.log('🔑 [events] getUser:', userData, userErr);
-      if (userErr || !userData?.user) {
-        throw new Error('Not authenticated — cannot save event');
-      }
-
-      const row = {
-        user_id: userData.user.id,
-        title: payload.title?.trim(),
-        description: payload.description ? payload.description.slice(0, 150) : null,
-        type: payload.type || 'other',
-        date: payload.date,               // "yyyy-MM-dd"
-        time: toPgTime(payload.time),     // NOT NULL in your schema!
-        location: payload.location?.trim() || null,
-      };
-
-      // Your schema has `time` NOT NULL — block early with a clear message
-      if (!row.time) {
-        throw new Error('Time is required (your events.time column is NOT NULL)');
-      }
-
-      console.log('📦 [events] insert payload:', row);
-
-      const { data, error } = await supabase
-        .from('events')
-        .insert(row)
-        .select()
-        .single();
-
-      console.log('✅ [events] insert result:', { data, error });
-      if (error) throw error;
-      return data;
-    },
+    mutationFn: (data) => base44.entities.CalendarEvent.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
       setShowForm(false);
       setForm(emptyEvent);
     },
     onError: (err) => {
-      console.error('💥 [events] create failed:', err);
-      alert(`Could not save event: ${err.message}`);
+      console.error('[CalendarPage] create error:', err);
+      alert(`Failed to save event: ${err.message || JSON.stringify(err)}`);
     },
   });
 
@@ -135,6 +81,7 @@ export default function CalendarPage() {
     <div>
       <TopBar title={t('calendar')} />
       <div className="p-6 space-y-6">
+        {/* Header */}
         <div className="flex flex-col md:flex-row w-full items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => setCurrentDate(subMonths(currentDate, 1))}>
@@ -152,6 +99,7 @@ export default function CalendarPage() {
           </Button>
         </div>
 
+        {/* Calendar Grid */}
         <div className="bg-card rounded-xl border border-border overflow-hidden">
           <div className="grid grid-cols-7 border-b border-border">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
@@ -200,22 +148,17 @@ export default function CalendarPage() {
         <DialogContent>
           <DialogHeader><DialogTitle className="font-heading">{t('newEvent')}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
-            <div>
-              <Label>Title *</Label>
-              <Input value={form.title} onChange={e => setForm({...form, title: e.target.value})} required />
-            </div>
-
+            <div><Label>Title *</Label><Input value={form.title} onChange={e => setForm({...form, title: e.target.value})} required /></div>
             <div>
               <Label>Description</Label>
-              <Textarea
-                value={form.description}
-                onChange={e => setForm({...form, description: e.target.value.slice(0, 150)})}
+              <Textarea 
+                value={form.description} 
+                onChange={e => setForm({...form, description: e.target.value.slice(0, 150)})} 
                 maxLength={150}
-                rows={2}
+                rows={2} 
               />
-              <p className="text-xs text-muted-foreground mt-1">{form.description.length}/150</p>
+              <span className="text-xs text-muted-foreground">{form.description.length}/150</span>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Type</Label>
@@ -224,28 +167,15 @@ export default function CalendarPage() {
                   <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Date *</Label>
-                <Input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} required />
-              </div>
+              <div><Label>Date *</Label><Input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} required /></div>
             </div>
-
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Time *</Label>
-                <Input type="time" value={form.time} onChange={e => setForm({...form, time: e.target.value})} required />
-              </div>
-              <div>
-                <Label>Location</Label>
-                <Input value={form.location} onChange={e => setForm({...form, location: e.target.value})} />
-              </div>
+              <div><Label>Time *</Label><Input type="time" value={form.time} onChange={e => setForm({...form, time: e.target.value})} required /></div>
+              <div><Label>Location</Label><Input value={form.location} onChange={e => setForm({...form, location: e.target.value})} /></div>
             </div>
-
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
-              <Button type="submit" disabled={saving || !form.title || !form.date || !form.time}>
-                {saving ? t('saving') : t('save')}
-              </Button>
+              <Button type="submit" disabled={saving || !form.title || !form.date || !form.time}>{saving ? t('saving') : t('save')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>
