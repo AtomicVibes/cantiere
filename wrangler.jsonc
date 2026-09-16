@@ -5,7 +5,7 @@
   "compatibility_date": "2026-06-20",
   "vars": {
     "VITE_SUPABASE_URL": "https://hrtncnmmykzckemykesu.supabase.co",
-    "VITE_SUPABASE_ANON_KEY": "sb_publishable__xX9gpDUVc6htcBZOi_IrQ_4gyyadt8",
+    "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhydG5jbm1teWt6Y2tlbXlrZXN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyMzg4NTcsImV4cCI6MjA1NjgxNDg1N30.REDACTED_ANON_KEY_SIGNATURE",
     "VITE_VAPID_PUBLIC_KEY": "BI2IpPMmOWwihtC8OAeSvXqKuApewLTdDW6HozdYwgG3oHJvNeOWeiF8KRR2mEWPi8OVpjyaagI86gZpURSb_vg"
   }
 }
