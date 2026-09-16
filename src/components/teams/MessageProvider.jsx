@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,18 +28,27 @@ export default function MessagePopover({ member }) {
   const senderId = user?.id;
   const receiverId = member?.id;
 
+  const sortedMessages = useMemo(
+    () => [...messages].sort((a, b) => {
+      const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return t !== 0 ? t : (a.id || '').localeCompare(b.id || '');
+    }),
+    [messages]
+  );
+
   const scrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      }
-    });
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
   }, []);
 
-  // Auto-scroll when a new last message arrives
-  const lastMessageId = messages[messages.length - 1]?.id;
+  // Auto-scroll only when a genuinely new last message arrives
+  const lastMessageId = sortedMessages[sortedMessages.length - 1]?.id;
+  const previousLastId = useRef(null);
   useEffect(() => {
     if (!lastMessageId) return;
+    if (previousLastId.current === lastMessageId) return;
+    previousLastId.current = lastMessageId;
     scrollToBottom();
   }, [lastMessageId, scrollToBottom]);
 
@@ -206,7 +215,15 @@ export default function MessagePopover({ member }) {
           {t('messageButton')}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 p-0" side="top">
+      <PopoverContent
+        className="w-96 p-0"
+        side="top"
+        align="end"
+        sideOffset={8}
+        collisionPadding={16}
+        avoidCollisions={true}
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
         <div className="flex flex-col h-[420px]">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
             <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
@@ -224,11 +241,11 @@ export default function MessagePopover({ member }) {
               </div>
             ) : (
               <div className="space-y-3">
-                {messages.map((msg) => {
+                {sortedMessages.map((msg) => {
                   const isSender = msg.sender_id === senderId;
                   return (
                     <div
-                      key={msg.id || msg.created_at}
+                      key={msg.id}
                       className={cn("flex", isSender ? "justify-end" : "justify-start")}
                     >
                       <div
