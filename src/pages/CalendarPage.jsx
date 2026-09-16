@@ -74,9 +74,14 @@ export default function CalendarPage() {
         description: payload.description ? payload.description.slice(0, 150) : null,
         type: payload.type || 'other',
         date: payload.date,               // "yyyy-MM-dd"
-        time: toPgTime(payload.time),     // nullable or formatted
+        time: toPgTime(payload.time),     // NOT NULL in your schema!
         location: payload.location?.trim() || null,
       };
+
+      // Your schema has `time` NOT NULL — block early with a clear message
+      if (!row.time) {
+        throw new Error('Time is required (your events.time column is NOT NULL)');
+      }
 
       console.log('📦 [events] insert payload:', row);
 
@@ -227,8 +232,8 @@ export default function CalendarPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label>Time</Label>
-                <Input type="time" value={form.time} onChange={e => setForm({...form, time: e.target.value})} />
+                <Label>Time *</Label>
+                <Input type="time" value={form.time} onChange={e => setForm({...form, time: e.target.value})} required />
               </div>
               <div>
                 <Label>Location</Label>
@@ -238,7 +243,7 @@ export default function CalendarPage() {
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
-              <Button type="submit" disabled={saving || !form.title || !form.date}>
+              <Button type="submit" disabled={saving || !form.title || !form.date || !form.time}>
                 {saving ? t('saving') : t('save')}
               </Button>
             </DialogFooter>
