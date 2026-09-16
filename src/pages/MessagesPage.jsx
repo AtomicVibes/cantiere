@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/services/supabase';
@@ -95,6 +95,14 @@ export default function MessagesPage() {
 
   const selectedContact = contacts.find(c => c.id === selectedUserId);
 
+  const sortedMessages = useMemo(
+    () => [...messages].sort((a, b) => {
+      const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return t !== 0 ? t : a.id.localeCompare(b.id);
+    }),
+    [messages]
+  );
+
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       if (scrollRef.current) {
@@ -103,9 +111,12 @@ export default function MessagesPage() {
     });
   }, []);
 
+  const lastMessageId = messages[messages.length - 1]?.id;
+
   useEffect(() => {
+    if (!lastMessageId) return;
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [lastMessageId, scrollToBottom]);
 
   useEffect(() => {
     if (!userId) return;
@@ -565,7 +576,7 @@ export default function MessagesPage() {
             <p className="text-sm text-muted-foreground">No messages yet. Say hello!</p>
           </div>
         ) : (
-          messages.map(msg => {
+          sortedMessages.map(msg => {
             const isSender = msg.sender_id === userId;
             return (
               <div key={msg.id} className={cn("flex group", isSender ? "justify-end" : "justify-start")}>

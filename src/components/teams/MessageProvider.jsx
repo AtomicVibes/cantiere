@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -28,18 +28,20 @@ export default function MessagePopover({ member }) {
   const senderId = user?.id;
   const receiverId = member?.id;
 
-  const scrollToBottom = () => {
+  const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       if (scrollRef.current) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
     });
-  };
+  }, []);
 
-  // Auto-scroll when messages change
+  // Auto-scroll when a new last message arrives
+  const lastMessageId = messages[messages.length - 1]?.id;
   useEffect(() => {
+    if (!lastMessageId) return;
     scrollToBottom();
-  }, [messages]);
+  }, [lastMessageId, scrollToBottom]);
 
   // Historical feed load + real-time subscription
   useEffect(() => {
