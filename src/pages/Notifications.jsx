@@ -153,7 +153,7 @@ export default function Notifications() {
                     <div className="flex items-start justify-between gap-2">
                       <h4 className={cn("text-sm font-medium", !notif.is_read && "font-semibold")}>{notif.title}</h4>
                       <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {notif.created_date ? format(new Date(notif.created_date), 'MMM d, h:mm a') : ''}
+                        {notif.created_at ? format(new Date(notif.created_at), 'MMM d, h:mm a') : ''}
                       </span>
                     </div>
                     {notif.message && <p className="text-sm text-muted-foreground mt-0.5">{notif.message}</p>}

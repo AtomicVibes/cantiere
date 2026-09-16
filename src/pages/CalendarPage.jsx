@@ -122,8 +122,21 @@ export default function CalendarPage() {
           };
         });
 
+      // Fallback: also include profiles not yet in team_members
+      const existingUserIds = new Set(combined.map(c => c.user_id));
+      for (const p of (profiles || [])) {
+        if (p.id && !existingUserIds.has(p.id)) {
+          combined.push({
+            user_id: p.id,
+            full_name: p.full_name || p.email || 'User',
+            job_title: p.role || '',
+            department: '',
+          });
+        }
+      }
+
       const unique = Array.from(new Map(combined.map(item => [item.user_id, item])).values());
-      return unique;
+      return unique.filter(m => !!m.user_id);
     },
   });
 
@@ -269,11 +282,17 @@ export default function CalendarPage() {
     }
   }, [events, selectedDate]);
 
-  const filteredTeamMembers = teamMembers.filter(m => 
-    m.full_name.toLowerCase().includes(audienceSearch.toLowerCase()) ||
-    m.job_title.toLowerCase().includes(audienceSearch.toLowerCase()) ||
-    m.department.toLowerCase().includes(audienceSearch.toLowerCase())
-  );
+  const filteredTeamMembers = React.useMemo(() => {
+    return teamMembers
+      .filter(m => m && m.user_id)
+      .filter(m => 
+        (m.full_name || '').toLowerCase().includes(audienceSearch.toLowerCase()) ||
+        (m.job_title || '').toLowerCase().includes(audienceSearch.toLowerCase()) ||
+        (m.department || '').toLowerCase().includes(audienceSearch.toLowerCase())
+      );
+  }, [teamMembers, audienceSearch]);
+
+  console.log('[audience render]', filteredTeamMembers.map(m => m.user_id));
 
   const handleDayClick = (day) => {
     setSelectedDate(day);
@@ -550,11 +569,9 @@ export default function CalendarPage() {
                       <div
                         key={member.user_id}
                         onClick={() => {
-                          if (isChecked) {
-                            setSelectedAudience(selectedAudience.filter(id => id !== member.user_id));
-                          } else {
-                            setSelectedAudience([...selectedAudience, member.user_id]);
-                          }
+                          setSelectedAudience(prev => 
+                            isChecked ? prev.filter(id => id !== member.user_id) : [...prev, member.user_id]
+                          );
                         }}
                         className={cn(
                           "flex items-center gap-2 p-2 rounded cursor-pointer transition-colors text-xs",

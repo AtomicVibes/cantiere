@@ -226,7 +226,7 @@ export default function MessagePopover({ member }) {
                   const isSender = msg.sender_id === senderId;
                   return (
                     <div
-                      key={msg.id || msg.created_date}
+                      key={msg.id || msg.created_at}
                       className={cn("flex", isSender ? "justify-end" : "justify-start")}
                     >
                       <div

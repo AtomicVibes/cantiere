@@ -310,7 +310,7 @@ export default function Documents() {
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Badge variant="secondary" className="text-xs">{getTypeLabel(doc.type)}</Badge>
                   {doc.file_format && <span>.{doc.file_format}</span>}
-                  <span>{doc.created_date ? format(new Date(doc.created_date), 'MMM d, yyyy') : ''}</span>
+                  <span>{doc.created_at ? format(new Date(doc.created_at), 'MMM d, yyyy') : ''}</span>
                 </div>
                 {doc.notes && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{doc.notes}</p>}
               </div>
