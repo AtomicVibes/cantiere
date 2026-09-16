@@ -7,7 +7,13 @@ export const queryClientInstance = new QueryClient({
       gcTime: 5 * 60_000,
       refetchOnWindowFocus: false,
       refetchOnMount: false,
-      retry: 1,
+      retry: (failureCount, error) => {
+        if (error?.name === 'AbortError') return false;
+        return failureCount < 1;
+      },
+    },
+    mutations: {
+      retry: 0,
     },
   },
 });
