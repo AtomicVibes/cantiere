@@ -256,6 +256,22 @@ const resources = {
       provisioning: 'Provisioning',
       directCreation: 'Direct Creation (no email)',
       sendInvitation: 'Send Invitation Email',
+      visibility: {
+        label: "Visibility",
+        private: "Private",
+        public: "Public",
+        selected: "Selected Audience"
+      },
+      privateHelp: "Only you can see this event",
+      publicHelp: "All authenticated users can see this event",
+      selectedHelp: "Only the audience you select can see this event",
+      assignToProject: "Assign to project",
+      cancelEvent: "Cancel Event",
+      archive: "Archive",
+      unarchive: "Unarchive",
+      confirmDeleteTitle: "Delete this event permanently?",
+      confirmDeleteDesc: "This action cannot be undone. The event and its audience list will be removed.",
+      close: "Close",
       logs: {
         auditLogs: 'Audit Logs',
         time: 'Time',
@@ -527,6 +543,22 @@ const resources = {
       provisioning: 'الإعداد',
       directCreation: 'إنشاء مباشر (بدون بريد إلكتروني)',
       sendInvitation: 'إرسال دعوة عبر البريد الإلكتروني',
+      visibility: {
+        label: "Visibility",
+        private: "Private",
+        public: "Public",
+        selected: "Selected Audience"
+      },
+      privateHelp: "Only you can see this event",
+      publicHelp: "All authenticated users can see this event",
+      selectedHelp: "Only the audience you select can see this event",
+      assignToProject: "Assign to project",
+      cancelEvent: "Cancel Event",
+      archive: "Archive",
+      unarchive: "Unarchive",
+      confirmDeleteTitle: "Delete this event permanently?",
+      confirmDeleteDesc: "This action cannot be undone. The event and its audience list will be removed.",
+      close: "Close",
       logs: {
         auditLogs: 'سجلات التدقيق',
         time: 'الوقت',
@@ -799,6 +831,22 @@ const resources = {
       provisioning: 'Provisionnement',
       directCreation: 'Création directe (sans email)',
       sendInvitation: 'Envoyer un email d\'invitation',
+      visibility: {
+        label: "Visibility",
+        private: "Private",
+        public: "Public",
+        selected: "Selected Audience"
+      },
+      privateHelp: "Only you can see this event",
+      publicHelp: "All authenticated users can see this event",
+      selectedHelp: "Only the audience you select can see this event",
+      assignToProject: "Assign to project",
+      cancelEvent: "Cancel Event",
+      archive: "Archive",
+      unarchive: "Unarchive",
+      confirmDeleteTitle: "Delete this event permanently?",
+      confirmDeleteDesc: "This action cannot be undone. The event and its audience list will be removed.",
+      close: "Close",
       logs: {
         auditLogs: 'Journaux d\'audit',
         time: 'Heure',
@@ -1071,6 +1119,22 @@ const resources = {
       provisioning: 'Provisioning',
       directCreation: 'Creazione diretta (senza email)',
       sendInvitation: 'Invia email di invito',
+      visibility: {
+        label: "Visibility",
+        private: "Private",
+        public: "Public",
+        selected: "Selected Audience"
+      },
+      privateHelp: "Only you can see this event",
+      publicHelp: "All authenticated users can see this event",
+      selectedHelp: "Only the audience you select can see this event",
+      assignToProject: "Assign to project",
+      cancelEvent: "Cancel Event",
+      archive: "Archive",
+      unarchive: "Unarchive",
+      confirmDeleteTitle: "Delete this event permanently?",
+      confirmDeleteDesc: "This action cannot be undone. The event and its audience list will be removed.",
+      close: "Close",
       logs: {
         auditLogs: 'Registri di controllo',
         time: 'Ora',
@@ -1113,4 +1177,3 @@ i18n
   });
 
 export default i18n;
-

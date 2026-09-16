@@ -43,7 +43,7 @@ export default function CalendarPage() {
     { value: 'inspection', label: 'Inspection', color: 'bg-purple-500' },
     { value: 'permit_expiry', label: 'Permit Expiry', color: 'bg-amber-500' },
     { value: 'payment_due', label: 'Payment Due', color: 'bg-indigo-500' },
-    { value: 'other', label: t('other'), color: 'bg-slate-500' },
+    { value: 'other', label: t('other') || 'Other', color: 'bg-slate-500' },
   ];
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showForm, setShowForm] = useState(false);
@@ -294,7 +294,7 @@ export default function CalendarPage() {
 
   return (
     <div>
-      <TopBar title={t('calendar')} />
+      <TopBar title={t('calendar') || 'Calendar'} />
       <div className="p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row w-full items-center justify-between gap-4">
@@ -508,7 +508,7 @@ export default function CalendarPage() {
 
             {/* Visibility Scope */}
             <div className="space-y-2">
-              <Label>{t('visibility') || 'Visibility'}</Label>
+              <Label>{t('visibility.label') || 'Visibility'}</Label>
               <Select 
                 value={form.visibility} 
                 onValueChange={v => {
@@ -524,9 +524,9 @@ export default function CalendarPage() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {form.visibility === 'private' && (t('privateHelp') || 'Only you can view this event.')}
-                {form.visibility === 'public' && (t('publicHelp') || 'Visible to all authenticated users in the organization.')}
-                {form.visibility === 'selected' && (t('selectedHelp') || 'Visible only to you and the specific team members selected below.')}
+                {form.visibility === 'private' && (t('privateHelp') || 'Only you can see this event')}
+                {form.visibility === 'public' && (t('publicHelp') || 'All authenticated users can see this event')}
+                {form.visibility === 'selected' && (t('selectedHelp') || 'Only the audience you select can see this event')}
               </p>
             </div>
 
@@ -585,7 +585,7 @@ export default function CalendarPage() {
               <Select value={form.project_id} onValueChange={v => setForm({...form, project_id: v})}>
                 <SelectTrigger><SelectValue placeholder={t('selectProject') || 'Select project (optional)'} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t('none') || 'None (General Event)'}</SelectItem>
+                  <SelectItem value="none">{t('none') || 'None'}</SelectItem>
                   {projects.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
@@ -625,17 +625,17 @@ export default function CalendarPage() {
                 
                 {selectedEvent.visibility === 'public' && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-primary/10 text-primary">
-                    <Globe className="w-3.5 h-3.5" /> {t('public') || 'Public'}
+                    <Globe className="w-3.5 h-3.5" /> {t('visibility.public') || 'Public'}
                   </span>
                 )}
                 {selectedEvent.visibility === 'selected' && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-muted text-muted-foreground">
-                    <Users className="w-3.5 h-3.5" /> {t('selectedAudience') || 'Selected Audience'}
+                    <Users className="w-3.5 h-3.5" /> {t('visibility.selected') || 'Selected Audience'}
                   </span>
                 )}
                 {(!selectedEvent.visibility || selectedEvent.visibility === 'private') && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-muted text-muted-foreground">
-                    <Lock className="w-3.5 h-3.5" /> {t('private') || 'Private'}
+                    <Lock className="w-3.5 h-3.5" /> {t('visibility.private') || 'Private'}
                   </span>
                 )}
               </div>
