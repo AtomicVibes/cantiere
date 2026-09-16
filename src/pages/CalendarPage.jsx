@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -22,32 +21,8 @@ import {
   AlertDialogTrigger 
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
-import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
-
-// ─────────── TEMP LOOP DETECTOR ───────────
-// Remove after fixing the infinite loop.
-const __loopState = new Map();
-function useLoopDetector(name, value) {
-  const serialized = (() => {
-    try { return JSON.stringify(value); }
-    catch { return String(value); }
-  })();
-  const prev = __loopState.get(name);
-  if (prev && prev.serialized === serialized) {
-    prev.count++;
-    if (prev.count === 50 || prev.count === 200) {
-      console.error(
-        `🔄 [LOOP DETECTED] "${name}" has not changed in ${prev.count} renders.\n` +
-        `Current value:`, value,
-        `\nThis state/prop is being set every render by an effect or handler.`
-      );
-    }
-  } else {
-    __loopState.set(name, { serialized, count: 0 });
-  }
-}
-// ─────────── END TEMP LOOP DETECTOR ───────────
 
 const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '', visibility: 'private', project_id: 'none' };
 
@@ -58,17 +33,26 @@ const toPgTime = (t) => {
 
 const fromPgTime = (t) => (t ? t.slice(0, 5) : '');
 
+const EVENT_TYPES_BASE = [
+  { value: 'deadline',      label: 'Deadline',      color: 'bg-red-500' },
+  { value: 'meeting',       label: 'Meeting',       color: 'bg-blue-500' },
+  { value: 'site_visit',    label: 'Site Visit',    color: 'bg-emerald-500' },
+  { value: 'inspection',    label: 'Inspection',    color: 'bg-purple-500' },
+  { value: 'permit_expiry', label: 'Permit Expiry', color: 'bg-amber-500' },
+  { value: 'payment_due',   label: 'Payment Due',   color: 'bg-indigo-500' },
+];
+
 export default function CalendarPage() {
   const { t } = useTranslation();
-  const EVENT_TYPES = [
-    { value: 'deadline', label: 'Deadline', color: 'bg-red-500' },
-    { value: 'meeting', label: 'Meeting', color: 'bg-blue-500' },
-    { value: 'site_visit', label: 'Site Visit', color: 'bg-emerald-500' },
-    { value: 'inspection', label: 'Inspection', color: 'bg-purple-500' },
-    { value: 'permit_expiry', label: 'Permit Expiry', color: 'bg-amber-500' },
-    { value: 'payment_due', label: 'Payment Due', color: 'bg-indigo-500' },
-    { value: 'other', label: t('other') || 'Other', color: 'bg-slate-500' },
-  ];
+  
+  const EVENT_TYPES = React.useMemo(
+    () => [
+      ...EVENT_TYPES_BASE,
+      { value: 'other', label: t('other') || 'Other', color: 'bg-slate-500' },
+    ],
+    [t]
+  );
+
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyEvent);
@@ -79,14 +63,6 @@ export default function CalendarPage() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const queryClient = useQueryClient();
-
-  useLoopDetector('currentDate', currentDate);
-  useLoopDetector('showForm', showForm);
-  useLoopDetector('form', form);
-  useLoopDetector('selectedAudience', selectedAudience);
-  useLoopDetector('audienceSearch', audienceSearch);
-  useLoopDetector('selectedDate', selectedDate);
-  useLoopDetector('selectedEvent', selectedEvent);
 
   const { data: authUser } = useQuery({
     queryKey: ['authUser'],
@@ -286,11 +262,14 @@ export default function CalendarPage() {
     },
   });
 
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
-  const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-  const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-  const days = eachDayOfInterval({ start: calStart, end: calEnd });
+  const monthStart = React.useMemo(() => startOfMonth(currentDate), [currentDate]);
+  const monthEnd = React.useMemo(() => endOfMonth(currentDate), [currentDate]);
+  const calStart = React.useMemo(() => startOfWeek(monthStart, { weekStartsOn: 1 }), [monthStart]);
+  const calEnd = React.useMemo(() => endOfWeek(monthEnd, { weekStartsOn: 1 }), [monthEnd]);
+  const days = React.useMemo(
+    () => eachDayOfInterval({ start: calStart, end: calEnd }),
+    [calStart, calEnd]
+  );
 
   const getEventsForDay = (day) => events.filter(e => e.date && isSameDay(new Date(e.date), day));
   const getEventColor = (type) => EVENT_TYPES.find(t => t.value === type)?.color || 'bg-slate-500';
@@ -322,8 +301,6 @@ export default function CalendarPage() {
         (m.department || '').toLowerCase().includes(audienceSearch.toLowerCase())
       );
   }, [teamMembers, audienceSearch]);
-
-  console.log('[audience render]', filteredTeamMembers.map(m => m.user_id));
 
   const handleDayClick = (day) => {
     setSelectedDate(day);
@@ -609,7 +586,12 @@ export default function CalendarPage() {
                           isChecked ? "bg-primary/10 border border-primary/30" : "hover:bg-muted"
                         )}
                       >
-                        <Checkbox checked={isChecked} onCheckedChange={() => {}} />
+                        <div className={cn(
+                          "w-4 h-4 rounded border flex items-center justify-center flex-shrink-0",
+                          isChecked ? "bg-primary border-primary" : "border-input"
+                        )}>
+                          {isChecked && <Check className="w-3 h-3 text-primary-foreground" />}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-foreground truncate">{member.full_name}</p>
                           {member.job_title && <p className="text-[10px] text-muted-foreground truncate">{member.job_title}</p>}
