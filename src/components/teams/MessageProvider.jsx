@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { MessageSquare, Mic, Send, Square } from 'lucide-react';
@@ -12,6 +12,7 @@ import AudioMessagePlayer from './AudioMessagePlayer';
 export default function MessagePopover({ member }) {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [recording, setRecording] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(60);
@@ -28,19 +29,18 @@ export default function MessagePopover({ member }) {
   const senderId = user?.id;
   const receiverId = member?.id;
 
-  const sortedMessages = useMemo(
-    () => [...messages].sort((a, b) => {
+  // Stabilize sorting by a content signature (length + last id) rather than
+  // the array reference, so stable content never recomputes a new array.
+  const messagesSignature = messages.length + ':' + (messages[messages.length - 1]?.id || '');
+  const sortedMessages = useMemo(() => {
+    return [...messages].sort((a, b) => {
       const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       return t !== 0 ? t : (a.id || '').localeCompare(b.id || '');
-    }),
-    [messages]
-  );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messagesSignature]);
 
-  const scrollToBottom = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
-  }, []);
+  console.log('[render] sorted length', sortedMessages.length, 'last', sortedMessages[sortedMessages.length - 1]?.id);
 
   // Auto-scroll only when a genuinely new last message arrives
   const lastMessageId = sortedMessages[sortedMessages.length - 1]?.id;
@@ -49,8 +49,14 @@ export default function MessagePopover({ member }) {
     if (!lastMessageId) return;
     if (previousLastId.current === lastMessageId) return;
     previousLastId.current = lastMessageId;
-    scrollToBottom();
-  }, [lastMessageId, scrollToBottom]);
+    const el = scrollRef.current;
+    if (!el) return;
+    // Use requestAnimationFrame once to wait for DOM, then instant scroll
+    console.log('[scroll] fire for', lastMessageId);
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+    });
+  }, [lastMessageId]);
 
   // Historical feed load + real-time subscription
   useEffect(() => {
@@ -63,7 +69,17 @@ export default function MessagePopover({ member }) {
         .or(`and(sender_id.eq.${senderId},receiver_id.eq.${receiverId}),and(sender_id.eq.${receiverId},receiver_id.eq.${senderId})`)
         .order('created_at', { ascending: true });
       if (!error && data) {
-        setMessages(data);
+        setMessages(prev => {
+          const seen = new Set(prev.map(m => m.id));
+          const merged = [...prev];
+          for (const m of data) {
+            if (!seen.has(m.id)) {
+              seen.add(m.id);
+              merged.push(m);
+            }
+          }
+          return merged;
+        });
       }
     };
 
@@ -75,16 +91,24 @@ export default function MessagePopover({ member }) {
         { event: 'INSERT', schema: 'public', table: 'messages',
           filter: `receiver_id=eq.${receiverId}` },
         (payload) => {
+          console.log('[rt] msg', payload.new.id, 'sender', payload.new.sender_id);
           if (payload.new.sender_id === senderId) {
-            setMessages(prev => [...prev, payload.new]);
+            setMessages(prev => {
+              if (prev.some(m => m.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
           }
         })
       .on('postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages',
           filter: `receiver_id=eq.${senderId}` },
         (payload) => {
+          console.log('[rt] msg', payload.new.id, 'sender', payload.new.sender_id);
           if (payload.new.sender_id === receiverId) {
-            setMessages(prev => [...prev, payload.new]);
+            setMessages(prev => {
+              if (prev.some(m => m.id === payload.new.id)) return prev;
+              return [...prev, payload.new];
+            });
           }
         })
       .subscribe();
@@ -208,31 +232,20 @@ export default function MessagePopover({ member }) {
   if (!member) return null;
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8">
-          <MessageSquare className="w-3.5 h-3.5" />
-          {t('messageButton')}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-96 p-0"
-        side="top"
-        align="end"
-        sideOffset={8}
-        collisionPadding={16}
-        avoidCollisions={true}
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
-        <div className="flex flex-col h-[420px]">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
-              {member.full_name?.charAt(0)?.toUpperCase()}
-            </div>
-            <p className="text-sm font-semibold">{member.full_name?.split(' ')[0]}</p>
-          </div>
+    <>
+      <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={() => setOpen(true)}>
+        <MessageSquare className="w-3.5 h-3.5" />
+        {t('messageButton')}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="w-96 p-0">
+          <DialogHeader className="px-4 py-3 border-b border-border">
+            <DialogTitle className="text-sm font-semibold">
+              {member.full_name?.split(' ')[0]}
+            </DialogTitle>
+          </DialogHeader>
 
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3" style={{ contain: 'strict' }}>
             {messages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <p className="text-sm text-muted-foreground text-center">
@@ -304,8 +317,8 @@ export default function MessagePopover({ member }) {
               </Button>
             </div>
           </div>
-        </div>
-      </PopoverContent>
-    </Popover>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
