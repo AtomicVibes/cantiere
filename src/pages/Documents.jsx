@@ -86,21 +86,38 @@ export default function Documents() {
     if (!form.name) return;
     setUploading(true);
     try {
+      const debugUpload = (message, details = {}) => {
+        if (import.meta.env.DEV) console.info(`[Documents] ${message}`, details);
+      };
+
+      debugUpload('UPLOAD START');
       let file_url = '';
       if (file) {
+        debugUpload('FILE SELECTED', {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+        });
+        debugUpload('SUPABASE STORAGE UPLOAD START');
         const result = await base44.integrations.Core.UploadFile({ file });
         file_url = result.file_url;
+        debugUpload('SUPABASE STORAGE UPLOAD RESULT', { uploaded: !!file_url });
       }
-      await createMutation.mutateAsync({
+      debugUpload('DATABASE INSERT START');
+      const createdDocument = await createMutation.mutateAsync({
         ...form,
         file_url,
         file_format: file?.name?.split('.').pop() || '',
         file_size: file?.size || 0,
       });
+      debugUpload('DATABASE INSERT RESULT', { saved: true, id: createdDocument?.id });
+      debugUpload('UPLOAD COMPLETE');
       setShowUpload(false);
       setForm({ name: '', type: 'other', notes: '' });
       setFile(null);
-    } catch {
+    } catch (error) {
+      console.error('[Documents] upload failed:', error);
+      toast.error(error?.message || 'Failed to upload document. Please try again.');
     } finally {
       setUploading(false);
     }

@@ -16,6 +16,25 @@ const toPgTime = (t) => {
   return t.length === 5 ? `${t}:00` : t;
 };
 
+const isDocumentTable = (tableName) => tableName === 'documents';
+
+const resolveDocumentUrls = async (records, tableName) => {
+  if (!isDocumentTable(tableName)) return records;
+
+  return Promise.all((records || []).map(async (record) => {
+    if (!record.file_url || record.file_url.startsWith('http')) return record;
+
+    const { data, error } = await supabase.storage
+      .from('documents')
+      .createSignedUrl(record.file_url, 3600);
+    if (error) {
+      console.warn('[documents] failed to create signed URL:', error.message);
+      return record;
+    }
+    return { ...record, file_url: data?.signedUrl || record.file_url };
+  }));
+};
+
 export const base44 = {
   auth: {
     me: async () => {
@@ -63,7 +82,7 @@ export const base44 = {
           const { data, error } = await query;
           console.log(`[base44→supabase] ${entityName} list result:`, { data, error });
           if (error) throw error;
-          return data ?? [];
+          return isDocumentTable(tableName) ? resolveDocumentUrls(data ?? [], tableName) : (data ?? []);
         },
         find: async (id) => {
           console.log(`[base44→supabase] ${entityName} find:`, { id });
@@ -149,6 +168,25 @@ export const base44 = {
       };
     }
   }),
+  integrations: {
+    Core: {
+      UploadFile: async ({ file }) => {
+        if (!file) throw new Error('A file is required');
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) throw new Error('Not authenticated — cannot upload file');
+
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filePath = `${user.id}/${crypto.randomUUID()}-${safeName}`;
+        const { error } = await supabase.storage
+          .from('documents')
+          .upload(filePath, file, { contentType: file.type || undefined, upsert: false });
+        if (error) throw error;
+
+        return { file_url: filePath };
+      },
+    },
+  },
   request: async (path, opts) => {
     console.log(`[base44→supabase] request:`, { path, opts });
     const res = await fetch(path, opts);
