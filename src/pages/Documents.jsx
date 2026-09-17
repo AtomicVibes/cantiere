@@ -21,6 +21,7 @@ import { Search, FileText, Upload, ExternalLink, Archive, RotateCcw, Trash2, Loa
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { useAuth } from '@/lib/AuthContext';
 import { useDocumentFormFields } from '@/hooks/useFormSchema';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { PERMISSIONS } from '@/lib/permissions';
@@ -42,6 +43,7 @@ export default function Documents() {
   const docTypeOptions = useMemo(() => DOC_CATEGORIES.map(c => ({ value: c, label: t(c) })), [t]);
   const { dir } = useDirection();
   const { role } = useUserRole();
+  const { user: currentUser } = useAuth();
   const { isSuperAdmin } = useIsSuperAdmin();
   const canUpload = PERMISSIONS.canUploadDocument.includes(role);
   const canDelete = PERMISSIONS.canDeleteDocument.includes(role);
@@ -60,20 +62,20 @@ export default function Documents() {
   const queryClient = useQueryClient();
 
   const { data: documents = [] } = useQuery({
-    queryKey: ['documents'],
+    queryKey: ['documents', currentUser?.id],
+    enabled: !!currentUser,
     queryFn: () => base44.entities.Document.list('-created_date'),
-    initialData: [],
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Document.create(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] }),
     onError: (err) => handleMutationError(err, t, toast),
   });
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Document.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
       toast.success('Document deleted');
     },
     onError: (err) => {
@@ -191,7 +193,7 @@ export default function Documents() {
       await Promise.all(idsArr.map(id => base44.entities.Document.update(id, { archived: true })));
       toast.success(`Archived ${idsArr.length} document${idsArr.length !== 1 ? 's' : ''}`);
       setSelectedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
     } catch (err) {
       toast.error(err.message || 'Failed to archive');
     } finally {
@@ -206,7 +208,7 @@ export default function Documents() {
       await Promise.all(idsArr.map(id => base44.entities.Document.update(id, { archived: false })));
       toast.success(`Restored ${idsArr.length} document${idsArr.length !== 1 ? 's' : ''}`);
       setSelectedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
     } catch (err) {
       toast.error(err.message || 'Failed to restore');
     } finally {
@@ -236,7 +238,7 @@ export default function Documents() {
       setSelectedIds(new Set());
       setConfirmDeleteOpen(false);
       setDeleteTarget(null);
-      queryClient.invalidateQueries({ queryKey: ['documents'] });
+      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
     } catch (err) {
       toast.error(err.message || 'Failed to delete');
     } finally {

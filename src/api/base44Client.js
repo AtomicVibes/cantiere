@@ -78,6 +78,13 @@ export const base44 = {
         list: async (sortParam) => {
           console.log(`[base44→supabase] ${entityName} (${tableName}) list:`, { sortParam });
           let query = supabase.from(tableName).select('*');
+
+          if (isDocumentTable(tableName)) {
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            if (userError) throw userError;
+            if (!user) throw new Error('Not authenticated — cannot list documents');
+            query = query.eq('user_id', user.id);
+          }
           
           if (sortParam) {
             const desc = sortParam.startsWith('-');
