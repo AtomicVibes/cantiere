@@ -31,7 +31,11 @@ const resolveDocumentUrls = async (records, tableName) => {
       console.warn('[documents] failed to create signed URL:', error.message);
       return record;
     }
-    return { ...record, file_url: data?.signedUrl || record.file_url };
+    return {
+      ...record,
+      storage_path: record.file_url,
+      file_url: data?.signedUrl || record.file_url,
+    };
   }));
 };
 
@@ -184,6 +188,11 @@ export const base44 = {
         if (error) throw error;
 
         return { file_url: filePath };
+      },
+      DeleteFile: async ({ filePath }) => {
+        if (!filePath || filePath.startsWith('http')) return;
+        const { error } = await supabase.storage.from('documents').remove([filePath]);
+        if (error) throw error;
       },
     },
   },

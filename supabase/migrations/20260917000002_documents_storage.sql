@@ -1,8 +1,4 @@
--- Private storage for Documents-tab uploads.
-
-insert into storage.buckets (id, name, public)
-values ('documents', 'documents', false)
-on conflict (id) do nothing;
+-- RLS policies for the existing private `documents` storage bucket.
 
 drop policy if exists "Authenticated users can upload documents" on storage.objects;
 create policy "Authenticated users can upload documents"

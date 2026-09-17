@@ -31,6 +31,12 @@ const DOC_CATEGORIES = [
   'video', 'audio_note', 'cad_file', 'report', 'other',
 ];
 
+const MAX_DOCUMENT_SIZE = 50 * 1024 * 1024;
+const SUPPORTED_DOCUMENT_TYPES = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf', 'video/mp4', 'video/webm', 'video/quicktime',
+]);
+
 export default function Documents() {
   const { t } = useTranslation();
   const docTypeOptions = useMemo(() => DOC_CATEGORIES.map(c => ({ value: c, label: t(c) })), [t]);
@@ -92,7 +98,14 @@ export default function Documents() {
 
       debugUpload('UPLOAD START');
       let file_url = '';
+      let uploadedPath = '';
       if (file) {
+        if (!SUPPORTED_DOCUMENT_TYPES.has(file.type)) {
+          throw new Error('Unsupported file type. Use JPG, PNG, WebP, GIF, PDF, MP4, WebM, or MOV.');
+        }
+        if (file.size > MAX_DOCUMENT_SIZE) {
+          throw new Error('File is too large. The maximum size is 50 MB.');
+        }
         debugUpload('FILE SELECTED', {
           name: file.name,
           type: file.type,
@@ -101,15 +114,28 @@ export default function Documents() {
         debugUpload('SUPABASE STORAGE UPLOAD START');
         const result = await base44.integrations.Core.UploadFile({ file });
         file_url = result.file_url;
+        uploadedPath = file_url;
         debugUpload('SUPABASE STORAGE UPLOAD RESULT', { uploaded: !!file_url });
       }
       debugUpload('DATABASE INSERT START');
-      const createdDocument = await createMutation.mutateAsync({
-        ...form,
-        file_url,
-        file_format: file?.name?.split('.').pop() || '',
-        file_size: file?.size || 0,
-      });
+      let createdDocument;
+      try {
+        createdDocument = await createMutation.mutateAsync({
+          ...form,
+          file_url,
+          file_format: file?.name?.split('.').pop() || '',
+          file_size: file?.size || 0,
+        });
+      } catch (error) {
+        if (uploadedPath) {
+          try {
+            await base44.integrations.Core.DeleteFile({ filePath: uploadedPath });
+          } catch (cleanupError) {
+            console.error('[Documents] failed to clean up uploaded file:', cleanupError);
+          }
+        }
+        throw error;
+      }
       debugUpload('DATABASE INSERT RESULT', { saved: true, id: createdDocument?.id });
       debugUpload('UPLOAD COMPLETE');
       setShowUpload(false);
@@ -195,7 +221,13 @@ export default function Documents() {
       let ids = [];
       if (deleteTarget.mode === 'selected') ids = [...selectedIds];
       else if (deleteTarget.mode === 'single') ids = [deleteTarget.id];
-      await Promise.all(ids.map(id => base44.entities.Document.delete(id)));
+      await Promise.all(ids.map(async (id) => {
+        const document = documents.find(item => item.id === id);
+        await base44.entities.Document.delete(id);
+        if (document?.storage_path) {
+          await base44.integrations.Core.DeleteFile({ filePath: document.storage_path });
+        }
+      }));
       toast.success(`Deleted ${ids.length} document${ids.length !== 1 ? 's' : ''}`);
       setSelectedIds(new Set());
       setConfirmDeleteOpen(false);
@@ -353,7 +385,7 @@ export default function Documents() {
                 <SelectContent>{typeOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>{t('file')}</Label><Input type="file" onChange={e => setFile(e.target.files[0])} /></div>
+            <div><Label>{t('file')}</Label><Input type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime" onChange={e => setFile(e.target.files[0])} /></div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowUpload(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : t('upload')}</Button>
