@@ -21,6 +21,7 @@ import {
   AlertDialogTrigger 
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/lib/AuthContext';
 import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
@@ -44,6 +45,7 @@ const EVENT_TYPES_BASE = [
 
 export default function CalendarPage() {
   const { t } = useTranslation();
+  const { user: currentUser } = useAuth();
   
   const EVENT_TYPES = React.useMemo(
     () => [
@@ -64,16 +66,11 @@ export default function CalendarPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: authUser } = useQuery({
-    queryKey: ['authUser'],
-    queryFn: async () => {
-      const { data } = await supabase.auth.getUser();
-      return data?.user || null;
-    },
-  });
-
   const { data: events = [], isLoading } = useQuery({
-    queryKey: ['calendarEvents'],
+    queryKey: ['calendarEvents', currentUser?.id],
+    enabled: !!currentUser,
+    staleTime: 0,
+    refetchOnMount: true,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('events')
@@ -169,17 +166,11 @@ export default function CalendarPage() {
 
   const createMutation = useMutation({
     mutationFn: async (payload) => {
-      const { data: userData, error: userErr } = await supabase.auth.getUser();
-      if (userErr || !userData?.user) {
-        throw new Error('Not authenticated — cannot save event');
-      }
-
       if (payload.visibility === 'selected' && selectedAudience.length === 0) {
         throw new Error('Please select at least one audience member for selected visibility.');
       }
 
       const row = {
-        user_id: userData.user.id,
         title: payload.title?.trim(),
         description: payload.description ? payload.description.trim().slice(0, 150) : null,
         type: payload.type || 'other',
@@ -194,27 +185,24 @@ export default function CalendarPage() {
         throw new Error('Time is required');
       }
 
-      const { data: newEvent, error } = await supabase
-        .from('events')
-        .insert(row)
-        .select()
-        .single();
+      const { data: newEvent, error } = await supabase.rpc('create_event_with_audience', {
+        p_title: row.title,
+        p_description: row.description,
+        p_type: row.type,
+        p_date: row.date,
+        p_time: row.time,
+        p_location: row.location,
+        p_visibility: row.visibility,
+        p_project_id: row.project_id,
+        p_audience_user_ids: selectedAudience,
+      });
 
       if (error) throw error;
-
-      if (row.visibility === 'selected' && selectedAudience.length > 0) {
-        const audienceRows = selectedAudience.map(uid => ({
-          event_id: newEvent.id,
-          user_id: uid,
-        }));
-        const { error: audErr } = await supabase.from('event_audience').insert(audienceRows);
-        if (audErr) throw audErr;
-      }
-
+      if (!newEvent) throw new Error('Event was not returned after saving');
       return newEvent;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['calendarEvents', currentUser?.id] });
       setShowForm(false);
       setForm(emptyEvent);
       setSelectedAudience([]);
@@ -231,7 +219,7 @@ export default function CalendarPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['calendarEvents', currentUser?.id] });
       setShowDeleteDialog(false);
       setSelectedEvent(null);
     },
@@ -253,7 +241,7 @@ export default function CalendarPage() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendarEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['calendarEvents', currentUser?.id] });
       setSelectedEvent(null);
     },
     onError: (err) => {
@@ -317,7 +305,7 @@ export default function CalendarPage() {
     }
   };
 
-  const isOwner = selectedEvent && authUser && selectedEvent.user_id === authUser.id;
+  const isOwner = selectedEvent && currentUser && selectedEvent.user_id === currentUser.id;
 
   return (
     <div>
