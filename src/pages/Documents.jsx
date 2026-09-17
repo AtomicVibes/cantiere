@@ -54,6 +54,9 @@ export default function Documents() {
   const [form, setForm] = useState({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
   const [file, setFile] = useState(null);
   const [selectedAudience, setSelectedAudience] = useState([]);
+  const [accessDocument, setAccessDocument] = useState(null);
+  const [accessVisibility, setAccessVisibility] = useState('private');
+  const [accessAudience, setAccessAudience] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -107,6 +110,30 @@ export default function Documents() {
       }
     },
   });
+
+  const saveAccess = async () => {
+    if (!accessDocument) return;
+    if (accessVisibility === 'selected' && accessAudience.length === 0) {
+      toast.error('Please select at least one audience member.');
+      return;
+    }
+    const { error: updateError } = await supabase.from('documents').update({ visibility: accessVisibility }).eq('id', accessDocument.id).eq('user_id', currentUser.id);
+    if (updateError) throw updateError;
+    const { error: deleteAudienceError } = await supabase.from('document_audience').delete().eq('document_id', accessDocument.id);
+    if (deleteAudienceError) throw deleteAudienceError;
+    if (accessVisibility === 'selected') {
+      const { error: insertAudienceError } = await supabase.from('document_audience').insert(accessAudience.map(userId => ({ document_id: accessDocument.id, user_id: userId })));
+      if (insertAudienceError) throw insertAudienceError;
+    }
+    setAccessDocument(null);
+    queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
+  };
+
+  const removeProject = async (document) => {
+    const { error } = await supabase.rpc('remove_document_project', { p_document_id: document.id });
+    if (error) throw error;
+    queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
+  };
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -400,6 +427,17 @@ export default function Documents() {
                   <span>{doc.created_at ? format(new Date(doc.created_at), 'MMM d, yyyy') : ''}</span>
                 </div>
                 {doc.project_id && <p className="text-xs text-primary mt-1">{projects.find(project => project.id === doc.project_id)?.name || 'Project assigned'}</p>}
+                {doc.user_id === currentUser?.id && (
+                  <div className="flex gap-2 mt-2">
+                    <Button type="button" size="sm" variant="outline" onClick={async () => {
+                      const { data: audience } = await supabase.from('document_audience').select('user_id').eq('document_id', doc.id);
+                      setAccessDocument(doc);
+                      setAccessVisibility(doc.visibility || 'private');
+                      setAccessAudience((audience || []).map(item => item.user_id));
+                    }}>Edit access</Button>
+                    {doc.project_id && <Button type="button" size="sm" variant="ghost" onClick={() => removeProject(doc)}>Remove project</Button>}
+                  </div>
+                )}
                 {doc.notes && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{doc.notes}</p>}
               </div>
             ))}
@@ -455,6 +493,18 @@ export default function Documents() {
               <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : t('upload')}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!accessDocument} onOpenChange={open => !open && setAccessDocument(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit document access</DialogTitle></DialogHeader>
+          <Select value={accessVisibility} onValueChange={setAccessVisibility}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="private">Private</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="selected">Selected audience</SelectItem></SelectContent>
+          </Select>
+          {accessVisibility === 'selected' && <div className="space-y-2 border rounded-md p-3">{audienceMembers.map(member => <label key={member.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessAudience.includes(member.id)} onChange={() => setAccessAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />{member.full_name || member.email}</label>)}</div>}
+          <DialogFooter><Button variant="outline" onClick={() => setAccessDocument(null)}>Cancel</Button><Button onClick={() => saveAccess().catch(error => toast.error(error.message))}>Save access</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

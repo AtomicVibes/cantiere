@@ -148,6 +148,24 @@ $$;
 revoke all on function public.create_document_with_audience(text, text, text, bigint, text, uuid, text, text, uuid[]) from public;
 grant execute on function public.create_document_with_audience(text, text, text, bigint, text, uuid, text, text, uuid[]) to authenticated;
 
+create or replace function public.remove_document_project(p_document_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_document_owner(p_document_id, auth.uid()) then
+    raise exception 'Not authorized';
+  end if;
+  delete from public.project_timeline where document_id = p_document_id;
+  update public.documents set project_id = null, updated_at = now() where id = p_document_id;
+end;
+$$;
+
+revoke all on function public.remove_document_project(uuid) from public;
+grant execute on function public.remove_document_project(uuid) to authenticated;
+
 -- Only authorized users should see document-backed timeline entries.
 drop policy if exists "Admins can read all timeline entries" on public.project_timeline;
 drop policy if exists "Clients can read timeline for own projects" on public.project_timeline;
