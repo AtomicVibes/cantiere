@@ -89,7 +89,10 @@ export default function Documents() {
       toast.error(t('accessDenied'));
       return;
     }
-    if (!form.name) return;
+    if (!form.name || !file) {
+      toast.error('Please provide a document name and select a file.');
+      return;
+    }
     setUploading(true);
     try {
       const debugUpload = (message, details = {}) => {
@@ -123,6 +126,7 @@ export default function Documents() {
         createdDocument = await createMutation.mutateAsync({
           ...form,
           file_url,
+          mime_type: file?.type || 'application/octet-stream',
           file_format: file?.name?.split('.').pop() || '',
           file_size: file?.size || 0,
         });

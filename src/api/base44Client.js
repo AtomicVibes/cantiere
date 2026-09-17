@@ -22,20 +22,24 @@ const resolveDocumentUrls = async (records, tableName) => {
   if (!isDocumentTable(tableName)) return records;
 
   return Promise.all((records || []).map(async (record) => {
-    if (!record.file_url || record.file_url.startsWith('http')) return record;
+    const storagePath = record.storage_path;
+    const document = {
+      ...record,
+      name: record.file_name,
+      file_url: storagePath,
+      file_format: record.mime_type?.split('/').pop() || '',
+      storage_path: storagePath,
+    };
+    if (!storagePath) return document;
 
     const { data, error } = await supabase.storage
       .from('documents')
-      .createSignedUrl(record.file_url, 3600);
+      .createSignedUrl(storagePath, 3600);
     if (error) {
       console.warn('[documents] failed to create signed URL:', error.message);
-      return record;
+      return document;
     }
-    return {
-      ...record,
-      storage_path: record.file_url,
-      file_url: data?.signedUrl || record.file_url,
-    };
+    return { ...document, file_url: data?.signedUrl || storagePath };
   }));
 };
 
@@ -107,6 +111,20 @@ export const base44 = {
           }
 
           let processedPayload = { ...payload, user_id: user.id };
+
+          if (isDocumentTable(tableName)) {
+            processedPayload = {
+              user_id: user.id,
+              file_name: payload.name || payload.file_name,
+              storage_path: payload.file_url || payload.storage_path,
+              mime_type: payload.mime_type,
+              file_size: payload.file_size || 0,
+              type: payload.type || 'other',
+              notes: payload.notes || null,
+              project_id: payload.project_id || null,
+              archived: false,
+            };
+          }
 
           // Specific adjustments for events table
           if (tableName === 'events') {
