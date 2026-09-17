@@ -66,7 +66,7 @@ export default function CalendarPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: events = [], isLoading } = useQuery({
+  const { data: events = [], isLoading, isError, error } = useQuery({
     queryKey: ['calendarEvents', currentUser?.id],
     enabled: !!currentUser,
     staleTime: 0,
@@ -84,7 +84,6 @@ export default function CalendarPage() {
       if (error) throw error;
       return data ?? [];
     },
-    initialData: [],
   });
 
   const { data: projects = [] } = useQuery({
@@ -415,7 +414,13 @@ export default function CalendarPage() {
                 <div className="text-center py-12 text-sm text-muted-foreground">{t('loading') || 'Loading…'}</div>
               )}
 
-              {!isLoading && panelEvents.length === 0 && (
+              {isError && (
+                <div className="text-center py-12 text-sm text-destructive">
+                  {error?.message || t('errorLoadingEvents') || 'Unable to load events.'}
+                </div>
+              )}
+
+              {!isLoading && !isError && panelEvents.length === 0 && (
                 <div className="text-center py-12 text-sm text-muted-foreground">
                   {selectedDate ? (t('noEventsOnThisDay') || 'No events on this day.') : (t('noUpcomingEvents') || 'No upcoming events.')}
                 </div>
