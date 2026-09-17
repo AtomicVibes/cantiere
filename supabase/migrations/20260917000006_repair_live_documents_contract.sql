@@ -32,6 +32,20 @@ create table if not exists public.document_audience (
   constraint document_audience_unique unique (document_id, user_id)
 );
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.document_audience'::regclass
+      and conname = 'document_audience_unique'
+  ) then
+    alter table public.document_audience
+      add constraint document_audience_unique unique (document_id, user_id);
+  end if;
+end
+$$;
+
 alter table public.project_timeline
   add column if not exists document_id uuid null references public.documents(id) on delete cascade;
 
