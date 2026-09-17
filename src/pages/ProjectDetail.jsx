@@ -18,7 +18,7 @@ import {
   Plus, Loader2, Archive
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
-import { findEntity, getEntity, createEntity, updateEntity } from '@/services/dataService';
+import { getEntity, createEntity, updateEntity } from '@/services/dataService';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -28,6 +28,7 @@ import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import ProjectAssignmentDropdown from '@/components/projects/ProjectAssignmentDropdown';
+import DocumentPreview from '@/components/shared/DocumentPreview';
 
 export default function ProjectDetail() {
   const { t } = useTranslation();
@@ -50,8 +51,26 @@ export default function ProjectDetail() {
 
   const { data: timeline = [] } = useQuery({
     queryKey: ['timeline', id],
-    queryFn: () => findEntity('project_timeline', { project_id: id }, { order: { column: 'created_at', direction: 'desc' } }),
-    initialData: [],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('project_timeline')
+        .select('*, document:documents(*)')
+        .eq('project_id', id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return Promise.all((data || []).map(async entry => {
+        if (!entry.document?.storage_path) return entry;
+        const { data: signed } = await supabase.storage.from('documents').createSignedUrl(entry.document.storage_path, 3600);
+        return {
+          ...entry,
+          document: {
+            ...entry.document,
+            name: entry.document.file_name,
+            file_url: signed?.signedUrl || entry.document.storage_path,
+          },
+        };
+      }));
+    },
   });
 
   const { data: clients = [] } = useQuery({
@@ -341,6 +360,7 @@ export default function ProjectDetail() {
                       </div>
                       <StatusBadge status={entry.status} />
                     </div>
+                    {entry.document && <DocumentPreview document={entry.document} />}
                     <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />

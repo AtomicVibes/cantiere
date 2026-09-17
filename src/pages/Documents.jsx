@@ -26,6 +26,8 @@ import { useDocumentFormFields } from '@/hooks/useFormSchema';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
+import { supabase } from '@/services/supabase';
+import DocumentPreview from '@/components/shared/DocumentPreview';
 
 const DOC_CATEGORIES = [
   'blueprint', 'contract', 'permit', 'invoice', 'photo',
@@ -49,8 +51,9 @@ export default function Documents() {
   const canDelete = PERMISSIONS.canDeleteDocument.includes(role);
   const { fields, typeOptions } = useDocumentFormFields();
   const [showUpload, setShowUpload] = useState(false);
-  const [form, setForm] = useState({ name: '', type: 'other', notes: '' });
+  const [form, setForm] = useState({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
   const [file, setFile] = useState(null);
+  const [selectedAudience, setSelectedAudience] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -60,6 +63,26 @@ export default function Documents() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const queryClient = useQueryClient();
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['documentProjects'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('projects').select('id, name').order('name');
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!currentUser,
+  });
+
+  const { data: audienceMembers = [] } = useQuery({
+    queryKey: ['documentAudienceMembers'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, full_name, email').order('full_name');
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!currentUser,
+  });
 
   const { data: documents = [] } = useQuery({
     queryKey: ['documents', currentUser?.id],
@@ -93,6 +116,10 @@ export default function Documents() {
     }
     if (!form.name || !file) {
       toast.error('Please provide a document name and select a file.');
+      return;
+    }
+    if (form.visibility === 'selected' && selectedAudience.length === 0) {
+      toast.error('Please select at least one audience member.');
       return;
     }
     setUploading(true);
@@ -131,6 +158,9 @@ export default function Documents() {
           mime_type: file?.type || 'application/octet-stream',
           file_format: file?.name?.split('.').pop() || '',
           file_size: file?.size || 0,
+          project_id: form.project_id || null,
+          visibility: form.visibility,
+          audience_user_ids: selectedAudience,
         });
       } catch (error) {
         if (uploadedPath) {
@@ -145,7 +175,8 @@ export default function Documents() {
       debugUpload('DATABASE INSERT RESULT', { saved: true, id: createdDocument?.id });
       debugUpload('UPLOAD COMPLETE');
       setShowUpload(false);
-      setForm({ name: '', type: 'other', notes: '' });
+      setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
+      setSelectedAudience([]);
       setFile(null);
     } catch (error) {
       console.error('[Documents] upload failed:', error);
@@ -335,7 +366,7 @@ export default function Documents() {
                     {isSuperAdmin && (
                       <Checkbox checked={selectedIds.has(doc.id)} onCheckedChange={() => toggleSelect(doc.id)} className="mr-1" />
                     )}
-                    <FileText className="w-5 h-5 text-primary flex-shrink-0" />
+                    <DocumentPreview document={doc} compact />
                     <h3 className="font-medium truncate">{doc.name}</h3>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
@@ -365,8 +396,10 @@ export default function Documents() {
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Badge variant="secondary" className="text-xs">{getTypeLabel(doc.type)}</Badge>
                   {doc.file_format && <span>.{doc.file_format}</span>}
+                  {doc.visibility && <span className="capitalize">{doc.visibility}</span>}
                   <span>{doc.created_at ? format(new Date(doc.created_at), 'MMM d, yyyy') : ''}</span>
                 </div>
+                {doc.project_id && <p className="text-xs text-primary mt-1">{projects.find(project => project.id === doc.project_id)?.name || 'Project assigned'}</p>}
                 {doc.notes && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{doc.notes}</p>}
               </div>
             ))}
@@ -392,6 +425,31 @@ export default function Documents() {
               </Select>
             </div>
             <div><Label>{t('file')}</Label><Input type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime" onChange={e => setFile(e.target.files[0])} /></div>
+            <div>
+              <Label>Project</Label>
+              <Select value={form.project_id || 'none'} onValueChange={value => setForm({...form, project_id: value === 'none' ? null : value})}>
+                <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
+                <SelectContent><SelectItem value="none">No project</SelectItem>{projects.map(project => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Visibility</Label>
+              <Select value={form.visibility} onValueChange={value => { setForm({...form, visibility: value}); if (value !== 'selected') setSelectedAudience([]); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="private">Private</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="selected">Selected audience</SelectItem></SelectContent>
+              </Select>
+            </div>
+            {form.visibility === 'selected' && (
+              <div className="space-y-2 border rounded-md p-3">
+                <Label>Select audience</Label>
+                {audienceMembers.map(member => (
+                  <label key={member.id} className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={selectedAudience.includes(member.id)} onChange={() => setSelectedAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />
+                    {member.full_name || member.email}
+                  </label>
+                ))}
+              </div>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setShowUpload(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : t('upload')}</Button>

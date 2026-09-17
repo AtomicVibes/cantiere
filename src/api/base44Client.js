@@ -79,13 +79,6 @@ export const base44 = {
           console.log(`[base44→supabase] ${entityName} (${tableName}) list:`, { sortParam });
           let query = supabase.from(tableName).select('*');
 
-          if (isDocumentTable(tableName)) {
-            const { data: { user }, error: userError } = await supabase.auth.getUser();
-            if (userError) throw userError;
-            if (!user) throw new Error('Not authenticated — cannot list documents');
-            query = query.eq('user_id', user.id);
-          }
-          
           if (sortParam) {
             const desc = sortParam.startsWith('-');
             const field = desc ? sortParam.substring(1) : sortParam;
@@ -120,17 +113,20 @@ export const base44 = {
           let processedPayload = { ...payload, user_id: user.id };
 
           if (isDocumentTable(tableName)) {
-            processedPayload = {
-              user_id: user.id,
-              file_name: payload.name || payload.file_name,
-              storage_path: payload.file_url || payload.storage_path,
-              mime_type: payload.mime_type,
-              file_size: payload.file_size || 0,
-              type: payload.type || 'other',
-              notes: payload.notes || null,
-              project_id: payload.project_id || null,
-              archived: false,
-            };
+            const { data, error } = await supabase.rpc('create_document_with_audience', {
+              p_file_name: payload.name || payload.file_name,
+              p_storage_path: payload.file_url || payload.storage_path,
+              p_mime_type: payload.mime_type,
+              p_file_size: payload.file_size || 0,
+              p_type: payload.type || 'other',
+              p_project_id: payload.project_id || null,
+              p_notes: payload.notes || null,
+              p_visibility: payload.visibility || 'private',
+              p_audience_user_ids: payload.audience_user_ids || [],
+            });
+            console.log(`[base44→supabase] ${entityName} create result:`, { data, error });
+            if (error) throw error;
+            return data;
           }
 
           // Specific adjustments for events table
