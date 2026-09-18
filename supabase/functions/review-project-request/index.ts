@@ -19,6 +19,16 @@ function respond(data, status = 200) {
   });
 }
 
+async function audit(actor, payload) {
+  const { error } = await supabaseAdmin.rpc('write_audit_log', {
+    p_actor: actor,
+    ...payload,
+  });
+  if (error) {
+    console.error('[audit] write_audit_log failed:', error.message, payload);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -100,6 +110,14 @@ serve(async (req) => {
         return respond({ error: 'Failed to verify request.' }, 400);
       }
 
+      await audit(user.id, {
+        p_action_type: 'REQUEST_VERIFY',
+        p_message: 'Project request verified',
+        p_entity_type: 'project_request',
+        p_entity_id: request_id,
+        p_details: { status: 'verification', project_name: existingRequest.project_name },
+      });
+
       return respond({ request: { ...existingRequest, status: 'verification' } }, 200);
     }
 
@@ -121,6 +139,18 @@ serve(async (req) => {
         return respond({ error: 'Failed to reject request.' }, 400);
       }
 
+      await audit(user.id, {
+        p_action_type: 'REQUEST_REJECT',
+        p_message: 'Project request rejected',
+        p_entity_type: 'project_request',
+        p_entity_id: request_id,
+        p_details: {
+          status: 'rejected',
+          project_name: existingRequest.project_name,
+          rejection_reason: rejection_reason?.trim() || null,
+        },
+      });
+
       return respond({ request: { ...existingRequest, status: 'rejected', rejection_reason } }, 200);
     }
 
@@ -141,6 +171,26 @@ serve(async (req) => {
 
       if (!rpcResult?.success) {
         return respond({ error: rpcResult?.error || 'Failed to validate request.' }, 400);
+      }
+
+      await audit(user.id, {
+        p_action_type: 'REQUEST_APPROVE',
+        p_message: 'Project request approved',
+        p_entity_type: 'project_request',
+        p_entity_id: request_id,
+        p_project_id: rpcResult.project_id,
+        p_details: { status: 'validated', project_name: existingRequest.project_name, project_id: rpcResult.project_id },
+      });
+
+      if (rpcResult.project_id) {
+        await audit(user.id, {
+          p_action_type: 'PROJECT_CREATE',
+          p_message: 'Project created after request approval',
+          p_entity_type: 'project',
+          p_entity_id: rpcResult.project_id,
+          p_project_id: rpcResult.project_id,
+          p_details: { project_name: existingRequest.project_name, source_request_id: request_id },
+        });
       }
 
       return respond({

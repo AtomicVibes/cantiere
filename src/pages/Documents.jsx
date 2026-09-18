@@ -174,6 +174,16 @@ export default function Documents() {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      // Fire-and-forget so a slow audit write never blocks the download.
+      await supabase.rpc('write_audit_log', {
+        p_action_type: 'DOCUMENT_DOWNLOAD',
+        p_message: 'Document downloaded',
+        p_document_name: doc.file_name,
+        p_entity_type: 'document',
+        p_entity_id: doc.id,
+        p_project_id: doc.project_id || null,
+        p_details: { file_name: doc.file_name, mime_type: doc.mime_type, visibility: doc.visibility, project_id: doc.project_id },
+      });
     } catch (error) {
       logDocumentError('Download failed', error, { documentId: doc.id });
       toast.error(getDocumentUserFriendlyError(

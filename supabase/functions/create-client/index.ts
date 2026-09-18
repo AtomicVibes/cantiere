@@ -30,6 +30,22 @@ function respond(data, status = 200, origin) {
   });
 }
 
+async function audit(actor, payload) {
+  const { error } = await supabaseAdmin.rpc('write_audit_log', {
+    p_actor: actor,
+    ...payload,
+  });
+  if (error) {
+    console.error('[audit] write_audit_log failed:', error.message, payload);
+  }
+}
+
+async function roleName(roleId) {
+  if (!roleId) return null;
+  const { data } = await supabaseAdmin.from('roles').select('name').eq('id', roleId).maybeSingle();
+  return data?.name ?? null;
+}
+
 serve(async (req: { headers: { get: (arg0: string) => string; }; method: string; json: () => any; }) => {
   const origin = req.headers.get('origin') || '';
 
@@ -100,6 +116,12 @@ serve(async (req: { headers: { get: (arg0: string) => string; }; method: string;
         return respond({ error: 'Failed to update existing user.', detail: updateError.message }, 400, origin);
       }
 
+      const { data: existingProfile, error: existingProfileError } = await supabaseAdmin
+        .from('profiles')
+        .select('id, role_id')
+        .eq('id', existing.id)
+        .maybeSingle();
+
       const { error: upsertError } = await supabaseAdmin
         .from('profiles')
         .upsert({
@@ -113,6 +135,39 @@ serve(async (req: { headers: { get: (arg0: string) => string; }; method: string;
 
       if (upsertError) {
         return respond({ error: 'Failed to update profile.', detail: upsertError.message }, 400, origin);
+      }
+
+      await audit(user.id, {
+        p_action_type: 'CLIENT_CREATE',
+        p_message: 'Client account created for existing user',
+        p_entity_type: 'profile',
+        p_entity_id: existing.id,
+        p_details: {
+          email: existing.email,
+          profile_id: existing.id,
+          role_id: CLIENT_ROLE_ID,
+          role: 'client',
+        },
+        p_new_values: { role_id: CLIENT_ROLE_ID, email: existing.email },
+      });
+
+      if (existingProfileError || (existingProfile && existingProfile.role_id !== CLIENT_ROLE_ID)) {
+        const fromRoleId = existingProfileError ? null : existingProfile?.role_id ?? null;
+        await audit(user.id, {
+          p_action_type: 'ROLE_UPDATE',
+          p_message: 'User role updated to client',
+          p_entity_type: 'profile',
+          p_entity_id: existing.id,
+          p_details: {
+            profile_id: existing.id,
+            from_role_id: fromRoleId,
+            to_role_id: CLIENT_ROLE_ID,
+            from_role: await roleName(fromRoleId),
+            to_role: 'client',
+          },
+          p_old_values: fromRoleId ? { role_id: fromRoleId } : null,
+          p_new_values: { role_id: CLIENT_ROLE_ID },
+        });
       }
 
       return respond({ user: existing }, 200, origin);
@@ -131,6 +186,22 @@ serve(async (req: { headers: { get: (arg0: string) => string; }; method: string;
 
     if (createError) {
       return respond({ error: 'Failed to create user.', detail: createError.message }, 400, origin);
+    }
+
+    if (createData?.user) {
+      await audit(user.id, {
+        p_action_type: 'CLIENT_CREATE',
+        p_message: 'Client account created',
+        p_entity_type: 'profile',
+        p_entity_id: createData.user.id,
+        p_details: {
+          email: email,
+          profile_id: createData.user.id,
+          role_id: CLIENT_ROLE_ID,
+          role: 'client',
+        },
+        p_new_values: { role_id: CLIENT_ROLE_ID, email },
+      });
     }
 
     return respond({ user: createData.user }, 200, origin);

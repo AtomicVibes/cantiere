@@ -18,6 +18,16 @@ function respond(data, status = 200) {
   });
 }
 
+async function audit(actor, payload) {
+  const { error } = await supabaseAdmin.rpc('write_audit_log', {
+    p_actor: actor,
+    ...payload,
+  });
+  if (error) {
+    console.error('[audit] write_audit_log failed:', error.message, payload);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -95,6 +105,20 @@ serve(async (req) => {
       console.error('Failed to create project request:', insertError);
       return respond({ error: insertError.message, details: insertError.details }, 500);
     }
+
+    await audit(user.id, {
+      p_action_type: 'REQUEST_CREATE',
+      p_message: 'Project request created',
+      p_entity_type: 'project_request',
+      p_entity_id: newRequest.id,
+      p_details: {
+        status: 'pending',
+        project_name: project_name.trim(),
+        category: category || null,
+        budget: budget != null ? Number(budget) : null,
+        client_id: resolvedClientId,
+      },
+    });
 
     // Look up super_admin role ID, then notify all super admins
     const { data: superAdminRole } = await supabaseAdmin

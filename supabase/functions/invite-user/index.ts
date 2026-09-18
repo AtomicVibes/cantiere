@@ -19,6 +19,22 @@ function respond(data, status = 200) {
   });
 }
 
+async function audit(actor, payload) {
+  const { error } = await supabaseAdmin.rpc('write_audit_log', {
+    p_actor: actor,
+    ...payload,
+  });
+  if (error) {
+    console.error('[audit] write_audit_log failed:', error.message, payload);
+  }
+}
+
+async function roleName(roleId) {
+  if (!roleId) return null;
+  const { data } = await supabaseAdmin.from('roles').select('name').eq('id', roleId).maybeSingle();
+  return data?.name ?? null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -96,6 +112,12 @@ serve(async (req) => {
         return respond({ error: 'Failed to update existing user.', detail: updateError.message }, 400);
       }
 
+      const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, role_id')
+        .eq('id', existing.id)
+        .maybeSingle();
+
       const { error: upsertError } = await supabaseAdmin
         .from('profiles')
         .upsert({
@@ -111,6 +133,24 @@ serve(async (req) => {
 
       if (upsertError) {
         return respond({ error: 'Failed to update profile.', detail: upsertError.message }, 400);
+      }
+
+      if (existingProfile && existingProfile.role_id !== role_id) {
+        await audit(user.id, {
+          p_action_type: 'ROLE_UPDATE',
+          p_message: 'User role updated by invitation',
+          p_entity_type: 'profile',
+          p_entity_id: existing.id,
+          p_details: {
+            profile_id: existing.id,
+            from_role_id: existingProfile.role_id,
+            to_role_id: role_id,
+            from_role: await roleName(existingProfile.role_id),
+            to_role: await roleName(role_id),
+          },
+          p_old_values: { role_id: existingProfile.role_id },
+          p_new_values: { role_id },
+        });
       }
 
       return respond({ user: existing });
@@ -130,6 +170,22 @@ serve(async (req) => {
         return respond({ error: 'Failed to create user.', detail: createError.message }, 400);
       }
 
+      if (createData?.user) {
+        await audit(user.id, {
+          p_action_type: 'MEMBER_ADD',
+          p_message: 'Team member added',
+          p_entity_type: 'profile',
+          p_entity_id: createData.user.id,
+          p_details: {
+            profile_id: createData.user.id,
+            email: email,
+            role_id,
+            role: await roleName(role_id),
+          },
+          p_new_values: { role_id, email },
+        });
+      }
+
       return respond({ user: createData.user });
     }
 
@@ -144,6 +200,22 @@ serve(async (req) => {
     if (inviteError) {
       console.error('DEBUG - Admin API Error:', JSON.stringify(inviteError, null, 2));
       return respond({ error: 'Invitation failed', detail: inviteError.message }, 400);
+    }
+
+    if (inviteData?.user) {
+      await audit(user.id, {
+        p_action_type: 'MEMBER_ADD',
+        p_message: 'Team member invited',
+        p_entity_type: 'profile',
+        p_entity_id: inviteData.user.id,
+        p_details: {
+          profile_id: inviteData.user.id,
+          email: email,
+          role_id,
+          role: await roleName(role_id),
+        },
+        p_new_values: { role_id, email },
+      });
     }
 
     return respond({ user: inviteData.user });

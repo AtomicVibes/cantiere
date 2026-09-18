@@ -24,6 +24,16 @@ function error(message, detail, status = 400, extra = {}) {
   return respond({ message, detail, ...extra }, status);
 }
 
+async function audit(actor, payload) {
+  const { error } = await supabaseAdmin.rpc('write_audit_log', {
+    p_actor: actor,
+    ...payload,
+  });
+  if (error) {
+    console.error('[audit] write_audit_log failed:', error.message, payload);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -73,6 +83,19 @@ serve(async (req) => {
       return error('You cannot delete your own account.', 'Self-deletion blocked');
     }
 
+    const { data: targetProfile, error: targetProfileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, full_name, role_id')
+      .eq('id', user_id)
+      .maybeSingle();
+
+    if (targetProfileError) {
+      return error('Failed to load target user profile', targetProfileError.message);
+    }
+
+    if (!targetProfile) {
+      return respond({ success: true, note: 'User was already removed or never existed.' });
+    }
 
     const { error: deleteProfileError } = await supabaseAdmin
       .from('profiles')
@@ -98,6 +121,24 @@ serve(async (req) => {
         { code: deleteAuthError.code, details: deleteAuthError.details, hint: deleteAuthError.hint }
       );
     }
+
+    await audit(user.id, {
+      p_action_type: 'MEMBER_REMOVE',
+      p_message: 'User removed from workspace',
+      p_entity_type: 'profile',
+      p_entity_id: user_id,
+      p_details: {
+        profile_id: user_id,
+        email: targetProfile.email,
+        full_name: targetProfile.full_name,
+        role_id: targetProfile.role_id,
+      },
+      p_old_values: {
+        email: targetProfile.email,
+        full_name: targetProfile.full_name,
+        role_id: targetProfile.role_id,
+      },
+    });
 
     return respond({ success: true });
   } catch (err) {

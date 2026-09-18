@@ -5,20 +5,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
-import StatusBadge from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, UserCircle, Pencil, Trash2, Ban, Mail, Phone, Building2, Eye, EyeOff, ArrowUpFromLine } from 'lucide-react';
+import { Plus, Search, UserCircle, Pencil, Trash2, Ban, Mail, Phone, Eye, EyeOff, ArrowUpFromLine } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
@@ -116,18 +114,6 @@ export default function Clients() {
     },
     onSuccess: async ({ userId, newRoleId }) => {
       const roleName = teamRoles.find(r => r.id === newRoleId)?.name || 'unknown';
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error: auditError } = await supabase
-        .from('audit_logs')
-        .insert({
-          user_id: user?.id,
-          action_type: 'ROLE_UPDATE',
-          message: `Promoted ${userId} to ${roleName}`,
-          details: { target_user_id: userId, new_role: roleName },
-        });
-      if (auditError) {
-        console.warn('audit log insert failed:', auditError.message);
-      }
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['clients', 'dropdown'] });
       queryClient.invalidateQueries({ queryKey: ['clientCount'] });
@@ -135,7 +121,7 @@ export default function Clients() {
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['managers'] });
-      toast.success(`Promoted to ${roleName}`, { description: 'Audit log entry created' });
+      toast.success(`Promoted to ${roleName}`);
     },
     onError: (err) => {
       if (!handleMutationError(err, t, toast)) {

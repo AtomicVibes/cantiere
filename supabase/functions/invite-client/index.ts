@@ -21,6 +21,16 @@ function respond(data, status = 200) {
   });
 }
 
+async function audit(actor, payload) {
+  const { error } = await supabaseAdmin.rpc('write_audit_log', {
+    p_actor: actor,
+    ...payload,
+  });
+  if (error) {
+    console.error('[audit] write_audit_log failed:', error.message, payload);
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -101,6 +111,22 @@ serve(async (req) => {
         return respond({ error: 'Failed to create user.', detail: createError.message }, 400);
       }
 
+      if (createData?.user) {
+        await audit(user.id, {
+          p_action_type: 'CLIENT_CREATE',
+          p_message: 'Client account created',
+          p_entity_type: 'profile',
+          p_entity_id: createData.user.id,
+          p_details: {
+            email: email,
+            profile_id: createData.user.id,
+            role_id: CLIENT_ROLE_ID,
+            role: 'client',
+          },
+          p_new_values: { role_id: CLIENT_ROLE_ID, email },
+        });
+      }
+
       return respond({ user: createData.user });
     }
 
@@ -115,6 +141,22 @@ serve(async (req) => {
     if (inviteError) {
       console.error('DEBUG - Admin API Error:', JSON.stringify(inviteError, null, 2));
       return respond({ error: 'Invitation failed', detail: inviteError.message }, 400);
+    }
+
+    if (inviteData?.user) {
+      await audit(user.id, {
+        p_action_type: 'CLIENT_CREATE',
+        p_message: 'Client invited',
+        p_entity_type: 'profile',
+        p_entity_id: inviteData.user.id,
+        p_details: {
+          email: email,
+          profile_id: inviteData.user.id,
+          role_id: CLIENT_ROLE_ID,
+          role: 'client',
+        },
+        p_new_values: { role_id: CLIENT_ROLE_ID, email },
+      });
     }
 
     return respond({ user: inviteData.user });
