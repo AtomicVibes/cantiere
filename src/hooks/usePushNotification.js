@@ -15,7 +15,7 @@ function urlB64ToUint8Array(base64String) {
   }
 
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   let rawData;
   try {
     rawData = window.atob(base64);
@@ -35,6 +35,17 @@ function urlB64ToUint8Array(base64String) {
   }
 
   return outputArray;
+}
+
+async function persistSubscription(userId, subscription) {
+  await supabase
+    .from('push_subscriptions')
+    .upsert(
+      { user_id: userId, subscription: subscription.toJSON() },
+      { onConflict: 'user_id,subscription' }
+    );
+  await supabase
+    .rpc('claim_push_subscription', { p_endpoint: subscription.endpoint || subscription.toJSON().endpoint });
 }
 
 export async function subscribeUserToPush(userId) {
@@ -80,12 +91,7 @@ export async function subscribeUserToPush(userId) {
   }
   if (existingSub) {
     try {
-      await supabase
-        .from('push_subscriptions')
-        .upsert(
-          { user_id: userId, subscription: existingSub.toJSON() },
-          { onConflict: 'user_id,subscription' }
-        );
+      await persistSubscription(userId, existingSub);
     } catch (err) {
       console.error('Push: DB upsert of existing sub failed', err);
     }
@@ -113,16 +119,48 @@ export async function subscribeUserToPush(userId) {
   }
 
   try {
-    await supabase
-      .from('push_subscriptions')
-      .upsert(
-        { user_id: userId, subscription: sub.toJSON() },
-        { onConflict: 'user_id,subscription' }
-      );
+    await persistSubscription(userId, sub);
   } catch (err) {
     console.error('Push: DB upsert failed', err);
     return null;
   }
 
   return sub;
+}
+
+// Bridges service-worker pushsubscriptionchange renewals (public/sw.js
+// posts PUSH_SUBSCRIPTION_CHANGED) into push_subscriptions for the user
+// that is currently signed in, and reclaims the endpoint for that user.
+// Safe to start once globally: the handler resolves the current session
+// at message time, so it stays correct across login/logout/account switch.
+export function startPushSubscriptionRelay() {
+  if (!('serviceWorker' in navigator)) {
+    return () => {};
+  }
+
+  const handler = (event) => {
+    if (event.data?.type !== 'PUSH_SUBSCRIPTION_CHANGED') return;
+    const subscription = event.data.subscription;
+    if (!subscription?.endpoint) return;
+
+    (async () => {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error || !user) return;
+        await supabase
+          .from('push_subscriptions')
+          .upsert(
+            { user_id: user.id, subscription },
+            { onConflict: 'user_id,subscription' }
+          );
+        await supabase
+          .rpc('claim_push_subscription', { p_endpoint: subscription.endpoint });
+      } catch (err) {
+        console.error('Push: relay persist failed', err);
+      }
+    })();
+  };
+
+  navigator.serviceWorker.addEventListener('message', handler);
+  return () => navigator.serviceWorker.removeEventListener('message', handler);
 }

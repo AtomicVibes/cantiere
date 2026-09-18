@@ -1,12 +1,13 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { sendNotification } from 'https://esm.sh/web-push-neo@0.1.2';
+import { sendNotification, WebPushError } from 'https://esm.sh/web-push-neo@0.1.2';
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')!;
 const vapidSubject = Deno.env.get('VAPID_SUBJECT') || Deno.env.get('VAPID_CONTACT_EMAIL') || 'mailto:notifications@geometra.app';
+const internalPushToken = Deno.env.get('INTERNAL_PUSH_TOKEN')!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
@@ -14,7 +15,7 @@ const vapidOptions = { subject: vapidSubject, publicKey: vapidPublicKey, private
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-push-token, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -23,6 +24,13 @@ function respond(data: unknown, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+function safeMessage(err: unknown, maxLength = 160): string {
+  if (!(err instanceof WebPushError)) {
+    return ((err as Error)?.message || 'Unknown error').slice(0, maxLength);
+  }
+  return `status ${err.statusCode}: ${(err.body || err.message).toString().slice(0, maxLength)}`;
 }
 
 serve(async (req) => {
@@ -34,72 +42,111 @@ serve(async (req) => {
     return respond({ error: 'Method not allowed' }, 405);
   }
 
-  try {
+  if (!vapidPublicKey || !vapidPrivateKey) {
+    return respond({ error: 'Server misconfigured: VAPID keys not set' }, 500);
+  }
+
+  let receiverId: string | undefined;
+  let caller: 'internal' | 'user' | null = null;
+
+  // 1. Authenticate the caller.
+  //    - The database trigger (handle_new_notification_push) sends
+  //      x-push-token = INTERNAL_PUSH_TOKEN (Vault + function env).
+  //    - Any valid user JWT is accepted, but receiver is forced to
+  //      that user's own id.
+  //    - Service-role tokens are NOT trusted here: the old embedded
+  //      key leaked and must stay useless for this endpoint.
+  const xPushToken = req.headers.get('x-push-token');
+  if (xPushToken && internalPushToken && xPushToken === internalPushToken) {
+    caller = 'internal';
+  } else {
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return respond({ error: 'Unauthorized' }, 401);
     }
-
-    const token = authHeader.replace('Bearer ', '');
+    const token = authHeader.replace(/^Bearer\s+/i, '');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !user) {
+    if (userError || !user?.id) {
       return respond({ error: 'Invalid authorization' }, 401);
     }
+    caller = 'user';
+    receiverId = user.id;
+  }
 
-    const { title, body, receiver_id, type, url, notification_id } = await req.json();
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return respond({ error: 'Invalid JSON body' }, 400);
+  }
 
-    if (!title || !receiver_id) {
-      return respond({ error: 'Missing required fields: title, receiver_id' }, 400);
-    }
+  const { title, body: bodyText, type, url, notification_id } = body || {};
 
-    const { data: subscriptions, error: subError } = await supabase
-      .from('push_subscriptions')
-      .select('id, subscription')
-      .eq('user_id', receiver_id);
+  if (caller === 'internal') {
+    receiverId = body?.receiver_id;
+  } else if (body?.receiver_id && body.receiver_id !== receiverId) {
+    return respond({ error: 'Forbidden: can only push to yourself' }, 403);
+  }
 
-    if (subError) {
-      console.error('Error fetching subscriptions:', subError);
-      return respond({ error: 'Failed to fetch subscriptions' }, 500);
-    }
+  if (!title || !receiverId) {
+    return respond({ error: 'Missing required fields: title, receiver_id' }, 400);
+  }
 
-    if (!subscriptions || subscriptions.length === 0) {
-      return respond({ sent: 0, message: 'No subscriptions found' });
-    }
+  const { data: subscriptions, error: subError } = await supabase
+    .from('push_subscriptions')
+    .select('id, subscription')
+    .eq('user_id', receiverId);
 
-    const displayBody = body && body.length > 200 ? body.substring(0, 200) + '…' : body || '';
-    const payload = JSON.stringify({ title, body: displayBody, type, url, notification_id });
+  if (subError) {
+    console.error('Error fetching subscriptions:', subError);
+    return respond({ error: 'Failed to fetch subscriptions' }, 500);
+  }
 
-    const results = await Promise.allSettled(
-      subscriptions.map(async (sub) => {
-        console.log('Processing subscription structure:', JSON.stringify(sub.subscription));
+  if (!subscriptions || subscriptions.length === 0) {
+    return respond({ sent: 0, message: 'No subscriptions found' });
+  }
 
-        try {
-          const res = await sendNotification(sub.subscription, payload, { vapidDetails: vapidOptions });
-          return res;
-        } catch (err) {
-          console.error('Detailed push error for endpoint:', sub.subscription?.endpoint, err);
+  const displayBody = bodyText && bodyText.length > 200 ? bodyText.substring(0, 200) + '…' : (bodyText || '');
+  const payload = JSON.stringify({ title, body: displayBody, type, url, notification_id });
+
+  const results = await Promise.allSettled(
+    subscriptions.map(async (sub) => {
+      try {
+        const res = await sendNotification(sub.subscription, payload, {
+          vapidDetails: vapidOptions,
+          signal: AbortSignal.timeout(10_000),
+        });
+        return { ok: true, statusCode: res.statusCode };
+      } catch (err) {
+        if (err instanceof WebPushError) {
           if (err.statusCode === 410 || err.statusCode === 404) {
-            await supabase
+            const { error: deleteError } = await supabase
               .from('push_subscriptions')
               .delete()
               .eq('id', sub.id);
-            console.log('Deleted expired subscription', sub.id);
+            if (deleteError) {
+              console.error('Failed to delete stale subscription', sub.id, deleteError);
+            } else {
+              console.log('Deleted stale subscription', sub.id);
+            }
           }
-          throw err;
         }
-      })
-    );
+        throw err;
+      }
+    })
+  );
 
-    const successful = results.filter((r) => r.status === 'fulfilled').length;
+  const fulfilled = results.filter((r) => r.status === 'fulfilled');
+  const rejected = results.filter((r) => r.status === 'rejected');
 
-    return respond({
-      sent: successful,
-      total: subscriptions.length,
-      failed: subscriptions.length - successful,
-      details: results.map(r => r.status === 'rejected' ? r.reason?.message : 'success'),
-    });
-  } catch (err) {
-    console.error('Unexpected error:', err);
-    return respond({ error: 'Internal server error', detail: err?.message }, 500);
-  }
+  return respond({
+    sent: fulfilled.length,
+    total: subscriptions.length,
+    failed: rejected.length,
+    details: results.map((r) =>
+      r.status === 'fulfilled'
+        ? { ok: true, statusCode: r.value.statusCode }
+        : { ok: false, error: safeMessage(r.reason) }
+    ),
+  });
 });

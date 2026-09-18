@@ -19,6 +19,8 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import AuthCallback from '@/pages/AuthCallback';
 
+import { startPushSubscriptionRelay } from '@/hooks/usePushNotification';
+
 // App pages
 import Dashboard from '@/pages/Dashboard';
 import Projects from '@/pages/Projects';
@@ -107,11 +109,29 @@ function App() {
         <Router>
           <AuthenticatedApp />
         </Router>
+        <PushSubscriptionRelay />
         <Toaster />
         <SonnerToaster position="top-right" richColors />
       </AuthProvider>
     </QueryClientProvider>
   );
+}
+
+// Listens for service-worker pushsubscriptionchange renewals and persists
+// the fresh subscription for the currently signed-in user, and reclaims the
+// browser endpoint from users who previously shared this browser.
+function PushSubscriptionRelay() {
+  const cleanupRef = React.useRef(null);
+
+  React.useEffect(() => {
+    cleanupRef.current = startPushSubscriptionRelay();
+    return () => {
+      if (typeof cleanupRef.current === 'function') cleanupRef.current();
+      cleanupRef.current = null;
+    };
+  }, []);
+
+  return null;
 }
 
 export default App
