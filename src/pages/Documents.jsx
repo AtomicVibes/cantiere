@@ -444,52 +444,52 @@ export default function Documents() {
         {filtered.length === 0 ? (
           <EmptyState icon={FileText} title={t('noDocuments')} description={view === 'archived' ? 'No archived documents' : t('uploadFirstDocument')} actionLabel={canUpload && view === 'active' ? t('uploadDocument') : undefined} onAction={canUpload && view === 'active' ? () => setShowUpload(true) : undefined} />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
             {filtered.map(doc => (
-              <div key={doc.id} className="bg-card rounded-xl border border-border p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2 min-w-0">
+              <div key={doc.id} className="bg-card rounded-lg border border-border p-2.5 hover:shadow-sm transition-shadow">
+                <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     {isSuperAdmin && (
-                      <Checkbox checked={selectedIds.has(doc.id)} onCheckedChange={() => toggleSelect(doc.id)} className="mr-1" />
+                      <Checkbox checked={selectedIds.has(doc.id)} onCheckedChange={() => toggleSelect(doc.id)} className="mr-0.5" />
                     )}
-                    <DocumentPreview document={doc} compact />
-                    <h3 className="font-medium truncate">{doc.name}</h3>
+                    <DocumentPreview document={doc} compact thumbnailClassName="w-9 h-9" />
+                    <h3 className="text-sm font-medium truncate min-w-0" title={doc.name}>{doc.name}</h3>
                   </div>
-                  <div className="flex gap-1 flex-shrink-0">
-                    <DocumentPreview document={doc} showLabel />
+                  <div className="flex flex-wrap items-center justify-end gap-0.5 flex-shrink-0">
+                    <DocumentPreview document={doc} compact showLabel thumbnailClassName="w-9 h-9" />
                     {doc.file_url && (
                       <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                        <Button variant="ghost" size="sm" className="h-7 gap-1 px-2" title="Open document"><ExternalLink className="w-3.5 h-3.5" />Open</Button>
+                        <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs" title="Open document"><ExternalLink className="w-3 h-3" />Open</Button>
                       </a>
                     )}
                     {isSuperAdmin && (
                       view === 'active' ? (
-                        <button onClick={() => executeArchive(doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Archive">
-                          <Archive className="w-3.5 h-3.5" />
+                        <button onClick={() => executeArchive(doc.id)} disabled={mutating} className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Archive">
+                          <Archive className="w-3 h-3" />
                         </button>
                       ) : (
-                        <button onClick={() => executeRestore(doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Restore">
-                          <RotateCcw className="w-3.5 h-3.5" />
+                        <button onClick={() => executeRestore(doc.id)} disabled={mutating} className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Restore">
+                          <RotateCcw className="w-3 h-3" />
                         </button>
                       )
                     )}
                     {canDelete && (
-                      <button onClick={() => handleBulkDeleteConfirm('single', doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40" title="Delete">
-                        <Trash2 className="w-3.5 h-3.5" />
+                      <button onClick={() => handleBulkDeleteConfirm('single', doc.id)} disabled={mutating} className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40" title="Delete">
+                        <Trash2 className="w-3 h-3" />
                       </button>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Badge variant="secondary" className="text-xs">{getTypeLabel(doc.type)}</Badge>
+                <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted-foreground">
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{getTypeLabel(doc.type)}</Badge>
                   {doc.file_format && <span>.{doc.file_format}</span>}
                   {doc.visibility && <span className="capitalize">{doc.visibility}</span>}
                   <span>{doc.created_at ? format(new Date(doc.created_at), 'MMM d, yyyy') : ''}</span>
                 </div>
-                {doc.project_id && <p className="text-xs text-primary mt-1">{projects.find(project => project.id === doc.project_id)?.name || 'Project assigned'}</p>}
+                {doc.project_id && <p className="text-[11px] text-primary mt-0.5 truncate">{projects.find(project => project.id === doc.project_id)?.name || 'Project assigned'}</p>}
                 {doc.user_id === currentUser?.id && (
-                  <div className="flex gap-2 mt-2">
-                    <Button type="button" size="sm" variant="outline" onClick={async () => {
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    <Button type="button" size="sm" className="h-6 px-1.5 text-[11px]" variant="outline" onClick={async () => {
                       const { data: audience, error } = await supabase.from('document_audience').select('user_id').eq('document_id', doc.id);
                       if (error) {
                         logDocumentError('Loading document audience failed', error, { documentId: doc.id });
@@ -500,10 +500,10 @@ export default function Documents() {
                       setAccessVisibility(doc.visibility || 'private');
                       setAccessAudience((audience || []).map(item => item.user_id));
                     }}>Edit access</Button>
-                    {doc.project_id && <Button type="button" size="sm" variant="ghost" onClick={() => removeProject(doc)}>Remove project</Button>}
+                    {doc.project_id && <Button type="button" size="sm" variant="ghost" className="h-6 px-1.5 text-[11px]" onClick={() => removeProject(doc)}>Remove project</Button>}
                   </div>
                 )}
-                {doc.notes && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{doc.notes}</p>}
+                {doc.notes && <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">{doc.notes}</p>}
               </div>
             ))}
           </div>

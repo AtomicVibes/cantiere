@@ -13,7 +13,7 @@ const isPdfDocument = (document) => {
   return getFileName(document).toLowerCase().endsWith('.pdf');
 };
 
-export default function DocumentPreview({ document, compact = false, showLabel = false }) {
+export default function DocumentPreview({ document, compact = false, showLabel = false, thumbnailClassName = 'w-16 h-16' }) {
   const [open, setOpen] = useState(false);
   if (!document?.file_url) return <FileText className="w-8 h-8 text-muted-foreground" />;
 
@@ -39,9 +39,9 @@ export default function DocumentPreview({ document, compact = false, showLabel =
 
   const buttonContent = compact
     ? isImage
-      ? <img src={fileUrl} alt={label} className="w-16 h-16 object-cover rounded" />
+      ? <img src={fileUrl} alt={label} className={`${thumbnailClassName} object-cover rounded`} />
       : isVideo
-        ? <div className="w-16 h-16 rounded bg-muted flex items-center justify-center"><Play className="w-6 h-6" /></div>
+        ? <div className={`${thumbnailClassName} rounded bg-muted flex items-center justify-center`}><Play className="w-4 h-4" /></div>
         : iconFallback
     : isPdf
       ? iconFallback
