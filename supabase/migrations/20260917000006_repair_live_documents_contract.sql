@@ -38,7 +38,8 @@ begin
     select 1
     from pg_constraint
     where conrelid = 'public.document_audience'::regclass
-      and conname = 'document_audience_unique'
+      and contype = 'u'
+      and pg_get_constraintdef(oid) = 'UNIQUE (document_id, user_id)'
   ) then
     alter table public.document_audience
       add constraint document_audience_unique unique (document_id, user_id);
@@ -57,9 +58,8 @@ alter table public.document_audience enable row level security;
 
 -- Remove both signatures that may have been created by earlier attempts.
 drop function if exists public.create_document_with_audience(text, text, text, bigint, text, uuid, text, text, uuid[]);
-drop function if exists public.create_document_with_audience(uuid[], text, bigint, text, text, uuid, text, text, text);
 
-create function public.create_document_with_audience(
+create or replace function public.create_document_with_audience(
   p_audience_user_ids uuid[],
   p_file_name text,
   p_file_size bigint,

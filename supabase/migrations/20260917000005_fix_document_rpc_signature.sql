@@ -3,8 +3,6 @@
 
 drop function if exists public.create_document_with_audience(text, text, text, bigint, text, uuid, text, text, uuid[]);
 
-drop function if exists public.create_document_with_audience(uuid[], text, bigint, text, text, uuid, text, text, text);
-
 create or replace function public.create_document_with_audience(
   p_audience_user_ids uuid[],
   p_file_name text,
