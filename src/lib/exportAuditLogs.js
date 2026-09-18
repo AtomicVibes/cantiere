@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import { getFeatureForAction } from './auditFeatureMapping';
 
 const MAX_CELL_JSON_LENGTH = 32000;
@@ -32,6 +31,8 @@ function serialize(value) {
 }
 
 export async function exportAuditLogsToExcel(logs, resolveUserName) {
+  const ExcelJSModule = await import('exceljs');
+  const ExcelJS = ExcelJSModule.default ?? ExcelJSModule;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Geometra Audit Logs';
   workbook.created = new Date();
