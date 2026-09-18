@@ -106,12 +106,13 @@ export const base44 = {
         },
         create: async (payload) => {
           console.log(`[base44→supabase] ${entityName} create payload:`, payload);
-          const { data: { user }, error: userErr } = await supabase.auth.getUser();
-          if (userErr || !user) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const userId = session?.user_id || session?.user?.id || null;
+          if (!session?.access_token || !userId) {
             throw new Error('Not authenticated — cannot create record');
           }
 
-          let processedPayload = { ...payload, user_id: user.id };
+          let processedPayload = { ...payload, user_id: userId };
 
           if (isDocumentTable(tableName)) {
             const { data, error } = await supabase.rpc('create_document_with_audience', {
@@ -222,11 +223,13 @@ export const base44 = {
       UploadFile: async ({ file }) => {
         if (!file) throw new Error('A file is required');
 
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
-        if (userError || !user) throw new Error('Not authenticated — cannot upload file');
+        const { data: { session } } = await supabase.auth.getSession();
+        const accessToken = session?.access_token;
+        const userId = session?.user_id || session?.user?.id || null;
+        if (!accessToken || !userId) throw new Error('Not authenticated — cannot upload file');
 
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const filePath = `${user.id}/${crypto.randomUUID()}-${safeName}`;
+        const filePath = `${userId}/${crypto.randomUUID()}-${safeName}`;
         const { error } = await supabase.storage
           .from('documents')
           .upload(filePath, file, { contentType: file.type || undefined, upsert: false });
