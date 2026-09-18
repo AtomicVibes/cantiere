@@ -188,7 +188,19 @@ export const base44 = {
 
           console.log(`[base44→supabase] ${entityName} delete result:`, { data, error });
           if (error) throw error;
-          return data?.[0] || { id };
+
+          // PostgREST answers with an empty array and no error when RLS blocks the
+          // delete (or the row no longer exists). Treat that as a failure so callers
+          // can never report success for a row that is still in the database.
+          if (!Array.isArray(data) || data.length === 0) {
+            const notDeleted = new Error(
+              `The ${entityName} record was not deleted. It may have already been removed, or you may not have permission to delete it.`
+            );
+            notDeleted.code = 'DELETE_NOT_APPLIED';
+            throw notDeleted;
+          }
+
+          return data[0];
         }
       };
     }
@@ -211,9 +223,21 @@ export const base44 = {
         return { file_url: filePath };
       },
       DeleteFile: async ({ filePath }) => {
-        if (!filePath || filePath.startsWith('http')) return;
-        const { error } = await supabase.storage.from('documents').remove([filePath]);
+        if (!filePath || filePath.startsWith('http')) return { removed: false, skipped: true };
+
+        const { data, error } = await supabase.storage.from('documents').remove([filePath]);
         if (error) throw error;
+
+        // Storage also answers 200 with an empty payload when RLS blocks the
+        // removal, so the returned objects are the only proof the file is gone.
+        const removed = Array.isArray(data) && data.length > 0;
+        if (!removed) {
+          const notRemoved = new Error('The stored file could not be removed from storage.');
+          notRemoved.code = 'STORAGE_DELETE_NOT_APPLIED';
+          throw notRemoved;
+        }
+
+        return { removed: true, skipped: false };
       },
     },
   },

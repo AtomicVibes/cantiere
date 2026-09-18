@@ -100,19 +100,6 @@ export default function Documents() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] }),
     onError: (err) => handleMutationError(err, t, toast),
   });
-  const deleteMutation = useMutation({
-    mutationFn: (id) => base44.entities.Document.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
-      toast.success('Document deleted');
-    },
-    onError: (err) => {
-      if (!handleMutationError(err, t, toast)) {
-        toast.error('Failed to delete document. Please try again.');
-      }
-    },
-  });
-
   const saveAccess = async () => {
     if (!accessDocument) return;
     if (accessVisibility === 'selected' && accessAudience.length === 0) {
@@ -298,25 +285,79 @@ export default function Documents() {
   };
 
   const executeBulkDelete = async () => {
-    setMutating(true);
-    try {
-      let ids = [];
-      if (deleteTarget.mode === 'selected') ids = [...selectedIds];
-      else if (deleteTarget.mode === 'single') ids = [deleteTarget.id];
-      await Promise.all(ids.map(async (id) => {
-        const document = documents.find(item => item.id === id);
-        await base44.entities.Document.delete(id);
-        if (document?.storage_path) {
-          await base44.integrations.Core.DeleteFile({ filePath: document.storage_path });
-        }
-      }));
-      toast.success(`Deleted ${ids.length} document${ids.length !== 1 ? 's' : ''}`);
-      setSelectedIds(new Set());
+    const ids = deleteTarget?.mode === 'selected'
+      ? [...selectedIds]
+      : deleteTarget?.mode === 'single' && deleteTarget.id
+        ? [deleteTarget.id]
+        : [];
+
+    if (ids.length === 0) {
       setConfirmDeleteOpen(false);
       setDeleteTarget(null);
-      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
+      return;
+    }
+
+    setMutating(true);
+    try {
+      // The database row is the source of truth: only a DELETE that actually
+      // returned the row counts as deleted. Storage removal is verified separately.
+      const results = await Promise.all(ids.map(async (id) => {
+        const document = documents.find(item => item.id === id);
+
+        try {
+          await base44.entities.Document.delete(id);
+        } catch (error) {
+          logDocumentError('Database delete failed', error, { documentId: id });
+          return { id, dbDeleted: false, error, storageError: null };
+        }
+
+        if (!document?.storage_path) return { id, dbDeleted: true, error: null, storageError: null };
+
+        try {
+          await base44.integrations.Core.DeleteFile({ filePath: document.storage_path });
+          return { id, dbDeleted: true, error: null, storageError: null };
+        } catch (error) {
+          logDocumentError('Storage deletion failed', error, { documentId: id, storagePath: document.storage_path });
+          return { id, dbDeleted: true, error: null, storageError: error };
+        }
+      }));
+
+      const deletedIds = results.filter(result => result.dbDeleted).map(result => result.id);
+      const deleteFailures = results.filter(result => !result.dbDeleted);
+      const storageFailures = results.filter(result => result.storageError);
+
+      if (deletedIds.length > 0) {
+        // Remove the deleted documents from the current UI state immediately,
+        // then refetch once so the list stays in sync with the database.
+        queryClient.setQueryData(['documents', currentUser?.id], (previous) =>
+          (previous || []).filter(item => !deletedIds.includes(item.id)));
+        queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
+        setSelectedIds(previous => {
+          const remaining = new Set(previous);
+          deletedIds.forEach(id => remaining.delete(id));
+          return remaining;
+        });
+      }
+
+      setConfirmDeleteOpen(false);
+      setDeleteTarget(null);
+
+      if (deleteFailures.length === 0 && storageFailures.length === 0) {
+        toast.success(`Deleted ${deletedIds.length} document${deletedIds.length !== 1 ? 's' : ''}`);
+      } else if (deletedIds.length > 0) {
+        const details = [];
+        if (deleteFailures.length > 0) details.push(`${deleteFailures.length} could not be deleted`);
+        if (storageFailures.length > 0) details.push(`${storageFailures.length} file${storageFailures.length !== 1 ? 's' : ''} could not be removed from storage`);
+        toast.warning(`Deleted ${deletedIds.length} of ${ids.length} document${ids.length !== 1 ? 's' : ''}. ${details.join(' and ')}.`);
+      } else {
+        const firstError = deleteFailures[0]?.error;
+        toast.error(firstError?.code === 'DELETE_NOT_APPLIED'
+          ? 'The document was not deleted. It may have already been removed, or you may not have permission to delete it.'
+          : (firstError?.message || 'Failed to delete the document. Please try again.'));
+      }
     } catch (err) {
-      toast.error(err.message || 'Failed to delete');
+      logDocumentError('Delete failed', err);
+      toast.error(err.message || 'Failed to delete the document. Please try again.');
     } finally {
       setMutating(false);
     }
@@ -415,9 +456,10 @@ export default function Documents() {
                     <h3 className="font-medium truncate">{doc.name}</h3>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
+                    <DocumentPreview document={doc} showLabel />
                     {doc.file_url && (
                       <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                        <Button variant="ghost" size="icon" className="h-7 w-7"><ExternalLink className="w-3.5 h-3.5" /></Button>
+                        <Button variant="ghost" size="sm" className="h-7 gap-1 px-2" title="Open document"><ExternalLink className="w-3.5 h-3.5" />Open</Button>
                       </a>
                     )}
                     {isSuperAdmin && (
