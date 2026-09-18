@@ -36,10 +36,11 @@ const resolveDocumentUrls = async (records, tableName) => {
       .from('documents')
       .createSignedUrl(storagePath, 3600);
     if (error) {
+      // Never fall back to the raw storage path: only signed URLs may reach the UI.
       console.warn('[documents] failed to create signed URL:', error.message);
-      return document;
+      return { ...document, file_url: null };
     }
-    return { ...document, file_url: data?.signedUrl || storagePath };
+    return { ...document, file_url: data?.signedUrl || null };
   }));
 };
 
@@ -171,12 +172,23 @@ export const base44 = {
             .from(tableName)
             .update(processedPayload)
             .eq('id', id)
-            .select()
-            .single();
+            .select();
 
           console.log(`[base44→supabase] ${entityName} update result:`, { data, error });
           if (error) throw error;
-          return data;
+
+          // PostgREST returns an empty array without an error when the UPDATE
+          // matched no row (RLS refused it, or the row no longer exists). Reporting
+          // that as success hides permission problems, so surface it as a failure.
+          if (!Array.isArray(data) || data.length === 0) {
+            const notUpdated = new Error(
+              `The ${entityName} record was not updated. It may have already been removed, or you may not have permission to update it.`
+            );
+            notUpdated.code = 'UPDATE_NOT_APPLIED';
+            throw notUpdated;
+          }
+
+          return data[0];
         },
         delete: async (id) => {
           console.log(`[base44→supabase] ${entityName} delete:`, { id });

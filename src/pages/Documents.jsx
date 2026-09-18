@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -17,7 +17,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, FileText, Upload, ExternalLink, Archive, RotateCcw, Trash2, Loader2 } from 'lucide-react';
+import { Search, FileText, Upload, ExternalLink, Archive, RotateCcw, Trash2, Loader2, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -67,6 +67,9 @@ export default function Documents() {
   const [mutating, setMutating] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const fileInputRef = useRef(null);
   const queryClient = useQueryClient();
 
   const { data: projects = [] } = useQuery({
@@ -138,6 +141,49 @@ export default function Documents() {
     const { error } = await supabase.rpc('remove_document_project', { p_document_id: document.id });
     if (error) throw error;
     queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
+  };
+
+  // Files live in the private `documents` bucket: a signed URL is only issued when the
+  // storage policies authorise the object for the current user, and those policies
+  // resolve access through the document row (owner, public, selected audience or an
+  // authorised role). Only the signed URL ever reaches the browser.
+  const handleDownload = async (doc) => {
+    if (!doc?.storage_path) {
+      toast.error('This document has no stored file to download.');
+      return;
+    }
+    const fileName = doc.file_name || doc.name || 'document';
+    setDownloadingId(doc.id);
+    try {
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .createSignedUrl(doc.storage_path, 300, { download: fileName });
+      if (error || !data?.signedUrl) {
+        logDocumentError('Signed URL for download failed', error, { documentId: doc.id, visibility: doc.visibility });
+        toast.error(getDocumentUserFriendlyError(
+          error,
+          'Unable to download this document. Please try again.',
+          "You don't have permission to download this document."
+        ));
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = data.signedUrl;
+      link.download = fileName;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      logDocumentError('Download failed', error, { documentId: doc.id });
+      toast.error(getDocumentUserFriendlyError(
+        error,
+        'Unable to download this document. Please try again.',
+        "You don't have permission to download this document."
+      ));
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handleUpload = async (e) => {
@@ -249,35 +295,82 @@ export default function Documents() {
     setSelectedIds(new Set());
   };
 
-  const executeArchive = async (ids) => {
+  // Archive/restore is a metadata update. A zero-row result means either RLS refused
+  // the update (the policy is owner-only) or the row is gone, so both outcomes are
+  // classified here instead of leaking the raw PostgREST error to the user.
+  const setDocumentsArchived = async (ids, archived) => {
+    const idsArr = Array.isArray(ids) ? ids : [ids];
+    if (idsArr.length === 0) return;
+
+    const action = archived ? 'archive' : 'restore';
+    const doneLabel = archived ? 'Archived' : 'Restored';
+    const permissionMessage = `You don't have permission to ${action} this document.`;
+
     setMutating(true);
     try {
-      const idsArr = Array.isArray(ids) ? ids : [ids];
-      await Promise.all(idsArr.map(id => base44.entities.Document.update(id, { archived: true })));
-      toast.success(`Archived ${idsArr.length} document${idsArr.length !== 1 ? 's' : ''}`);
-      setSelectedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
-    } catch (err) {
-      toast.error(err.message || 'Failed to archive');
+      const results = await Promise.all(idsArr.map(async (id) => {
+        try {
+          await base44.entities.Document.update(id, { archived });
+          return { id, ok: true };
+        } catch (error) {
+          logDocumentError(`${action} failed`, error, { documentId: id, archived });
+          if (error?.code !== 'UPDATE_NOT_APPLIED') return { id, ok: false, error };
+
+          // The row is still listed for this user, so it exists; a zero-row update
+          // therefore means the update policy refused it. A missing row is reported
+          // as such instead of as a permission problem.
+          const { data: existing, error: lookupError } = await supabase
+            .from('documents')
+            .select('id')
+            .eq('id', id)
+            .maybeSingle();
+          if (lookupError && lookupError.code !== 'PGRST116') {
+            logDocumentError(`${action} verification failed`, lookupError, { documentId: id });
+          }
+          return { id, ok: false, error, missing: !existing };
+        }
+      }));
+
+      const updatedIds = results.filter(result => result.ok).map(result => result.id);
+      const missing = results.filter(result => !result.ok && result.missing);
+      const denied = results.filter(result => !result.ok && !result.missing);
+
+      if (updatedIds.length > 0) {
+        queryClient.setQueryData(['documents', currentUser?.id], (previous) =>
+          (previous || []).map(item => (updatedIds.includes(item.id) ? { ...item, archived } : item)));
+        setSelectedIds(previous => {
+          const remaining = new Set(previous);
+          updatedIds.forEach(id => remaining.delete(id));
+          return remaining;
+        });
+      }
+      if (updatedIds.length > 0 || missing.length > 0) {
+        queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
+      }
+
+      if (updatedIds.length === idsArr.length) {
+        toast.success(`${doneLabel} ${updatedIds.length} document${updatedIds.length !== 1 ? 's' : ''}`);
+      } else if (updatedIds.length > 0) {
+        const details = [];
+        if (denied.length > 0) details.push(`${denied.length} could not be updated`);
+        if (missing.length > 0) details.push(`${missing.length} no longer exists`);
+        toast.warning(`${doneLabel} ${updatedIds.length} of ${idsArr.length} documents. ${details.join(' and ')}.`);
+      } else if (denied.length > 0) {
+        toast.error(getDocumentUserFriendlyError(denied[0].error, permissionMessage, permissionMessage));
+      } else {
+        toast.warning('This document is no longer available. The list has been refreshed.');
+      }
+    } catch (error) {
+      logDocumentError(`${action} failed`, error);
+      toast.error(getDocumentUserFriendlyError(error, `Unable to ${action} this document. Please try again.`, permissionMessage));
     } finally {
       setMutating(false);
     }
   };
 
-  const executeRestore = async (ids) => {
-    setMutating(true);
-    try {
-      const idsArr = Array.isArray(ids) ? ids : [ids];
-      await Promise.all(idsArr.map(id => base44.entities.Document.update(id, { archived: false })));
-      toast.success(`Restored ${idsArr.length} document${idsArr.length !== 1 ? 's' : ''}`);
-      setSelectedIds(new Set());
-      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
-    } catch (err) {
-      toast.error(err.message || 'Failed to restore');
-    } finally {
-      setMutating(false);
-    }
-  };
+  const executeArchive = (ids) => setDocumentsArchived(ids, true);
+
+  const executeRestore = (ids) => setDocumentsArchived(ids, false);
 
   const handleBulkDeleteConfirm = (mode, id) => {
     setDeleteTarget({ mode, id });
@@ -299,32 +392,42 @@ export default function Documents() {
 
     setMutating(true);
     try {
-      // The database row is the source of truth: only a DELETE that actually
-      // returned the row counts as deleted. Storage removal is verified separately.
+      // The database row is the source of truth: only a DELETE that actually returned
+      // the row counts as deleted. The stored object is removed first, while the
+      // metadata row still exists, so a storage removal that the policies refuse
+      // aborts the deletion instead of leaving a metadata row whose attached file
+      // is still present. A missing object (STORAGE_DELETE_NOT_APPLIED) is not an
+      // error - it lets orphaned metadata rows be cleaned up truthfully below.
       const results = await Promise.all(ids.map(async (id) => {
         const document = documents.find(item => item.id === id);
+
+        if (document?.storage_path) {
+          try {
+            await base44.integrations.Core.DeleteFile({ filePath: document.storage_path });
+          } catch (storageError) {
+            if (storageError?.code === 'STORAGE_DELETE_NOT_APPLIED') {
+              // Storage returned nothing: the object is already absent, nothing to remove.
+              logDocumentError('Storage object already absent', storageError, { documentId: id, storagePath: document.storage_path });
+            } else {
+              logDocumentError('Storage deletion failed', storageError, { documentId: id, storagePath: document.storage_path });
+              return { id, dbDeleted: false, error: storageError, storageBlocked: true };
+            }
+          }
+        }
 
         try {
           await base44.entities.Document.delete(id);
         } catch (error) {
           logDocumentError('Database delete failed', error, { documentId: id });
-          return { id, dbDeleted: false, error, storageError: null };
+          return { id, dbDeleted: false, error, storageBlocked: false };
         }
 
-        if (!document?.storage_path) return { id, dbDeleted: true, error: null, storageError: null };
-
-        try {
-          await base44.integrations.Core.DeleteFile({ filePath: document.storage_path });
-          return { id, dbDeleted: true, error: null, storageError: null };
-        } catch (error) {
-          logDocumentError('Storage deletion failed', error, { documentId: id, storagePath: document.storage_path });
-          return { id, dbDeleted: true, error: null, storageError: error };
-        }
+        return { id, dbDeleted: true, error: null, storageBlocked: false };
       }));
 
       const deletedIds = results.filter(result => result.dbDeleted).map(result => result.id);
       const deleteFailures = results.filter(result => !result.dbDeleted);
-      const storageFailures = results.filter(result => result.storageError);
+      const storageBlocked = results.filter(result => result.storageBlocked);
 
       if (deletedIds.length > 0) {
         // Remove the deleted documents from the current UI state immediately,
@@ -342,13 +445,14 @@ export default function Documents() {
       setConfirmDeleteOpen(false);
       setDeleteTarget(null);
 
-      if (deleteFailures.length === 0 && storageFailures.length === 0) {
+      if (deleteFailures.length === 0) {
         toast.success(`Deleted ${deletedIds.length} document${deletedIds.length !== 1 ? 's' : ''}`);
       } else if (deletedIds.length > 0) {
-        const details = [];
-        if (deleteFailures.length > 0) details.push(`${deleteFailures.length} could not be deleted`);
-        if (storageFailures.length > 0) details.push(`${storageFailures.length} file${storageFailures.length !== 1 ? 's' : ''} could not be removed from storage`);
+        const details = [`${deleteFailures.length} could not be deleted`];
+        if (storageBlocked.length > 0) details.push(`${storageBlocked.length} file${storageBlocked.length !== 1 ? 's' : ''} could not be removed from storage`);
         toast.warning(`Deleted ${deletedIds.length} of ${ids.length} document${ids.length !== 1 ? 's' : ''}. ${details.join(' and ')}.`);
+      } else if (storageBlocked.length === ids.length) {
+        toast.error('The stored file could not be removed from storage, so the document was not deleted. Please try again.');
       } else {
         const firstError = deleteFailures[0]?.error;
         toast.error(firstError?.code === 'DELETE_NOT_APPLIED'
@@ -456,6 +560,11 @@ export default function Documents() {
                     <h3 className="font-medium truncate">{doc.name}</h3>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
+                    {doc.storage_path && (
+                      <button onClick={() => handleDownload(doc)} disabled={downloadingId === doc.id} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Download">
+                        {downloadingId === doc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
                     {doc.file_url && (
                       <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
                         <Button variant="ghost" size="icon" className="h-7 w-7" title="Open document">
@@ -512,9 +621,9 @@ export default function Documents() {
       </div>
 
       <Dialog open={showUpload} onOpenChange={setShowUpload}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] flex flex-col">
           <DialogHeader><DialogTitle className="font-heading">{t('uploadDocument')}</DialogTitle></DialogHeader>
-          <form onSubmit={handleUpload} className="space-y-4" dir={dir}>
+          <form onSubmit={handleUpload} className="flex-1 min-h-0 space-y-4 overflow-y-auto pr-1" dir={dir}>
             {fields.filter(f => f.key !== 'type').map(f => (
               <div key={f.key}>
                 <Label>{f.label}{f.required ? ' *' : ''}</Label>
@@ -528,7 +637,35 @@ export default function Documents() {
                 <SelectContent>{typeOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label>{t('file')}</Label><Input type="file" accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime" onChange={e => setFile(e.target.files[0])} /></div>
+            <div>
+              <Label>{t('file')}</Label>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                onDragEnter={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                onDragLeave={() => setIsDraggingFile(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDraggingFile(false);
+                  const droppedFile = e.dataTransfer?.files?.[0];
+                  if (droppedFile) setFile(droppedFile);
+                }}
+                className={`flex w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed px-3 py-4 text-center transition-colors ${isDraggingFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/60 hover:bg-muted/50'}`}
+              >
+                <Upload className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Drag &amp; drop a file here, or click to browse</span>
+                <span className="text-[11px] text-muted-foreground">JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV - up to 50 MB</span>
+                {file ? <span className="max-w-full truncate text-xs font-medium">{file.name}</span> : null}
+              </button>
+              <Input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime"
+                className="hidden"
+                onChange={e => setFile(e.target.files?.[0] || null)}
+              />
+            </div>
             <div>
               <Label>Project</Label>
               <Select value={form.project_id || 'none'} onValueChange={value => setForm({...form, project_id: value === 'none' ? null : value})}>
@@ -546,15 +683,17 @@ export default function Documents() {
             {form.visibility === 'selected' && (
               <div className="space-y-2 border rounded-md p-3">
                 <Label>Select audience</Label>
-                {audienceMembers.map(member => (
-                  <label key={member.id} className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={selectedAudience.includes(member.id)} onChange={() => setSelectedAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />
-                    {member.full_name || member.email}
-                  </label>
-                ))}
+                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                  {audienceMembers.map(member => (
+                    <label key={member.id} className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={selectedAudience.includes(member.id)} onChange={() => setSelectedAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />
+                      {member.full_name || member.email}
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 bg-background pt-2">
               <Button type="button" variant="outline" onClick={() => setShowUpload(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : t('upload')}</Button>
             </DialogFooter>
@@ -563,14 +702,22 @@ export default function Documents() {
       </Dialog>
 
       <Dialog open={!!accessDocument} onOpenChange={open => !open && setAccessDocument(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] flex flex-col">
           <DialogHeader><DialogTitle>Edit document access</DialogTitle></DialogHeader>
-          <Select value={accessVisibility} onValueChange={setAccessVisibility}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="private">Private</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="selected">Selected audience</SelectItem></SelectContent>
-          </Select>
-          {accessVisibility === 'selected' && <div className="space-y-2 border rounded-md p-3">{audienceMembers.map(member => <label key={member.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessAudience.includes(member.id)} onChange={() => setAccessAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />{member.full_name || member.email}</label>)}</div>}
-          <DialogFooter><Button variant="outline" disabled={accessSaving} onClick={() => setAccessDocument(null)}>Cancel</Button><Button disabled={accessSaving} onClick={saveAccess}>{accessSaving ? 'Saving...' : 'Save access'}</Button></DialogFooter>
+          <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
+            <Select value={accessVisibility} onValueChange={setAccessVisibility}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="private">Private</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="selected">Selected audience</SelectItem></SelectContent>
+            </Select>
+            {accessVisibility === 'selected' && (
+              <div className="space-y-2 border rounded-md p-3">
+                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                  {audienceMembers.map(member => <label key={member.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessAudience.includes(member.id)} onChange={() => setAccessAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />{member.full_name || member.email}</label>)}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="sticky bottom-0 bg-background pt-2"><Button variant="outline" disabled={accessSaving} onClick={() => setAccessDocument(null)}>Cancel</Button><Button disabled={accessSaving} onClick={saveAccess}>{accessSaving ? 'Saving...' : 'Save access'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

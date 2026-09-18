@@ -1,14 +1,26 @@
-export function getDocumentUserFriendlyError(error, fallback = 'Unable to update document access. Please try again.') {
+export function getDocumentUserFriendlyError(
+  error,
+  fallback = 'Unable to update document access. Please try again.',
+  permissionMessage = "You don't have permission to change access for this document."
+) {
   const code = error?.code;
+  const statusCode = String(error?.statusCode || error?.status || '');
   const message = String(error?.message || '').toLowerCase();
 
-  if (code === '42501' || message.includes('row-level security') || message.includes('not authorized') || message.includes('permission')) {
-    return "You don't have permission to change access for this document.";
+  if (
+    code === '42501'
+    || statusCode === '403'
+    || message.includes('row-level security')
+    || message.includes('not authorized')
+    || message.includes('unauthorized')
+    || message.includes('permission')
+  ) {
+    return permissionMessage;
   }
   if (message.includes('selected visibility') || message.includes('audience')) {
     return 'Please select at least one person.';
   }
-  if (message.includes('not found') || code === 'PGRST116') {
+  if (message.includes('not found') || code === 'PGRST116' || statusCode === '404') {
     return 'This document could not be found.';
   }
   if (message.includes('network') || message.includes('fetch')) {
