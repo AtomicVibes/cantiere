@@ -1,9 +1,22 @@
 -- Document visibility, audiences, and deterministic project timeline links.
 
 alter table public.documents
-  add column if not exists visibility text not null default 'private',
-  add constraint documents_visibility_check
-    check (visibility in ('private', 'public', 'selected'));
+  add column if not exists visibility text not null default 'private';
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.documents'::regclass
+      and conname = 'documents_visibility_check'
+  ) then
+    alter table public.documents
+      add constraint documents_visibility_check
+      check (visibility in ('private', 'public', 'selected'));
+  end if;
+end
+$$;
 
 create table if not exists public.document_audience (
   id uuid not null default gen_random_uuid(),
@@ -24,6 +37,15 @@ create index if not exists document_audience_document_id_idx on public.document_
 create index if not exists document_audience_user_id_idx on public.document_audience(user_id);
 
 alter table public.document_audience enable row level security;
+
+drop policy if exists "Users can view authorized documents" on public.documents;
+drop policy if exists "Users can insert their own documents" on public.documents;
+drop policy if exists "Owners can update documents" on public.documents;
+drop policy if exists "Owners can delete documents" on public.documents;
+drop policy if exists "Users can read authorized document audience" on public.document_audience;
+drop policy if exists "Document owners can manage audience" on public.document_audience;
+drop policy if exists "Users can read authorized document objects" on storage.objects;
+drop policy if exists "Users can read authorized project timeline" on public.project_timeline;
 
 create or replace function public.can_read_document(p_document_id uuid, p_user_id uuid default auth.uid())
 returns boolean
@@ -176,7 +198,6 @@ create policy "Users can read authorized project timeline"
     (document_id is null and (
       public.is_admin()
       or exists (select 1 from public.project_members pm where pm.project_id = project_timeline.project_id and pm.profile_id = auth.uid())
-      or project_id in (select pr.project_id from public.project_requests pr join public.clients c on c.id = pr.client_id where c.profile_id = auth.uid())
     ))
     or (document_id is not null and exists (
       select 1 from public.documents document
