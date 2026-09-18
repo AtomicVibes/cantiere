@@ -16,10 +16,12 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ScrollText, Search, User, Archive, Trash2, Loader2, RotateCcw } from 'lucide-react';
+import { ScrollText, Search, User, Archive, Trash2, Loader2, RotateCcw, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { getFeatureForAction } from '@/lib/auditFeatureMapping';
+import { exportAuditLogsToExcel } from '@/lib/exportAuditLogs';
 
 const PAGE_SIZE = 25;
 
@@ -29,6 +31,17 @@ function badgeColor(actionType) {
   if (upper.includes('UPDATE') || upper.includes('EDIT')) return 'bg-amber-500';
   if (upper.includes('DELETE') || upper.includes('REMOVE')) return 'bg-red-500';
   return 'bg-slate-500';
+}
+
+function FeatureCell({ actionType }) {
+  const feature = getFeatureForAction(actionType);
+  const Icon = feature.icon;
+  return (
+    <span className="inline-flex items-center gap-1.5" title={feature.name} aria-label={feature.name}>
+      <Icon className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+      <span className="hidden md:inline text-sm text-foreground">{feature.name}</span>
+    </span>
+  );
 }
 
 export default function Logs() {
@@ -42,6 +55,8 @@ export default function Logs() {
   const [mutating, setMutating] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // { mode: 'selected'|'all'|'single', id?: string }
+  const [profilesMap, setProfilesMap] = useState({});
+  const [exporting, setExporting] = useState(false);
 
   const { isSuperAdmin } = useIsSuperAdmin();
 
@@ -87,6 +102,38 @@ export default function Logs() {
   }, []);
 
   useEffect(() => { setPage(1); }, [search]);
+
+  useEffect(() => {
+    const ids = [...new Set(logs.map((log) => log.user_id).filter(Boolean))];
+    let cancelled = false;
+    if (ids.length === 0) {
+      setProfilesMap({});
+      return undefined;
+    }
+    supabase
+      .from('profiles')
+      .select('id, full_name, email')
+      .in('id', ids)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const map = {};
+        (data || []).forEach((p) => { map[p.id] = p; });
+        setProfilesMap(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [logs]);
+
+  const resolveUserName = useCallback(
+    (userId) => {
+      if (!userId) return 'System';
+      const profile = profilesMap[userId];
+      if (profile?.full_name) return profile.full_name;
+      if (profile?.email) return profile.email;
+      return 'Deleted user';
+    },
+    [profilesMap]
+  );
 
   const visibleLogs = useMemo(() => {
     if (!search) return logs;
@@ -202,6 +249,43 @@ export default function Logs() {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .eq('archived', view === 'archived');
+      if (error) throw error;
+      const allLogs = data || [];
+
+      const uniqueIds = [...new Set(allLogs.map((l) => l.user_id).filter(Boolean))];
+      const exportProfiles = {};
+      if (uniqueIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', uniqueIds);
+        (profiles || []).forEach((p) => { exportProfiles[p.id] = p; });
+      }
+
+      const resolve = (userId) => {
+        if (!userId) return 'System';
+        const profile = exportProfiles[userId];
+        if (profile?.full_name) return profile.full_name;
+        if (profile?.email) return profile.email;
+        return 'Deleted user';
+      };
+
+      await exportAuditLogsToExcel(allLogs, resolve);
+      toast.success(`Exported ${allLogs.length} audit log${allLogs.length !== 1 ? 's' : ''}`);
+    } catch (err) {
+      toast.error(err.message || 'Failed to export');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const renderPageNumbers = () => {
     const pages = [];
     const start = Math.max(1, page - 2);
@@ -265,7 +349,22 @@ export default function Logs() {
               Select All
             </label>
 
-            <div className="flex items-center gap-2 ml-auto">
+            <div className="flex items-center gap-2 ml-auto flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={exporting}
+                onClick={handleExport}
+                title="Export full audit dataset to Excel"
+              >
+                {exporting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                Export Excel
+              </Button>
               {view === 'active' ? (
                 <>
                   <Button
@@ -356,6 +455,7 @@ export default function Logs() {
                   <TableRow className="bg-muted/50">
                     {isSuperAdmin && <TableHead className="w-10" />}
                     <TableHead>Timestamp</TableHead>
+                    <TableHead>Feature</TableHead>
                     <TableHead>Action</TableHead>
                     <TableHead className="hidden sm:table-cell">Table</TableHead>
                     <TableHead className="hidden md:table-cell">Record</TableHead>
@@ -379,6 +479,9 @@ export default function Logs() {
                         {log.created_at ? format(new Date(log.created_at), 'MMM dd, yyyy HH:mm') : '-'}
                       </TableCell>
                       <TableCell>
+                        <FeatureCell actionType={log.action_type} />
+                      </TableCell>
+                      <TableCell>
                         <Badge className={`${badgeColor(log.action_type)} text-white`}>
                           {log.action_type?.replace(/_/g, ' ') || '-'}
                         </Badge>
@@ -390,9 +493,14 @@ export default function Logs() {
                         {log.details?.record_id ? log.details.record_id.substring(0, 8) + '...' : '-'}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                        <span className="inline-flex items-center gap-1">
-                          <User className="w-3 h-3" />
-                          {log.user_id ? log.user_id.substring(0, 8) + '...' : '-'}
+                        <span
+                          className="inline-flex items-center gap-1"
+                          title={log.user_id || ''}
+                        >
+                          <User className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-[180px]">
+                            {resolveUserName(log.user_id)}
+                          </span>
                         </span>
                       </TableCell>
                       <TableCell className="hidden lg:table-cell text-sm text-muted-foreground max-w-xs truncate">
