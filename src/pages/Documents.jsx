@@ -28,6 +28,7 @@ import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { supabase } from '@/services/supabase';
 import DocumentPreview from '@/components/shared/DocumentPreview';
+import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
 
 const DOC_CATEGORIES = [
   'blueprint', 'contract', 'permit', 'invoice', 'photo',
@@ -57,6 +58,7 @@ export default function Documents() {
   const [accessDocument, setAccessDocument] = useState(null);
   const [accessVisibility, setAccessVisibility] = useState('private');
   const [accessAudience, setAccessAudience] = useState([]);
+  const [accessSaving, setAccessSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -117,16 +119,32 @@ export default function Documents() {
       toast.error('Please select at least one audience member.');
       return;
     }
-    const { error: updateError } = await supabase.from('documents').update({ visibility: accessVisibility }).eq('id', accessDocument.id).eq('user_id', currentUser.id);
-    if (updateError) throw updateError;
-    const { error: deleteAudienceError } = await supabase.from('document_audience').delete().eq('document_id', accessDocument.id);
-    if (deleteAudienceError) throw deleteAudienceError;
-    if (accessVisibility === 'selected') {
-      const { error: insertAudienceError } = await supabase.from('document_audience').insert(accessAudience.map(userId => ({ document_id: accessDocument.id, user_id: userId })));
-      if (insertAudienceError) throw insertAudienceError;
+    setAccessSaving(true);
+    try {
+      const { data, error } = await supabase.rpc('update_document_access', {
+        p_document_id: accessDocument.id,
+        p_visibility: accessVisibility,
+        p_audience_user_ids: accessAudience,
+      });
+      if (error) {
+        logDocumentError('update_document_access failed', error, {
+          documentId: accessDocument.id,
+          visibility: accessVisibility,
+          selectedUserIds: accessAudience,
+        });
+        toast.error(getDocumentUserFriendlyError(error));
+        return;
+      }
+      console.info('[Documents] update_document_access success', { documentId: data?.id, visibility: data?.visibility });
+      setAccessDocument(null);
+      queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
+      toast.success('Document access updated.');
+    } catch (error) {
+      logDocumentError('Failed to update document access', error, { documentId: accessDocument.id });
+      toast.error(getDocumentUserFriendlyError(error));
+    } finally {
+      setAccessSaving(false);
     }
-    setAccessDocument(null);
-    queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
   };
 
   const removeProject = async (document) => {
@@ -206,8 +224,8 @@ export default function Documents() {
       setSelectedAudience([]);
       setFile(null);
     } catch (error) {
-      console.error('[Documents] upload failed:', error);
-      toast.error(error?.message || 'Failed to upload document. Please try again.');
+      logDocumentError('Upload failed', error, { fileType: file?.type, fileSize: file?.size });
+      toast.error(getDocumentUserFriendlyError(error, 'Unable to upload document. Please try again.'));
     } finally {
       setUploading(false);
     }
@@ -430,7 +448,12 @@ export default function Documents() {
                 {doc.user_id === currentUser?.id && (
                   <div className="flex gap-2 mt-2">
                     <Button type="button" size="sm" variant="outline" onClick={async () => {
-                      const { data: audience } = await supabase.from('document_audience').select('user_id').eq('document_id', doc.id);
+                      const { data: audience, error } = await supabase.from('document_audience').select('user_id').eq('document_id', doc.id);
+                      if (error) {
+                        logDocumentError('Loading document audience failed', error, { documentId: doc.id });
+                        toast.error(getDocumentUserFriendlyError(error, 'Unable to load document access. Please try again.'));
+                        return;
+                      }
                       setAccessDocument(doc);
                       setAccessVisibility(doc.visibility || 'private');
                       setAccessAudience((audience || []).map(item => item.user_id));
@@ -504,7 +527,7 @@ export default function Documents() {
             <SelectContent><SelectItem value="private">Private</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="selected">Selected audience</SelectItem></SelectContent>
           </Select>
           {accessVisibility === 'selected' && <div className="space-y-2 border rounded-md p-3">{audienceMembers.map(member => <label key={member.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessAudience.includes(member.id)} onChange={() => setAccessAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />{member.full_name || member.email}</label>)}</div>}
-          <DialogFooter><Button variant="outline" onClick={() => setAccessDocument(null)}>Cancel</Button><Button onClick={() => saveAccess().catch(error => toast.error(error.message))}>Save access</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" disabled={accessSaving} onClick={() => setAccessDocument(null)}>Cancel</Button><Button disabled={accessSaving} onClick={saveAccess}>{accessSaving ? 'Saving...' : 'Save access'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
