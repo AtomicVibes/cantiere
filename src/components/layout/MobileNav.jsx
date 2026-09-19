@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import Logo from '@/components/Logo';
@@ -17,6 +17,11 @@ export default function MobileNav() {
   const { isAdmin } = useUserRole();
   const { isSuperAdmin } = useIsSuperAdmin();
   const location = useLocation();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  useEffect(() => {
+    setIsSheetOpen(false);
+  }, [location]);
 
   const bottomItems = [
     { icon: LayoutDashboard, path: '/', label: t('home') },
@@ -35,13 +40,13 @@ export default function MobileNav() {
 
   return (
     <>
-      <div className="fixed top-0 left-0 right-0 bg-card border-b border-border z-40 grid grid-cols-3 items-center px-4 py-4">
+      <div className="fixed top-0 left-0 right-0 bg-card border-b border-border z-40 grid grid-cols-3 items-center px-4 py-4 h-20">
         <Logo size={40} className="text-primary" />
         <span className="font-display font-bold text-lg justify-self-center">Geometra</span>
         <div className="justify-self-end">
-          <Sheet>
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
             <SheetTrigger asChild>
-              <button className="p-2"><Menu className="w-8 h-8" /></button>
+              <button className="p-2" aria-label="Open navigation menu"><Menu className="w-8 h-8" /></button>
             </SheetTrigger>
             <SheetContent side="left" className="p-0 w-[260px]">
               <Sidebar collapsed={false} setCollapsed={() => {}} />

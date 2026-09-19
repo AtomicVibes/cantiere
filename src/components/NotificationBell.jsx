@@ -154,7 +154,7 @@ export default function NotificationBell() {
       </button>
 
       {isOpen && (
-        <div className="fixed inset-x-4 top-16 z-50 mt-2 origin-top-right rounded-xl border border-border bg-card shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none md:absolute md:right-0 md:left-auto md:w-96">
+        <div className="fixed inset-x-4 top-20 z-50 mt-2 origin-top-right rounded-xl border border-border bg-card shadow-2xl ring-1 ring-black ring-opacity-5 focus:outline-none md:absolute md:top-16 md:right-0 md:left-auto md:w-96">
           <div className="p-4 border-b border-border flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
             {notifications.length > 0 && (

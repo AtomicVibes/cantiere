@@ -34,12 +34,12 @@ export default function TopBar({ title }) {
   const initials = getInitials(displayName);
 
   return (
-    <header className="h-16 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-0 z-30 w-full max-w-full">
-      <div className="flex items-center gap-4">
-        <h1 className="text-xl font-heading font-bold">{title}</h1>
+    <header className="h-16 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 lg:px-8 sticky top-20 md:top-0 z-30 w-full max-w-full">
+      <div className="flex items-center gap-4 min-w-0">
+        <h1 className="text-xl font-heading font-bold truncate">{title}</h1>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4">
+      <div className="flex items-center gap-3 sm:gap-4 shrink-0">
         <div className="relative hidden md:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input

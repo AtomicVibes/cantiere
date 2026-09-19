@@ -19,7 +19,7 @@ export default function AppLayout() {
           <MobileNav />
         </div>
       )}
-      <main className={`min-h-screen transition-all duration-300 max-w-full min-w-0 ${collapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'} ${isChatOpen ? '' : 'pt-14 pb-16 md:pt-0 md:pb-0'}`}>
+      <main className={`min-h-screen transition-all duration-300 max-w-full min-w-0 ${collapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'} ${isChatOpen ? '' : 'pt-20 pb-16 md:pt-0 md:pb-0'}`}>
         <Outlet />
       </main>
     </div>
