@@ -61,7 +61,7 @@ serve(async (req) => {
       return respond({ error: 'Your profile was not found.' }, 400);
     }
 
-    if (!['super_admin', 'admin'].includes(profile.roles.name)) {
+    if (profile.roles.name !== 'super_admin') {
       return respond(
         { error: 'You do not have permission to review requests.', detail: `Role '${profile.roles.name}' is not allowed.` },
         400

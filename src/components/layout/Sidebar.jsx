@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FolderKanban, Users, UserCircle,
   Bell, DollarSign, Calendar, BarChart3, FileText,
   Settings, ScrollText, ChevronLeft, ChevronRight, LogOut,
-  ClipboardList, ShieldCheck, MessageSquare
+  ClipboardList, MessageSquare
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
@@ -30,7 +30,6 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
     { label: t('reports'), icon: BarChart3, path: '/reports', requires: true },
     { label: t('documents'), icon: FileText, path: '/documents' },
     { label: t('requests'), icon: ClipboardList, path: '/requests' },
-    { label: t('requestManagement'), icon: ShieldCheck, path: '/admin/requests', requires: true },
     { label: t('logs.auditLogs'), icon: ScrollText, path: '/logs', requires: true },
     { label: t('settings'), icon: Settings, path: '/settings' },
   ];

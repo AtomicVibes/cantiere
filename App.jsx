@@ -34,8 +34,7 @@ import Reports from '@/pages/Reports';
 import Documents from '@/pages/Documents';
 import Settings from '@/pages/Settings';
 import Logs from '@/pages/Logs';
-import ProjectRequests from '@/pages/ProjectRequests';
-import AdminInbox from '@/pages/AdminInbox';
+import Requests from '@/pages/Requests';
 import MessagesPage from '@/pages/MessagesPage';
 
 const AuthenticatedApp = () => {
@@ -89,8 +88,8 @@ const AuthenticatedApp = () => {
           <Route path="/documents" element={<Documents />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/logs" element={<Logs />} />
-          <Route path="/requests" element={<ProjectRequests />} />
-          <Route path="/admin/requests" element={<AdminInbox />} />
+          <Route path="/requests" element={<Requests />} />
+          <Route path="/admin/requests" element={<Navigate to="/requests?view=management" replace />} />
           <Route path="/messages" element={<MessagesPage />} />
           <Route path="/admin/messages" element={<MessagesPage />} />
         </Route>

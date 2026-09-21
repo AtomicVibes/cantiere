@@ -73,7 +73,7 @@ async function fetchAllRequests(archived) {
   };
 }
 
-export default function AdminInbox() {
+export default function AdminInbox({ embedded = false }) {
   const { t } = useTranslation();
   const { isSuperAdmin } = useIsSuperAdmin();
   const queryClient = useQueryClient();
@@ -220,9 +220,9 @@ export default function AdminInbox() {
   const canReject = isPending || isVerification;
 
   return (
-    <div className="min-h-screen bg-background" style={{ minHeight: '100dvh' }}>
-      <TopBar title={t('requestManagement')} />
-      <div className="p-4 md:p-6 space-y-6" style={{ padding: 'clamp(1rem, 2.5vw, 1.5rem)' }}>
+    <div className={embedded ? '' : 'min-h-screen bg-background'} style={embedded ? undefined : { minHeight: '100dvh' }}>
+      {!embedded && <TopBar title={t('requestManagement')} />}
+      <div className={embedded ? 'space-y-6' : 'p-4 md:p-6 space-y-6'} style={embedded ? undefined : { padding: 'clamp(1rem, 2.5vw, 1.5rem)' }}>
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="flex gap-1 bg-muted p-1 rounded-lg overflow-x-auto">
             {tabs.map((tab) => (

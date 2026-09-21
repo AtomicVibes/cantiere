@@ -42,7 +42,7 @@ const statusConfig = {
   [REQUEST_STATUSES.REJECTED]: { icon: XCircle, variant: 'destructive' },
 };
 
-export default function ProjectRequests() {
+export default function ProjectRequests({ embedded = false }) {
   const { t } = useTranslation();
   const { role } = useUserRole();
   const { isSuperAdmin } = useIsSuperAdmin();
@@ -211,8 +211,8 @@ export default function ProjectRequests() {
 
   return (
     <div>
-      <TopBar title={t('projectRequests')} />
-      <div className="p-6 space-y-6">
+      {!embedded && <TopBar title={t('projectRequests')} />}
+      <div className={embedded ? 'space-y-6' : 'p-6 space-y-6'}>
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="flex gap-3 items-center">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
