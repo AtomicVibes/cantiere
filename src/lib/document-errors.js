@@ -20,6 +20,9 @@ export function getDocumentUserFriendlyError(
   if (message.includes('selected visibility') || message.includes('audience')) {
     return 'Please select at least one person.';
   }
+  if (message.includes('google document link')) {
+    return 'This Google link is not valid. Paste a link to a Google Docs, Sheets or Slides document.';
+  }
   if (message.includes('not found') || code === 'PGRST116' || statusCode === '404') {
     return 'This document could not be found.';
   }

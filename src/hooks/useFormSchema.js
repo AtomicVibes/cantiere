@@ -110,6 +110,9 @@ export function useDocumentFormFields() {
       { value: 'audio_note', label: t('audioNote') },
       { value: 'cad_file', label: t('cadFile') },
       { value: 'report', label: t('report') },
+      { value: 'word', label: t('word') },
+      { value: 'excel', label: t('excel') },
+      { value: 'google', label: t('google') },
       { value: 'other', label: t('other') },
     ],
   }), [i18n.language]);

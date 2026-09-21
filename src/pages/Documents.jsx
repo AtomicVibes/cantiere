@@ -32,14 +32,39 @@ import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-e
 
 const DOC_CATEGORIES = [
   'blueprint', 'contract', 'permit', 'invoice', 'photo',
-  'video', 'audio_note', 'cad_file', 'report', 'other',
+  'video', 'audio_note', 'cad_file', 'report', 'word', 'excel', 'google', 'other',
 ];
 
 const MAX_DOCUMENT_SIZE = 50 * 1024 * 1024;
 const SUPPORTED_DOCUMENT_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'image/gif',
   'application/pdf', 'video/mp4', 'video/webm', 'video/quicktime',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
+
+const GOOGLE_DOC_MIME = {
+  document: 'application/vnd.google-apps.document',
+  spreadsheets: 'application/vnd.google-apps.spreadsheet',
+  presentation: 'application/vnd.google-apps.presentation',
+};
+const GOOGLE_DOC_RE = /^\/(document|spreadsheets|presentation)(?:\/u\/\d+)?\/d\//;
+
+const parseGoogleDocLink = (value) => {
+  if (!value?.trim()) return null;
+  let url;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+  if (url.hostname !== 'docs.google.com') return null;
+  const match = url.pathname.match(GOOGLE_DOC_RE);
+  return match ? { subtype: match[1] } : null;
+};
 
 export default function Documents() {
   const { t } = useTranslation();
@@ -54,6 +79,8 @@ export default function Documents() {
   const [showUpload, setShowUpload] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
   const [file, setFile] = useState(null);
+  const [addMode, setAddMode] = useState('file');
+  const [externalUrl, setExternalUrl] = useState('');
   const [selectedAudience, setSelectedAudience] = useState([]);
   const [accessDocument, setAccessDocument] = useState(null);
   const [accessVisibility, setAccessVisibility] = useState('private');
@@ -196,14 +223,32 @@ export default function Documents() {
     }
   };
 
-  const handleUpload = async (e) => {
+  const openUploadDialog = () => {
+    setShowUpload(true);
+    setAddMode('file');
+    setExternalUrl('');
+    setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
+    setSelectedAudience([]);
+    setFile(null);
+  };
+
+  const closeUploadDialog = () => {
+    setShowUpload(false);
+    setAddMode('file');
+    setExternalUrl('');
+    setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
+    setSelectedAudience([]);
+    setFile(null);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canUpload) {
       toast.error(t('accessDenied'));
       return;
     }
-    if (!form.name || !file) {
-      toast.error('Please provide a document name and select a file.');
+    if (!form.name) {
+      toast.error('Please provide a document name.');
       return;
     }
     if (form.visibility === 'selected' && selectedAudience.length === 0) {
@@ -216,27 +261,53 @@ export default function Documents() {
         if (import.meta.env.DEV) console.info(`[Documents] ${message}`, details);
       };
 
+      if (addMode === 'link') {
+        const parsed = parseGoogleDocLink(externalUrl);
+        if (!parsed) {
+          toast.error(t('invalidGoogleLink'));
+          return;
+        }
+        debugUpload('LINK START', { url: externalUrl.trim() });
+        await createMutation.mutateAsync({
+          ...form,
+          external_url: externalUrl.trim(),
+          external_provider: 'google',
+          mime_type: GOOGLE_DOC_MIME[parsed.subtype],
+          file_size: 0,
+          project_id: form.project_id || null,
+          visibility: form.visibility,
+          audience_user_ids: selectedAudience,
+        });
+        debugUpload('LINK COMPLETE');
+        closeUploadDialog();
+        toast.success('Google document linked.');
+        return;
+      }
+
+      if (!file) {
+        toast.error('Please select a file.');
+        return;
+      }
+
       debugUpload('UPLOAD START');
       let file_url = '';
       let uploadedPath = '';
-      if (file) {
-        if (!SUPPORTED_DOCUMENT_TYPES.has(file.type)) {
-          throw new Error('Unsupported file type. Use JPG, PNG, WebP, GIF, PDF, MP4, WebM, or MOV.');
-        }
-        if (file.size > MAX_DOCUMENT_SIZE) {
-          throw new Error('File is too large. The maximum size is 50 MB.');
-        }
-        debugUpload('FILE SELECTED', {
-          name: file.name,
-          type: file.type,
-          size: file.size,
-        });
-        debugUpload('SUPABASE STORAGE UPLOAD START');
-        const result = await base44.integrations.Core.UploadFile({ file });
-        file_url = result.file_url;
-        uploadedPath = file_url;
-        debugUpload('SUPABASE STORAGE UPLOAD RESULT', { uploaded: !!file_url });
+      if (!SUPPORTED_DOCUMENT_TYPES.has(file.type)) {
+        throw new Error('Unsupported file type. Use JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, or XLSX.');
       }
+      if (file.size > MAX_DOCUMENT_SIZE) {
+        throw new Error('File is too large. The maximum size is 50 MB.');
+      }
+      debugUpload('FILE SELECTED', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      });
+      debugUpload('SUPABASE STORAGE UPLOAD START');
+      const result = await base44.integrations.Core.UploadFile({ file });
+      file_url = result.file_url;
+      uploadedPath = file_url;
+      debugUpload('SUPABASE STORAGE UPLOAD RESULT', { uploaded: !!file_url });
       debugUpload('DATABASE INSERT START');
       let createdDocument;
       try {
@@ -262,13 +333,14 @@ export default function Documents() {
       }
       debugUpload('DATABASE INSERT RESULT', { saved: true, id: createdDocument?.id });
       debugUpload('UPLOAD COMPLETE');
-      setShowUpload(false);
-      setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
-      setSelectedAudience([]);
-      setFile(null);
+      closeUploadDialog();
     } catch (error) {
       logDocumentError('Upload failed', error, { fileType: file?.type, fileSize: file?.size });
-      toast.error(getDocumentUserFriendlyError(error, 'Unable to upload document. Please try again.'));
+      toast.error(getDocumentUserFriendlyError(
+        error,
+        addMode === 'link' ? 'Unable to link the document. Please try again.' : 'Unable to upload document. Please try again.',
+        "You don't have permission to upload this document."
+      ));
     } finally {
       setUploading(false);
     }
@@ -498,7 +570,7 @@ export default function Documents() {
             </Select>
           </div>
           {canUpload && (
-            <Button onClick={() => setShowUpload(true)} className="gap-2">
+            <Button onClick={openUploadDialog} className="gap-2">
               <Upload className="w-4 h-4" /> {t('uploadDocument')}
             </Button>
           )}
@@ -556,7 +628,7 @@ export default function Documents() {
         )}
 
         {filtered.length === 0 ? (
-          <EmptyState icon={FileText} title={t('noDocuments')} description={view === 'archived' ? 'No archived documents' : t('uploadFirstDocument')} actionLabel={canUpload && view === 'active' ? t('uploadDocument') : undefined} onAction={canUpload && view === 'active' ? () => setShowUpload(true) : undefined} />
+          <EmptyState icon={FileText} title={t('noDocuments')} description={view === 'archived' ? 'No archived documents' : t('uploadFirstDocument')} actionLabel={canUpload && view === 'active' ? t('uploadDocument') : undefined} onAction={canUpload && view === 'active' ? openUploadDialog : undefined} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(doc => (
@@ -603,6 +675,11 @@ export default function Documents() {
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Badge variant="secondary" className="text-xs">{getTypeLabel(doc.type)}</Badge>
                   {doc.file_format && <span>.{doc.file_format}</span>}
+                  {doc.external_provider === 'google' && (
+                    <span className="inline-flex items-center gap-1">
+                      <ExternalLink className="w-3 h-3" /> {t('google')}
+                    </span>
+                  )}
                   {doc.visibility && <span className="capitalize">{doc.visibility}</span>}
                   <span>{doc.created_at ? format(new Date(doc.created_at), 'MMM d, yyyy') : ''}</span>
                 </div>
@@ -630,10 +707,26 @@ export default function Documents() {
         )}
       </div>
 
-      <Dialog open={showUpload} onOpenChange={setShowUpload}>
+      <Dialog open={showUpload} onOpenChange={open => { if (!open) closeUploadDialog(); }}>
         <DialogContent className="max-h-[85vh] flex flex-col">
-          <DialogHeader><DialogTitle className="font-heading">{t('uploadDocument')}</DialogTitle></DialogHeader>
-          <form onSubmit={handleUpload} className="flex-1 min-h-0 space-y-4 overflow-y-auto pr-1" dir={dir}>
+          <DialogHeader><DialogTitle className="font-heading">{t('addDocument')}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSubmit} className="flex-1 min-h-0 space-y-4 overflow-y-auto pr-1" dir={dir}>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setAddMode('file'); setFile(null); }}
+                className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${addMode === 'file' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border text-muted-foreground hover:border-primary/60 hover:bg-muted/50'}`}
+              >
+                <Upload className="w-4 h-4" /> {t('uploadFile')}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAddMode('link'); setExternalUrl(''); }}
+                className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${addMode === 'link' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border text-muted-foreground hover:border-primary/60 hover:bg-muted/50'}`}
+              >
+                <ExternalLink className="w-4 h-4" /> {t('linkGoogleDocument')}
+              </button>
+            </div>
             {fields.filter(f => f.key !== 'type').map(f => (
               <div key={f.key}>
                 <Label>{f.label}{f.required ? ' *' : ''}</Label>
@@ -647,35 +740,49 @@ export default function Documents() {
                 <SelectContent>{typeOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>{t('file')}</Label>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
-                onDragEnter={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
-                onDragLeave={() => setIsDraggingFile(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDraggingFile(false);
-                  const droppedFile = e.dataTransfer?.files?.[0];
-                  if (droppedFile) setFile(droppedFile);
-                }}
-                className={`flex w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed px-3 py-4 text-center transition-colors ${isDraggingFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/60 hover:bg-muted/50'}`}
-              >
-                <Upload className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Drag &amp; drop a file here, or click to browse</span>
-                <span className="text-[11px] text-muted-foreground">JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV - up to 50 MB</span>
-                {file ? <span className="max-w-full truncate text-xs font-medium">{file.name}</span> : null}
-              </button>
-              <Input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime"
-                className="hidden"
-                onChange={e => setFile(e.target.files?.[0] || null)}
-              />
-            </div>
+            {addMode === 'link' ? (
+              <div className="space-y-2">
+                <Label>{t('googleDocumentLink')} *</Label>
+                <Input
+                  type="url"
+                  value={externalUrl}
+                  onChange={e => setExternalUrl(e.target.value)}
+                  placeholder="https://docs.google.com/document/d/..."
+                  required
+                />
+                <p className="text-xs text-muted-foreground">{t('googleLinkNote')}</p>
+              </div>
+            ) : (
+              <div>
+                <Label>{t('file')}</Label>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                  onDragEnter={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                  onDragLeave={() => setIsDraggingFile(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingFile(false);
+                    const droppedFile = e.dataTransfer?.files?.[0];
+                    if (droppedFile) setFile(droppedFile);
+                  }}
+                  className={`flex w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed px-3 py-4 text-center transition-colors ${isDraggingFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/60 hover:bg-muted/50'}`}
+                >
+                  <Upload className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Drag &amp; drop a file here, or click to browse</span>
+                  <span className="text-[11px] text-muted-foreground">JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - up to 50 MB</span>
+                  {file ? <span className="max-w-full truncate text-xs font-medium">{file.name}</span> : null}
+                </button>
+                <Input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={e => setFile(e.target.files?.[0] || null)}
+                />
+              </div>
+            )}
             <div>
               <Label>Project</Label>
               <Select value={form.project_id || 'none'} onValueChange={value => setForm({...form, project_id: value === 'none' ? null : value})}>
@@ -704,8 +811,8 @@ export default function Documents() {
               </div>
             )}
             <DialogFooter className="sticky bottom-0 bg-background pt-2">
-              <Button type="button" variant="outline" onClick={() => setShowUpload(false)}>{t('cancel')}</Button>
-              <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : t('upload')}</Button>
+              <Button type="button" variant="outline" onClick={closeUploadDialog}>{t('cancel')}</Button>
+              <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : addMode === 'link' ? t('save') : t('upload')}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

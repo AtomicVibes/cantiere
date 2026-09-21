@@ -18,19 +18,35 @@ const toPgTime = (t) => {
 
 const isDocumentTable = (tableName) => tableName === 'documents';
 
+// Human-friendly extension for office MIME types; the generic mime split produces
+// unusable values for OOXML (e.g. "vnd.openxmlformats-officedocument...").
+const DOCUMENT_FILE_FORMATS = {
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+};
+
 const resolveDocumentUrls = async (records, tableName) => {
   if (!isDocumentTable(tableName)) return records;
 
   return Promise.all((records || []).map(async (record) => {
     const storagePath = record.storage_path;
+    const mimeType = record.mime_type || '';
+    // External links (Google Docs/Sheets/Slides) have no storage object: their URL
+    // is exposed directly, it is never fabricated from a storage path, and it is only
+    // reachable by users the existing document RLS already authorises.
+    const isExternal = !!record.external_provider;
     const document = {
       ...record,
       name: record.file_name,
-      file_url: storagePath,
-      file_format: record.mime_type?.split('/').pop() || '',
+      file_url: isExternal ? record.external_url : storagePath,
+      file_format: isExternal
+        ? ''
+        : DOCUMENT_FILE_FORMATS[mimeType] || mimeType.split('/').pop() || '',
       storage_path: storagePath,
     };
-    if (!storagePath) return document;
+    if (isExternal || !storagePath) return document;
 
     const { data, error } = await supabase.storage
       .from('documents')
@@ -116,15 +132,17 @@ export const base44 = {
 
           if (isDocumentTable(tableName)) {
             const { data, error } = await supabase.rpc('create_document_with_audience', {
-              p_file_name: payload.name || payload.file_name,
-              p_storage_path: payload.file_url || payload.storage_path,
-              p_mime_type: payload.mime_type,
-              p_file_size: payload.file_size || 0,
-              p_type: payload.type || 'other',
-              p_project_id: payload.project_id || null,
-              p_notes: payload.notes || null,
-              p_visibility: payload.visibility || 'private',
               p_audience_user_ids: payload.audience_user_ids || [],
+              p_file_name: payload.name || payload.file_name,
+              p_file_size: payload.file_size || 0,
+              p_mime_type: payload.mime_type,
+              p_notes: payload.notes || null,
+              p_project_id: payload.project_id || null,
+              p_storage_path: payload.file_url || payload.storage_path || null,
+              p_type: payload.type || 'other',
+              p_visibility: payload.visibility || 'private',
+              p_external_url: payload.external_url || null,
+              p_external_provider: payload.external_provider || null,
             });
             console.log(`[base44→supabase] ${entityName} create result:`, { data, error });
             if (error) throw error;
