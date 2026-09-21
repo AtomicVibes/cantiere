@@ -78,7 +78,7 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body,
     icon: '/icon-192.png',
-    badge: '/favicon.svg',
+    badge: '/logo.svg',
     vibrate: [200, 100, 200],
     tag: data.notification_id || data.type || 'default',
     renotify: true,

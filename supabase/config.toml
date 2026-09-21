@@ -20,4 +20,10 @@ policy = "per_worker"
 "create-client" = {}
 "create-project-request" = {}
 "review-project-request" = {}
-"send-push" = {}
+# send-push authenticates its own callers (internal x-push-token from the DB
+# trigger, or a valid user JWT where receiver is forced to the caller). The
+# platform-level JWT check must be disabled, otherwise the DB trigger's
+# x-push-token call (no Authorization header) is rejected 401 at the gateway
+# before the function body runs.
+[functions.send-push]
+verify_jwt = false

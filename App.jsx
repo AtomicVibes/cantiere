@@ -19,7 +19,7 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import AuthCallback from '@/pages/AuthCallback';
 
-import { startPushSubscriptionRelay } from '@/hooks/usePushNotification';
+import { startPushSubscriptionRelay, subscribeUserToPush } from '@/hooks/usePushNotification';
 
 // App pages
 import Dashboard from '@/pages/Dashboard';
@@ -109,6 +109,7 @@ function App() {
           <AuthenticatedApp />
         </Router>
         <PushSubscriptionRelay />
+        <PushSubscriptionManager />
         <Toaster />
         <SonnerToaster position="top-right" richColors />
       </AuthProvider>
@@ -129,6 +130,35 @@ function PushSubscriptionRelay() {
       cleanupRef.current = null;
     };
   }, []);
+
+  return null;
+}
+
+// Reflects the "I already granted Chrome permission" case into a real Web Push
+// subscription. Chrome permission being granted does NOT create a subscription:
+// the app only subscribed from the Settings toggle. This manager auto-subscribes
+// the signed-in user whenever the browser permission is already "granted" and
+// there is no active subscription. It NEVER calls requestPermission(), so it can
+// never show a prompt on load.
+function PushSubscriptionManager() {
+  const { user } = useAuth();
+  const inFlightRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!user?.id) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') return;
+    if (inFlightRef.current) return;
+
+    inFlightRef.current = true;
+    subscribeUserToPush(user.id)
+      .catch((err) => {
+        console.error('Push: auto-subscribe failed', err);
+      })
+      .finally(() => {
+        inFlightRef.current = false;
+      });
+  }, [user?.id]);
 
   return null;
 }
