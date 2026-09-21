@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/services/supabase';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Archive,
+  AlertCircle,
   Bell,
   CheckCheck,
   Loader2,
@@ -47,9 +49,12 @@ const PRIORITY_STYLES = {
   low: 'border-l-border',
 };
 
+const PAGE_SIZE = 50;
+
 export default function Notifications() {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
+  const { user, isLoadingAuth } = useAuth();
   const { role } = useUserRole();
   const canManage = PERMISSIONS.canManageNotifications.includes(role);
   const { isSuperAdmin } = useIsSuperAdmin();
@@ -59,14 +64,45 @@ export default function Notifications() {
   const [mutating, setMutating] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
 
   const navigate = useNavigate();
 
-  const { data: notifications = [] } = useQuery({
-    queryKey: ['notifications'],
-    queryFn: () => base44.entities.Notification.list('-created_date'),
-    initialData: [],
+  const userId = user?.id;
+
+  // Query key is scoped to the authenticated user so session/user changes
+  // refetch automatically and never surface another account's cached rows.
+  // The ['notifications'] prefix is kept so the bell can invalidate it.
+  const notificationsQueryKey = useMemo(
+    () => ['notifications', userId, pageSize],
+    [userId, pageSize]
+  );
+
+  const {
+    data: notifications = [],
+    isLoading: notificationsLoading,
+    isFetching: notificationsFetching,
+    error: notificationsError,
+    refetch: refetchNotifications,
+  } = useQuery({
+    queryKey: notificationsQueryKey,
+    // Never query before the authenticated session (and its user id) is ready.
+    enabled: !!userId,
+    placeholderData: (previous) => previous,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        // Explicit per-user predicate for the query; RLS is the real boundary.
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .range(0, pageSize - 1);
+      if (error) throw error;
+      return data ?? [];
+    },
   });
+
+  const canLoadMore = notifications.length === pageSize;
 
   const currentNotifications = useMemo(
     () => notifications.filter(n => (view === 'archived' ? n.archived : !n.archived)),
@@ -167,7 +203,7 @@ export default function Notifications() {
       const denied = results.filter(r => !r.ok && !r.missing);
 
       if (updatedIds.length > 0) {
-        queryClient.setQueryData(['notifications'], (previous) =>
+        queryClient.setQueryData(notificationsQueryKey, (previous) =>
           (previous || []).map(item => updatedIds.includes(item.id) ? { ...item, archived } : item));
         setSelectedIds(prev => {
           const remaining = new Set(prev);
@@ -235,7 +271,7 @@ export default function Notifications() {
       const deleteFailures = results.filter(r => !r.dbDeleted);
 
       if (deletedIds.length > 0) {
-        queryClient.setQueryData(['notifications'], (previous) =>
+        queryClient.setQueryData(notificationsQueryKey, (previous) =>
           (previous || []).filter(item => !deletedIds.includes(item.id)));
         queryClient.invalidateQueries({ queryKey: ['notifications'] });
         setSelectedIds(prev => {
@@ -343,10 +379,25 @@ export default function Notifications() {
           </div>
         )}
 
-        {currentNotifications.length === 0 ? (
+        {(notificationsLoading || (isLoadingAuth && !userId)) ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" />
+            <span className="text-sm">{t('loading')}</span>
+          </div>
+        ) : notificationsError ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+            <AlertCircle className="w-8 h-8 text-destructive" />
+            <div>
+              <p className="text-sm font-medium">Couldn't load your notifications</p>
+              <p className="text-sm text-muted-foreground">{notificationsError.message}</p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => refetchNotifications()}>Try again</Button>
+          </div>
+        ) : currentNotifications.length === 0 ? (
           <EmptyState icon={Bell} title="No notifications" description={view === 'archived' ? 'No archived notifications' : "You're all caught up!"} />
         ) : (
-          <div className="space-y-2">
+          <>
+            <div className="space-y-2">
             {currentNotifications.map(notif => {
               const Icon = getNotificationIcon(notif.type);
               const labelKey = getNotificationLabelKey(notif.type);
@@ -442,7 +493,16 @@ export default function Notifications() {
                 </div>
               );
             })}
-          </div>
+            </div>
+            {canLoadMore && (
+              <div className="flex justify-center pt-2">
+                <Button variant="outline" size="sm" disabled={notificationsFetching} onClick={() => setPageSize(size => size + PAGE_SIZE)}>
+                  {notificationsFetching && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Load more
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
