@@ -26,6 +26,7 @@ export default function Settings() {
     language: 'en',
     email_notifications: true,
   });
+  const [retention, setRetention] = useState(7);
   const [saving, setSaving] = useState(false);
   const [pushState, setPushState] = useState({ loading: false, enabled: null });
 
@@ -57,6 +58,22 @@ export default function Settings() {
       applyTheme(savedTheme);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    supabase
+      .from('profiles')
+      .select('notification_retention_days')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (active && data?.notification_retention_days) {
+          setRetention(data.notification_retention_days);
+        }
+      });
+    return () => { active = false; };
+  }, [user?.id]);
 
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
@@ -126,6 +143,7 @@ export default function Settings() {
         .upsert({
           id: authUser.id,
           preferred_language: selectedLang,
+          notification_retention_days: retention,
         });
 
       if (upsertError) throw upsertError;
@@ -238,6 +256,20 @@ export default function Settings() {
               >
                 {pushState.loading ? 'Enabling...' : pushState.enabled ? 'Enabled' : 'Enable'}
               </Button>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2">
+              <div>
+                <p className="font-medium">{t('notificationRetention')}</p>
+                <p className="text-sm text-muted-foreground">{t('notificationRetentionDesc')}</p>
+              </div>
+              <Select value={String(retention)} onValueChange={(v) => setRetention(Number(v))}>
+                <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">{t('retention24h')}</SelectItem>
+                  <SelectItem value="7">{t('retention1week')}</SelectItem>
+                  <SelectItem value="30">{t('retention1month')}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

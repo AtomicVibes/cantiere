@@ -47,6 +47,7 @@ const NOTIFICATION_ROUTES = {
   team: '/teams',
   role_update: '/settings',
   status_change: '/settings',
+  notification_reminder: '/notifications',
   general: '/dashboard',
 };
 

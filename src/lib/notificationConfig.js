@@ -62,6 +62,9 @@ export const NOTIFICATION_TYPES = {
   role_update: { labelKey: 'settings', icon: UserCog, base: '/settings' },
   status_change: { labelKey: 'settings', icon: Bell, base: '/settings' },
 
+  // Reminder about unread notifications (produced by the reminder engine)
+  notification_reminder: { labelKey: 'notifications', icon: Bell, base: '/notifications' },
+
   // Fallback category for unknown/legacy rows
   general: { labelKey: 'general', icon: Bell, base: '/dashboard' },
 };
