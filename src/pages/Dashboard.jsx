@@ -38,6 +38,8 @@ export default function Dashboard() {
     queryKey: ['projects'],
     queryFn: () => listEntities('projects'),
     placeholderData: [],
+    // Heal a stale/empty cache whenever the dashboard is remounted.
+    refetchOnMount: true,
   });
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],

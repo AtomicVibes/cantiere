@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import TopBar from '@/components/layout/TopBar';
@@ -8,16 +8,18 @@ import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, FolderKanban } from 'lucide-react';
+import { Plus, Search, FolderKanban, AlertTriangle, Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { listEntities, createEntity, updateEntity } from '@/services/dataService';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useAuth } from '@/lib/AuthContext';
 import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 
 export default function Projects() {
   const { t } = useTranslation();
   const { role } = useUserRole();
+  const { user } = useAuth();
   const canCreate = PERMISSIONS.canCreateProject.includes(role);
   const [showForm, setShowForm] = useState(false);
   const [editProject, setEditProject] = useState(null);
@@ -25,10 +27,14 @@ export default function Projects() {
   const [statusFilter, setStatusFilter] = useState('all');
   const queryClient = useQueryClient();
 
-  const { data: projects = [] } = useQuery({
+  const { data: projects = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['projects'],
     queryFn: () => listEntities('projects', { order: { column: 'created_at', direction: 'desc' } }),
-    initialData: [],
+    placeholderData: [],
+    enabled: !!user?.id,
+    // A project may have been created/approved on another page (e.g. request
+    // approval) while this cache was stale; refetch on mount so the list heals.
+    refetchOnMount: true,
   });
   const { data: clients = [] } = useQuery({
     queryKey: ['clients', 'dropdown'],
@@ -40,7 +46,8 @@ export default function Projects() {
       const result = (data ?? []).map(c => ({ id: c.id, company_name: c.company_name || '' }));
       return result;
     },
-    initialData: [],
+    placeholderData: [],
+    enabled: !!user?.id,
   });
   const { data: managers = [] } = useManagers();
 
@@ -69,6 +76,10 @@ export default function Projects() {
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  useEffect(() => {
+    if (isError) console.error('[projects] failed to load projects — showing retry state');
+  }, [isError]);
 
   return (
     <div>
@@ -109,7 +120,20 @@ export default function Projects() {
         </div>
 
         {/* Project Grid */}
-        {filtered.length === 0 ? (
+        {isError ? (
+          <div className="border border-destructive/30 bg-destructive/5 rounded-xl p-6 flex flex-col items-center gap-3 text-center">
+            <AlertTriangle className="w-8 h-8 text-destructive" />
+            <p className="font-medium">{t('projectsLoadError')}</p>
+            <p className="text-sm text-muted-foreground max-w-md">{t('projectsLoadErrorDesc')}</p>
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => refetch()}>
+              <RefreshCw className="w-4 h-4" /> {t('retry')}
+            </Button>
+          </div>
+        ) : isLoading ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" /> {t('loading')}
+          </div>
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={FolderKanban}
             title={t('noProjectsFound')}

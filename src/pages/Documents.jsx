@@ -29,6 +29,7 @@ import { handleMutationError } from '@/lib/rbac';
 import { supabase } from '@/services/supabase';
 import DocumentPreview from '@/components/shared/DocumentPreview';
 import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
+import { parseGoogleDocLink, getGoogleDocMime } from '@/lib/googleLinks';
 
 const DOC_CATEGORIES = [
   'blueprint', 'contract', 'permit', 'invoice', 'photo',
@@ -44,27 +45,6 @@ const SUPPORTED_DOCUMENT_TYPES = new Set([
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ]);
-
-const GOOGLE_DOC_MIME = {
-  document: 'application/vnd.google-apps.document',
-  spreadsheets: 'application/vnd.google-apps.spreadsheet',
-  presentation: 'application/vnd.google-apps.presentation',
-};
-const GOOGLE_DOC_RE = /^\/(document|spreadsheets|presentation)(?:\/u\/\d+)?\/d\//;
-
-const parseGoogleDocLink = (value) => {
-  if (!value?.trim()) return null;
-  let url;
-  try {
-    url = new URL(value.trim());
-  } catch {
-    return null;
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-  if (url.hostname !== 'docs.google.com') return null;
-  const match = url.pathname.match(GOOGLE_DOC_RE);
-  return match ? { subtype: match[1] } : null;
-};
 
 export default function Documents() {
   const { t } = useTranslation();
@@ -272,7 +252,7 @@ export default function Documents() {
           ...form,
           external_url: externalUrl.trim(),
           external_provider: 'google',
-          mime_type: GOOGLE_DOC_MIME[parsed.subtype],
+          mime_type: getGoogleDocMime(parsed.subtype),
           file_size: 0,
           project_id: form.project_id || null,
           visibility: form.visibility,

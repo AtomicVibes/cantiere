@@ -4,13 +4,16 @@ const handleReadCall = async (operation) => {
   try {
     return await operation();
   } catch (error) {
+    // Surface errors instead of swallowing them: a silent `undefined` is seen by
+    // React Query as a "successful" read of empty data, which caches empty lists
+    // for gcMinutes and makes transient failures look like "no records".
     console.error('DATA_ERROR_LOG', {
       message: error.message,
       code: error.code,
       details: error.details,
       hint: error.hint,
     });
-    return undefined;
+    throw error;
   }
 };
 

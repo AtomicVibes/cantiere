@@ -7,12 +7,10 @@ import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
 import StatCard from '@/components/dashboard/StatCard';
+import InvoiceFormDialog from '@/components/invoices/InvoiceFormDialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { DateInput } from '@/components/ui/inputWithIcon';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
@@ -20,32 +18,24 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Archive, RotateCcw, Trash2, Loader2 } from 'lucide-react';
+import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Archive, RotateCcw, Trash2, Loader2, FileText, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useInvoiceFormFields } from '@/hooks/useFormSchema';
-import { useDirection } from '@/i18n/LanguageProvider';
 import { PERMISSIONS } from '@/lib/permissions';
-import { handleMutationError } from '@/lib/rbac';
-
-const emptyInvoice = {
-  invoice_number: '', client_id: '', project_id: '', category: 'miscellaneous',
-  supplier: '', amount: '', tax: '', total: '', issue_date: '', due_date: '',
-  payment_status: 'draft', notes: '',
-};
+import { fetchInvoiceDetail } from '@/services/invoiceService';
+import { openInvoicePdf } from '@/services/invoicePdf';
 
 export default function Finance() {
   const { t } = useTranslation();
-  const { dir } = useDirection();
   const { role } = useUserRole();
   const { isSuperAdmin } = useIsSuperAdmin();
   const canCreate = PERMISSIONS.canCreateInvoice.includes(role);
   const canDelete = PERMISSIONS.canDeleteInvoice.includes(role);
-  const { fields, categoryOptions, statusOptions } = useInvoiceFormFields();
+  const { statusOptions } = useInvoiceFormFields();
   const [showForm, setShowForm] = useState(false);
   const [editInvoice, setEditInvoice] = useState(null);
-  const [form, setForm] = useState(emptyInvoice);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [view, setView] = useState('active');
@@ -53,13 +43,12 @@ export default function Finance() {
   const [mutating, setMutating] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [saving, setSaving] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: invoices = [] } = useQuery({
     queryKey: ['invoices'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('invoices').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase.from('invoices').select('*, invoice_attachments(id)').order('created_at', { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -86,39 +75,27 @@ export default function Finance() {
   const clientMap = Object.fromEntries(clients.map(c => [c.id, c.name]));
   const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]));
 
-  const createMutation = useMutation({
-    mutationFn: async (data) => {
-      const { data: created, error } = await supabase.from('invoices').insert([data]).select().single();
-      if (error) throw error;
-      return created;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
-    onError: (err) => handleMutationError(err, t, toast),
-  });
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const { data: updated, error } = await supabase.from('invoices').update(data).eq('id', id).select().single();
-      if (error) throw error;
-      return updated;
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
-    onError: (err) => handleMutationError(err, t, toast),
-  });
-  const deleteMutation = useMutation({
-    mutationFn: async (id) => {
-      const { error } = await supabase.from('invoices').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Invoice deleted');
-    },
-    onError: (err) => {
-      if (!handleMutationError(err, t, toast)) {
-        toast.error('Failed to delete invoice. Please try again.');
-      }
-    },
-  });
+  const openEdit = (inv) => {
+    setEditInvoice(inv);
+    setShowForm(true);
+  };
+
+  const handlePdf = async (inv) => {
+    try {
+      const detail = await fetchInvoiceDetail(inv.id);
+      await openInvoicePdf(
+        {
+          invoice: detail,
+          items: detail.items || [],
+          logoUrl: (detail.seller_snapshot && detail.seller_snapshot.logo_url) || '/icons/icon-512.png',
+        },
+        `fattura-${inv.invoice_number || inv.id}.pdf`
+      );
+    } catch (err) {
+      console.error('[finance] failed to generate PDF', err);
+      toast.error('Failed to generate the PDF. Please try again.');
+    }
+  };
 
   const archiveMutation = useMutation({
     mutationFn: async (ids) => {
@@ -149,33 +126,6 @@ export default function Finance() {
     },
     onError: (err) => toast.error(err.message),
   });
-
-  const openEdit = (inv) => {
-    setEditInvoice(inv);
-    setForm({
-      invoice_number: inv.invoice_number || '', client_id: inv.client_id || '', project_id: inv.project_id || '',
-      category: inv.category || 'miscellaneous', supplier: inv.supplier || '', amount: inv.amount || '',
-      tax: inv.tax || '', total: inv.total || '', issue_date: inv.issue_date || '', due_date: inv.due_date || '',
-      payment_status: inv.payment_status || 'draft', notes: inv.notes || '',
-    });
-    setShowForm(true);
-  };
-
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!canCreate && !editInvoice) {
-      toast.error(t('accessDenied'));
-      return;
-    }
-    setSaving(true);
-    const data = { ...form, amount: Number(form.amount) || 0, tax: Number(form.tax) || 0, total: Number(form.total) || 0 };
-    if (editInvoice) await updateMutation.mutateAsync({ id: editInvoice.id, data });
-    else await createMutation.mutateAsync(data);
-    setSaving(false);
-    setShowForm(false);
-    setEditInvoice(null);
-    setForm(emptyInvoice);
-  };
 
   const currentInvoices = invoices.filter(i => view === 'archived' ? i.archived : !i.archived);
 
@@ -259,7 +209,7 @@ export default function Finance() {
             </Select>
           </div>
           {canCreate && (
-            <Button onClick={() => { setEditInvoice(null); setForm(emptyInvoice); setShowForm(true); }} className="gap-2">
+            <Button onClick={() => { setEditInvoice(null); setShowForm(true); }} className="gap-2">
               <Plus className="w-4 h-4" /> {t('newInvoice')}
             </Button>
           )}
@@ -348,8 +298,17 @@ export default function Finance() {
                     <TableCell className="hidden md:table-cell">{inv.due_date ? format(new Date(inv.due_date), 'MMM d, yyyy') : '-'}</TableCell>
                     <TableCell><StatusBadge status={inv.payment_status} /></TableCell>
                     <TableCell>
-                      <div className="flex gap-1">
+                      <div className="flex gap-1 items-center">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handlePdf(inv)}><FileText className="w-3.5 h-3.5" /></Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(inv)}><Pencil className="w-3.5 h-3.5" /></Button>
+                        {(inv.invoice_attachments?.length || 0) > 0 && (
+                          <button onClick={() => openEdit(inv)} className="relative p-1.5 rounded-md hover:bg-muted text-muted-foreground transition-colors" title={t('attachments')}>
+                            <Paperclip className="w-3.5 h-3.5" />
+                            <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[9px] rounded-full h-3.5 min-w-3.5 px-0.5 flex items-center justify-center leading-none">
+                              {inv.invoice_attachments.length}
+                            </span>
+                          </button>
+                        )}
                         {isSuperAdmin && (
                           view === 'active' ? (
                             <button onClick={() => archiveMutation.mutate(inv.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Archive">
@@ -376,65 +335,14 @@ export default function Finance() {
         )}
       </div>
 
-      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); if (!v) setEditInvoice(null); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-heading">{editInvoice ? t('editInvoice') : t('newInvoice')}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSave} className="space-y-4" dir={dir}>
-            <div className="grid grid-cols-2 gap-4">
-              {fields.filter(f => ['invoice_number', 'supplier'].includes(f.key)).map(f => (
-                <div key={f.key}><Label>{f.label}{f.required ? ' *' : ''}</Label><Input type={f.type} value={form[f.key] || ''} onChange={e => setForm({...form, [f.key]: e.target.value})} required={f.required} /></div>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {fields.filter(f => ['client_id', 'project_id'].includes(f.key)).map(f => {
-                const data = f.key === 'client_id' ? clients : projects;
-                return (
-                  <div key={f.key}>
-                    <Label>{f.label}</Label>
-                    <Select value={form[f.key]} onValueChange={v => setForm({...form, [f.key]: v})}>
-                      <SelectTrigger><SelectValue placeholder={t('select')} /></SelectTrigger>
-                      <SelectContent>{data.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              {fields.filter(f => ['amount', 'tax', 'total'].includes(f.key)).map(f => (
-                <div key={f.key}><Label>{f.label}</Label><Input type="number" value={form[f.key] || ''} onChange={e => {
-                  const newForm = { ...form, [f.key]: e.target.value };
-                  if (f.key === 'amount') newForm.total = String(Number(e.target.value) + Number(form.tax || 0));
-                  if (f.key === 'tax') newForm.total = String(Number(form.amount || 0) + Number(e.target.value));
-                  setForm(newForm);
-                }} /></div>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label>{t('category')}</Label>
-                <Select value={form.category} onValueChange={v => setForm({...form, category: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{categoryOptions.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              {fields.filter(f => ['issue_date', 'due_date'].includes(f.key)).map(f => (
-                <div key={f.key}><Label>{f.label}</Label><DateInput value={form[f.key] || ''} onChange={e => setForm({...form, [f.key]: e.target.value})} /></div>
-              ))}
-            </div>
-            <div>
-              <Label>{t('paymentStatus')}</Label>
-              <Select value={form.payment_status} onValueChange={v => setForm({...form, payment_status: v})}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
-              <Button type="submit" disabled={saving || !form.invoice_number}>{saving ? t('saving') : t('save')}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <InvoiceFormDialog
+        open={showForm}
+        onOpenChange={(v) => { setShowForm(v); if (!v) setEditInvoice(null); }}
+        invoice={editInvoice}
+        clients={clients}
+        projects={projects}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['invoices'] })}
+      />
 
       <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <AlertDialogContent>

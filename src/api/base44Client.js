@@ -20,7 +20,7 @@ const isDocumentTable = (tableName) => tableName === 'documents';
 
 // Human-friendly extension for office MIME types; the generic mime split produces
 // unusable values for OOXML (e.g. "vnd.openxmlformats-officedocument...").
-const DOCUMENT_FILE_FORMATS = {
+export const DOCUMENT_FILE_FORMATS = {
   'application/msword': 'doc',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
   'application/vnd.ms-excel': 'xls',
