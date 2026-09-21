@@ -6,6 +6,7 @@ import TopBar from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { DateInput, TimeInput } from '@/components/ui/inputWithIcon';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -518,11 +519,11 @@ export default function CalendarPage() {
                   <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div><Label>{t('date') || 'Date'} *</Label><Input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} required /></div>
+              <div><Label>{t('date') || 'Date'} *</Label><DateInput value={form.date} onChange={e => setForm({...form, date: e.target.value})} required /></div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>{t('time') || 'Time'} *</Label><Input type="time" value={form.time} onChange={e => setForm({...form, time: e.target.value})} required /></div>
+              <div><Label>{t('time') || 'Time'} *</Label><TimeInput value={form.time} onChange={e => setForm({...form, time: e.target.value})} required /></div>
               <div><Label>{t('location') || 'Location'}</Label><Input value={form.location} onChange={e => setForm({...form, location: e.target.value})} /></div>
             </div>
 

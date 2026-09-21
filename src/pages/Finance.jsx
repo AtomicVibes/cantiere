@@ -10,6 +10,7 @@ import StatCard from '@/components/dashboard/StatCard';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/inputWithIcon';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -417,7 +418,7 @@ export default function Finance() {
                 </Select>
               </div>
               {fields.filter(f => ['issue_date', 'due_date'].includes(f.key)).map(f => (
-                <div key={f.key}><Label>{f.label}</Label><Input type="date" value={form[f.key] || ''} onChange={e => setForm({...form, [f.key]: e.target.value})} /></div>
+                <div key={f.key}><Label>{f.label}</Label><DateInput value={form[f.key] || ''} onChange={e => setForm({...form, [f.key]: e.target.value})} /></div>
               ))}
             </div>
             <div>

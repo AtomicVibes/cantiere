@@ -4,6 +4,7 @@ import { supabase } from '@/services/supabase';
 import { createProjectRequest, uploadProjectDoc } from '@/services/requestService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/inputWithIcon';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -151,9 +152,8 @@ export default function ProjectRequestForm({ onSuccess }) {
         <Label htmlFor="req-deadline" className="text-sm font-medium">
           Estimated deadline
         </Label>
-        <Input
+        <DateInput
           id="req-deadline"
-          type="date"
           value={form.estimated_deadline}
           onChange={(e) => set('estimated_deadline')(e.target.value)}
           min={today}

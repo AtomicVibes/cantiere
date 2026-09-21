@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 
 import { Input } from '@/components/ui/input';
+import { DateInput } from '@/components/ui/inputWithIcon';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import {
@@ -337,7 +338,7 @@ export default function ProjectDetail() {
             <div className="bg-card rounded-xl border border-border p-4 space-y-3 mb-4">
               <Input placeholder={t('entryTitle')} value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
               <Textarea placeholder="Description" value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
-              <Input type="date" value={newEntry.date} onChange={e => setNewEntry({...newEntry, date: e.target.value})} />
+              <DateInput value={newEntry.date} onChange={e => setNewEntry({...newEntry, date: e.target.value})} />
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title}>{t('save')}</Button>
                 <Button size="sm" variant="outline" onClick={() => setAddingEntry(false)}>{t('cancel')}</Button>

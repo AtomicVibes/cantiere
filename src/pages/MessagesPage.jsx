@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/AuthContext';
+import { useStaffProfiles } from '@/hooks/useStaffProfiles';
 import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -45,7 +46,10 @@ export default function MessagesPage() {
     });
   }, [userId]);
 
+  const { data: staffProfiles = [], isLoading: staffLoading } = useStaffProfiles();
+
   const [contacts, setContacts] = useState([]);
+  const [contactPartners, setContactPartners] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -68,11 +72,41 @@ export default function MessagesPage() {
   const unreadMapRef = useRef({});
   const handleOpenChatRef = useRef(null);
   const selectedUserIdRef = useRef(null);
+  const contactsRef = useRef([]);
+  const hiddenIdsRef = useRef(new Set());
 
   // Keep refs in sync with state for snapshot/rollback
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { unreadMapRef.current = unreadMap; }, [unreadMap]);
   useEffect(() => { selectedUserIdRef.current = selectedUserId; }, [selectedUserId]);
+  useEffect(() => { contactsRef.current = contacts; }, [contacts]);
+
+  // Merge the staff directory with existing message partners, deduping by
+  // profile UUID so a person appears exactly once. Client-role users are
+  // excluded from the directory but stay reachable once a thread exists.
+  const mergeContacts = useCallback((staff, partners, {
+    hiddenIds = hiddenIdsRef.current,
+    preserved = contactsRef.current,
+  } = {}) => {
+    const map = new Map();
+    (preserved || []).forEach(c => { if (c?.id && !hiddenIds.has(c.id)) map.set(c.id, c); });
+    (staff || []).forEach(s => {
+      if (s.id && !hiddenIds.has(s.id)) map.set(s.id, s);
+    });
+    (partners || []).forEach(p => {
+      const curr = map.get(p.id);
+      if (!curr) map.set(p.id, p);
+      else if (!curr.role_name && p.role_name) map.set(p.id, { ...curr, ...p });
+    });
+    return [...map.values()].sort((a, b) =>
+      (a.full_name || '').localeCompare(b.full_name || '', undefined, { sensitivity: 'base' })
+    );
+  }, []);
+
+  // Central merge: any change in partners or the staff directory rebuilds the list.
+  useEffect(() => {
+    setContacts(mergeContacts(staffProfiles, contactPartners));
+  }, [staffProfiles, contactPartners, mergeContacts]);
 
   // Sync selectedUserId to URL so AppLayout can detect open chat.
   // Skip clearing on mount: the deep-link effect may already be handling ?user=xxx
@@ -118,6 +152,26 @@ export default function MessagesPage() {
     scrollToBottom();
   }, [lastMessageId, scrollToBottom]);
 
+// Fetches profile metadata for a set of partner profile IDs.
+  const fetchPartners = useCallback(async (ids) => {
+    if (!ids?.length) return [];
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, phone, job_title, department, role_id, roles(name)')
+      .in('id', ids);
+    if (error) throw error;
+    return (data ?? []).map(p => ({
+      id: p.id,
+      full_name: p.full_name || '',
+      email: p.email || '',
+      phone: p.phone || '',
+      job_title: p.job_title || '',
+      department: p.department || '',
+      role_id: p.role_id || '',
+      role_name: p.roles?.find(r => r?.name)?.name || '',
+    }));
+  }, []);
+
   useEffect(() => {
     if (!userId) return;
     setLoading(true);
@@ -145,24 +199,11 @@ export default function MessagesPage() {
           const { data } = await supabase.from('hidden_conversations').select('other_user_id').eq('user_id', userId);
           hiddenIds = new Set((data ?? []).map(h => h.other_user_id));
         } catch {}
+        hiddenIdsRef.current = hiddenIds;
 
-        const partnerArray = [...partnerIds].filter(id => !hiddenIds.has(id));
-        if (partnerArray.length === 0) {
-          setContacts([]);
-          setUnreadMap(counts);
-          setLoading(false);
-          return;
-        }
-
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, email, full_name, role_id, roles(name)')
-          .in('id', partnerArray);
-
-        setContacts(partnerArray.map(id => {
-          const profile = profiles?.find(p => p.id === id);
-          return profile || { id, full_name: null, email: null };
-        }));
+        const partnerArray = [...partnerIds].filter(id => !hiddenIds.has(id)).map(id => ({ id }));
+        const partnerProfiles = await fetchPartners(partnerArray.map(p => p.id));
+        setContactPartners(partnerProfiles);
         setUnreadMap(counts);
       } catch (err) {
         console.error('Failed to load contacts:', err);
@@ -170,7 +211,7 @@ export default function MessagesPage() {
         setLoading(false);
       }
     })();
-  }, [userId]);
+  }, [userId, fetchPartners]);
 
   // ── Realtime contact list refresh ──────────────────────────────────
   // When a new message arrives, increment the sender's unread count and
@@ -210,57 +251,61 @@ export default function MessagesPage() {
               hiddenIds = new Set((data ?? []).map(h => h.other_user_id));
             } catch {}
 
-            const partnerArray = [...partnerIds].filter(id => !hiddenIds.has(id));
-            if (partnerArray.length === 0) return;
+            const partnerArray = [...partnerIds].filter(id => !hiddenIds.has(id)).map(id => ({ id }));
+            hiddenIdsRef.current = hiddenIds;
 
-            const { data: profiles } = await supabase
-              .from('profiles')
-              .select('id, email, full_name, role_id, roles(name)')
-              .in('id', partnerArray);
-
-            setContacts(partnerArray.map(id => {
-              const profile = profiles?.find(p => p.id === id);
-              return profile || { id, full_name: null, email: null };
-            }));
+            const partnerProfiles = await fetchPartners(partnerArray.map(p => p.id));
+            setContactPartners(partnerProfiles);
           } catch {}
         })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [userId]);
+  }, [userId, fetchPartners]);
 
   // ── URL param deep-linking (single source of truth) ─────────────────
   // Handles both initial mount and subsequent URL changes (e.g., push
   // notification click while on /messages).  If the contact is already
   // loaded, opens the chat immediately.  Otherwise fetches the profile
   // from the DB and adds them to the contact list.
-  useEffect(() => {
-    if (!userId) return;
-    const openId = new URLSearchParams(location.search).get('user');
-    if (!openId || openId === selectedUserId) return;
+  const handleDeepLink = useCallback(async (openId) => {
+    if (!openId || openId === selectedUserIdRef.current) return;
 
-    const existingContact = contacts.find(c => c.id === openId);
+    const existingContact = contactsRef.current.find(c => c.id === openId);
     if (existingContact) {
       handleOpenChatRef.current(openId);
-    } else {
-      supabase
-        .from('profiles')
-        .select('id, email, full_name, role_id, roles(name)')
-        .eq('id', openId)
-        .single()
-        .then(({ data }) => {
-          if (data) {
-            setContacts(prev => [data, ...prev]);
-          } else {
-            setContacts(prev => {
-              if (prev.some(c => c.id === openId)) return prev;
-              return [...prev, { id: openId, full_name: null, email: null }];
-            });
-          }
-          handleOpenChatRef.current(openId);
-        });
+      return;
     }
-  }, [location.search, userId, contacts, selectedUserId]);
+
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, email, full_name, phone, job_title, department, role_id, roles(name)')
+      .eq('id', openId)
+      .single();
+
+    const profile = data
+      ? {
+          id: data.id,
+          full_name: data.full_name || '',
+          email: data.email || '',
+          phone: data.phone || '',
+          job_title: data.job_title || '',
+          department: data.department || '',
+          role_id: data.role_id || '',
+          role_name: data.roles?.find(r => r?.name)?.name || '',
+        }
+      : { id: openId, full_name: null, email: null };
+
+    const merged = mergeContacts(staffProfiles, contactPartners);
+    if (!merged.some(c => c.id === openId)) merged.unshift(profile);
+    setContacts(merged);
+    handleOpenChatRef.current(openId);
+  }, [staffProfiles, contactPartners, mergeContacts]);
+
+  useEffect(() => {
+    if (!userId) return;
+    handleDeepLink(new URLSearchParams(location.search).get('user'));
+  }, [userId, location.search, handleDeepLink]);
 
   // ── Optimistic chat opener ─────────────────────────────────────────
   // Immediately marks local messages as read before the RPC commits to
@@ -369,6 +414,8 @@ export default function MessagesPage() {
       setDeleteTarget(null);
       setSelectedUserId(null);
       setMessages([]);
+      setContactPartners(prev => prev.filter(p => p.id !== peerId));
+      hiddenIdsRef.current = new Set([...hiddenIdsRef.current, peerId]);
       setContacts(prev => prev.filter(c => c.id !== peerId));
       setUnreadMap(prev => {
         const next = { ...prev };
@@ -448,21 +495,28 @@ export default function MessagesPage() {
         });
       if (insertError) throw insertError;
 
-      if (!contacts.some(c => c.id === selectedUserId)) {
+      if (!contactsRef.current.some(c => c.id === selectedUserId)) {
         supabase
           .from('profiles')
-          .select('id, email, full_name, role_id, roles(name)')
+          .select('id, email, full_name, phone, job_title, department, role_id, roles(name)')
           .eq('id', selectedUserId)
           .single()
           .then(({ data }) => {
-            if (data) {
-              setContacts(prev => [...prev, data]);
-            } else {
-              setContacts(prev => {
-                if (prev.some(c => c.id === selectedUserId)) return prev;
-                return [...prev, { id: selectedUserId, full_name: null, email: null }];
-              });
-            }
+            const profile = data
+              ? {
+                  id: data.id,
+                  full_name: data.full_name || '',
+                  email: data.email || '',
+                  phone: data.phone || '',
+                  job_title: data.job_title || '',
+                  department: data.department || '',
+                  role_id: data.role_id || '',
+                  role_name: data.roles?.find(r => r?.name)?.name || '',
+                }
+              : { id: selectedUserId, full_name: null, email: null };
+            const merged = mergeContacts(staffProfiles, contactPartners);
+            if (!merged.some(c => c.id === selectedUserId)) merged.unshift(profile);
+            setContacts(merged);
           });
       }
 
@@ -538,9 +592,14 @@ export default function MessagesPage() {
     }
   }, []);
 
-  const filteredContacts = contacts.filter(c =>
-    !search || c.full_name?.toLowerCase().includes(search.toLowerCase()) || c.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredContacts = contacts.filter(c => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    const fields = [c.full_name, c.email, c.phone, c.job_title, c.department, c.role_name];
+    return fields.some(f => (f || '').toLowerCase().includes(q));
+  });
+
+  const anythingLoading = loading || (staffLoading && staffProfiles.length === 0);
 
   const renderChatContent = () => (
     <>
@@ -695,7 +754,7 @@ export default function MessagesPage() {
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto">
-            {loading ? (
+            {anythingLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
               </div>
@@ -730,7 +789,11 @@ export default function MessagesPage() {
                     </div>
                     <div className={cn("flex-1 min-w-0", isContactsCollapsed && "hidden")}>
                       <p className="text-sm font-medium truncate">{contact.full_name || contact.email || 'Unknown'}</p>
-                      <p className="text-xs text-muted-foreground truncate">{contact.full_name ? contact.email : ''}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {contact.full_name
+                          ? (contact.job_title ? contact.job_title + (contact.department ? ` · ${contact.department}` : '') : (contact.role_name || contact.email || ''))
+                          : ''}
+                      </p>
                     </div>
                   </button>
                 );
