@@ -1442,9 +1442,10 @@ i18n
       lookupQuerystring: 'lng',
       lookupCookie: 'i18next',
       lookupLocalStorage: 'i18nextLng',
-      caches: ['localStorage', 'cookie'],
-      cookieMinutes: 43200,
-      cookieDomain: window.location.hostname
+      // Persist the language only in localStorage (the app also persists it to
+      // profiles.preferred_language). Writing the "i18next" cookie is disabled
+      // so the app never sets an automatic preference cookie without consent.
+      caches: ['localStorage']
     }
   });
 
