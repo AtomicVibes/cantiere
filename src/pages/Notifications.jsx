@@ -22,32 +22,24 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  AlertTriangle,
   Archive,
   Bell,
   CheckCheck,
-  Clock,
-  DollarSign,
-  FolderKanban,
   Loader2,
   RotateCcw,
   Trash2,
-  Users,
+  ArrowRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
-
-const TYPE_ICONS = {
-  project_update: FolderKanban,
-  team_assignment: Users,
-  invoice_change: DollarSign,
-  permit_expiry: AlertTriangle,
-  deadline_alert: Clock,
-  general: Bell,
-};
+import {
+  getNotificationIcon,
+  getNotificationLabelKey,
+  resolveNotificationDestination,
+} from '@/lib/notificationConfig';
 
 const PRIORITY_STYLES = {
   high: 'border-l-destructive',
@@ -82,50 +74,16 @@ export default function Notifications() {
   );
 
   const handleNotificationClick = useCallback(async (notif) => {
-    if (!notif.is_read && canManage) {
-      await base44.entities.Notification.update(notif.id, { is_read: true });
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    if (!notif.is_read) {
+      try {
+        await base44.entities.Notification.update(notif.id, { is_read: true });
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      } catch (err) {
+        console.error('Failed to mark notification as read:', err);
+      }
     }
-
-    if (notif.url) {
-      navigate(notif.url);
-      return;
-    }
-
-    const type = notif.type;
-
-    if (type === 'role_update' || type === 'status_change') {
-      navigate('/settings');
-      return;
-    }
-
-    if (type === 'project_assignment' || type === 'project_update') {
-      navigate('/projects');
-      return;
-    }
-
-    if (type === 'message' || type === 'new_message') {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('roles:roles!profiles_role_id_fkey(name)')
-        .eq('id', notif.user_id)
-        .single();
-      const roleName = profile?.roles?.name;
-      navigate(roleName === 'super_admin' ? '/admin/messages' : '/messages');
-      return;
-    }
-
-    const msg = (notif.message || '').toLowerCase();
-    if (msg.includes('project')) {
-      navigate('/projects');
-    } else if (msg.includes('team') || msg.includes('member')) {
-      navigate('/teams');
-    } else if (msg.includes('invoice') || msg.includes('finance') || msg.includes('budget')) {
-      navigate('/finance');
-    } else {
-      navigate('/dashboard');
-    }
-  }, [navigate, canManage, queryClient]);
+    navigate(resolveNotificationDestination(notif, { isSuperAdmin }));
+  }, [navigate, queryClient, isSuperAdmin]);
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Notification.update(id, data),
@@ -390,7 +348,10 @@ export default function Notifications() {
         ) : (
           <div className="space-y-2">
             {currentNotifications.map(notif => {
-              const Icon = TYPE_ICONS[notif.type] || Bell;
+              const Icon = getNotificationIcon(notif.type);
+              const labelKey = getNotificationLabelKey(notif.type);
+              const label = t(labelKey);
+              const showLabel = label && label !== labelKey;
               return (
                 <div
                   key={notif.id}
@@ -418,7 +379,9 @@ export default function Notifications() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className={cn("text-sm font-medium", !notif.is_read && "font-semibold")}>{notif.title}</h4>
+                      <h4 className={cn("text-sm font-medium", !notif.is_read && "font-semibold")}>
+                        {showLabel ? label : (notif.title || '')}
+                      </h4>
                       <span className="text-xs text-muted-foreground flex-shrink-0">
                         {notif.created_at ? format(new Date(notif.created_at), 'MMM d, h:mm a') : ''}
                       </span>
@@ -426,6 +389,14 @@ export default function Notifications() {
                     {notif.message && <p className="text-sm text-muted-foreground mt-0.5">{notif.message}</p>}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs flex-shrink-0 z-10"
+                      onClick={(e) => { e.stopPropagation(); handleNotificationClick(notif); }}
+                    >
+                      <ArrowRight className="w-3.5 h-3.5 mr-1" /> {t('moreDetails')}
+                    </Button>
                     {isSuperAdmin && (
                       <div className="flex flex-col gap-1 z-10">
                         {view === 'active' ? (

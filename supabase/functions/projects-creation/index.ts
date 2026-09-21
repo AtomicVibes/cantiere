@@ -139,8 +139,9 @@ serve(async (req) => {
             .from('notifications')
             .insert({
               user_id: adminUser.id,
-              type: 'project_assignment',
+              type: 'project_request',
               message: `New project request: ${project_name.trim()}`,
+              url: '/requests?view=management',
               is_read: false,
             });
         }

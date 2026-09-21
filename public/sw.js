@@ -28,6 +28,40 @@ function notifyClients(type, payload) {
   });
 }
 
+// Notification type -> destination. MUST mirror src/lib/notificationConfig.js
+// (the service worker cannot import the app bundle). The legacy universal
+// '/messages' url default is deliberately NOT honored here.
+const NOTIFICATION_ROUTES = {
+  message: '/messages',
+  new_message: '/messages',
+  project_request: '/requests',
+  project_assignment: '/projects',
+  project_update: '/projects',
+  team_assignment: '/projects',
+  document: '/documents',
+  invoice_change: '/finance',
+  event: '/calendar',
+  permit_expiry: '/calendar',
+  deadline_alert: '/calendar',
+  client: '/clients',
+  team: '/teams',
+  role_update: '/settings',
+  status_change: '/settings',
+  general: '/dashboard',
+};
+
+function resolvePushDestination(type, url) {
+  const route = NOTIFICATION_ROUTES[type];
+  if (route) {
+    // Trust an explicit deep link only when it belongs to the type's destination.
+    if (url && url.startsWith('/') && url.startsWith(route)) return url;
+    return route;
+  }
+  // Unknown/legacy type: keep a valid deep link unless it is the old default.
+  if (url && url.startsWith('/') && url !== '/messages' && url !== '/notifications') return url;
+  return '/dashboard';
+}
+
 self.addEventListener('push', (event) => {
   let data = { title: 'Geometra', body: '' };
 
@@ -39,8 +73,7 @@ self.addEventListener('push', (event) => {
     }
   }
 
-  const targetUrl = data.url ||
-    (data.type === 'message' ? '/messages' : '/notifications');
+  const targetUrl = resolvePushDestination(data.type, data.url);
 
   const options = {
     body: data.body,

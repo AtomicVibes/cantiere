@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Check, MessageSquare, AlertCircle } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Bell, Check, MessageSquare } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/AuthContext';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
+import { getNotificationIcon, resolveNotificationDestination } from '@/lib/notificationConfig';
 
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useAuth();
+  const { isSuperAdmin } = useIsSuperAdmin();
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const userId = user?.id;
 
@@ -22,6 +27,7 @@ export default function NotificationBell() {
         .select('*')
         .eq('user_id', userId)
         .eq('is_read', false)
+        .eq('archived', false)
         .order('created_at', { ascending: false });
 
       if (!error && data) {
@@ -44,7 +50,7 @@ export default function NotificationBell() {
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newNotif = payload.new;
-            if (!newNotif.is_read) {
+            if (!newNotif.is_read && !newNotif.archived) {
               setNotifications((prev) => [newNotif, ...prev]);
             }
           } else if (payload.eventType === 'UPDATE' || payload.eventType === 'DELETE') {
@@ -83,46 +89,9 @@ export default function NotificationBell() {
     }
 
     setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
 
-    if (notification.url) {
-      navigate(notification.url);
-      return;
-    }
-
-    const type = notification.type;
-
-    if (type === 'role_update' || type === 'status_change') {
-      navigate('/settings');
-      return;
-    }
-
-    if (type === 'project_assignment' || type === 'project_update') {
-      navigate('/projects');
-      return;
-    }
-
-    if (type === 'message' || type === 'new_message') {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('roles:roles!profiles_role_id_fkey(name)')
-        .eq('id', userId)
-        .single();
-      const roleName = profile?.roles?.name;
-      navigate(roleName === 'super_admin' ? '/admin/messages' : '/messages');
-      return;
-    }
-
-    const msg = (notification.message || '').toLowerCase();
-
-    if (msg.includes('project')) {
-      navigate('/projects');
-    } else if (msg.includes('team') || msg.includes('member')) {
-      navigate('/teams');
-    } else if (msg.includes('invoice') || msg.includes('finance') || msg.includes('budget')) {
-      navigate('/finance');
-    } else {
-      navigate('/dashboard');
-    }
+    navigate(resolveNotificationDestination(notification, { isSuperAdmin }));
   };
 
   const markAllAsRead = async () => {
@@ -135,6 +104,7 @@ export default function NotificationBell() {
 
     if (!error) {
       setNotifications([]);
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
     }
   };
 
@@ -174,30 +144,33 @@ export default function NotificationBell() {
                 <p>All caught up! No new notifications.</p>
               </div>
             ) : (
-              notifications.map((notif) => (
-                <button
-                  key={notif.id}
-                  onClick={() => handleNotificationClick(notif)}
-                  className="w-full p-4 text-left transition-colors duration-150 hover:bg-accent flex items-start gap-3 focus:outline-none group"
-                >
-                  <div className="mt-0.5 p-1.5 bg-accent group-hover:bg-accent/80 rounded-lg text-destructive shrink-0 transition-colors">
-                    <AlertCircle className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground leading-relaxed break-words">
-                      {notif.message}
-                    </p>
-                    <span className="text-xs text-muted-foreground mt-1 block">
-                      {new Date(notif.created_at).toLocaleDateString([], {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                </button>
-              ))
+              notifications.map((notif) => {
+                const Icon = getNotificationIcon(notif.type);
+                return (
+                  <button
+                    key={notif.id}
+                    onClick={() => handleNotificationClick(notif)}
+                    className="w-full p-4 text-left transition-colors duration-150 hover:bg-accent flex items-start gap-3 focus:outline-none group"
+                  >
+                    <div className="mt-0.5 p-1.5 bg-accent group-hover:bg-accent/80 rounded-lg text-muted-foreground group-hover:text-foreground shrink-0 transition-colors">
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground leading-relaxed break-words">
+                        {notif.message}
+                      </p>
+                      <span className="text-xs text-muted-foreground mt-1 block">
+                        {new Date(notif.created_at).toLocaleDateString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
