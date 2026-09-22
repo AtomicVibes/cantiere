@@ -211,7 +211,7 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
         vat_natura: i.vat_natura || null,
       }));
       await openInvoicePdf(
-        { invoice: previewInvoice, items: rows, logoUrl: seller.logo_url || '/icons/icon-512.png' },
+        { invoice: previewInvoice, items: rows, logoUrl: seller.logo_url || '/Invoice_logo.png' },
         `fattura-${form.invoice_number || 'bozza'}.pdf`
       );
     } catch (err) {

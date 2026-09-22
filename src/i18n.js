@@ -157,7 +157,7 @@ const resources = {
       uploadFile: 'Upload File',
       linkGoogleDocument: 'Link Google Document',
       googleDocumentLink: 'Google Document Link',
-      googleLinkNote: 'No file is uploaded. Anyone who can see this document will be able to open the link; Google sharing settings still control access to the file itself.',
+      googleLinkNote: 'No file is uploaded. The Google document must be publicly accessible: anyone who can view your Geometra documents will be able to open this link. Google sharing settings still control access to the file itself.',
       invalidGoogleLink: 'That is not a valid Google Docs, Sheets or Slides link. Paste a link from docs.google.com.',
       upload: 'Upload',
       uploading: 'Uploading...',
