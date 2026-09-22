@@ -12,6 +12,7 @@ import { MessageSquare, Send, Search, Check, CheckCheck, Mic, Square, ChevronLef
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/avatar';
 import AudioMessagePlayer from '@/components/teams/AudioMessagePlayer';
+import ContactCombobox from '@/components/teams/ContactCombobox';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -128,6 +129,20 @@ export default function MessagesPage() {
   }, [selectedUserId, navigate, location.pathname]);
 
   const selectedContact = contacts.find(c => c.id === selectedUserId);
+
+  // Open a chat with a picked contact: ensures the profile is in the local
+  // contact list (so the header shows name/job info) and then opens the
+  // existing conversation — or a fresh empty one — via handleOpenChat.
+  const openContactChat = useCallback((contact) => {
+    if (!contact?.id || contact.id === userId) return;
+
+    if (!contactsRef.current.some(c => c.id === contact.id)) {
+      const merged = mergeContacts(staffProfiles, contactPartners);
+      if (!merged.some(c => c.id === contact.id)) merged.unshift(contact);
+      setContacts(merged);
+    }
+    handleOpenChat(contact.id);
+  }, [userId, staffProfiles, contactPartners, mergeContacts, handleOpenChat]);
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => {
@@ -746,6 +761,11 @@ export default function MessagesPage() {
                     className="pl-9 h-9 bg-secondary border-0"
                   />
                 </div>
+                <ContactCombobox
+                  currentUserId={userId}
+                  onSelectContact={openContactChat}
+                  triggerLabel="Contacts"
+                />
                 <Button variant="ghost" size="icon" onClick={() => setIsContactsCollapsed(true)} className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground">
                   <ChevronLeft className="w-4 h-4" />
                 </Button>

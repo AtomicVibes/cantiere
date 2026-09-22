@@ -137,6 +137,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['project-members'] });
+      queryClient.invalidateQueries({ queryKey: ['staffProfiles'] });
       toast.success('Member updated');
       onOpenChange(false);
     } catch (err) {

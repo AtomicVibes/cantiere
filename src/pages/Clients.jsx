@@ -149,13 +149,13 @@ export default function Clients() {
     },
     onSuccess: async ({ userId, newRoleId }) => {
       const roleName = teamRoles.find(r => r.id === newRoleId)?.name || 'unknown';
-      queryClient.invalidateQueries({ queryKey: ['clients'] });
-      queryClient.invalidateQueries({ queryKey: ['clients', 'dropdown'] });
+queryClient.invalidateQueries({ queryKey: ['clients'] });
       queryClient.invalidateQueries({ queryKey: ['clientCount'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['managers'] });
+      queryClient.invalidateQueries({ queryKey: ['staffProfiles'] });
       toast.success(`Promoted to ${roleName}`);
     },
     onError: (err) => {

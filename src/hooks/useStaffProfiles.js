@@ -11,24 +11,27 @@ import { supabase } from '@/services/supabase';
  * @property {string} department
  * @property {string} role_id
  * @property {string} role_name
+ * @property {string} status
+ * @property {string} avatar_url
  */
 
 /**
  * Fetches the internal-staff directory (super_admin / admin / manager)
  * used by the Messaging contact search.
  *
- * Access is gated server-side by the "Profiles staff read" RLS policy,
- * so the caller can only ever see the staff rows their own role allows.
- * Client-role profiles are excluded here; clients stay reachable via the
- * Clients page rather than the global messaging directory.
+ * Access is gated server-side by the existing profiles SELECT RLS
+ * policies, so the caller can only ever see the staff rows their own
+ * role allows. Client-role profiles are excluded here; clients stay
+ * reachable via the Clients page rather than the global messaging
+ * directory.
  */
 export function useStaffProfiles() {
-  return useQuery({
+  const query = useQuery({
     queryKey: ['staffProfiles'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name, phone, job_title, department, role_id, roles(name)');
+        .select('id, email, full_name, phone, job_title, department, role_id, roles(name), status, avatar_url');
       if (error) throw error;
 
       return (data ?? [])
@@ -42,8 +45,17 @@ export function useStaffProfiles() {
           department: p.department || '',
           role_id: p.role_id || '',
           role_name: p.roles?.find(r => r?.name)?.name || '',
+          status: p.status || 'active',
+          avatar_url: p.avatar_url || '',
         }));
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  return {
+    data: query.data ?? [],
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: query.refetch,
+  };
 }

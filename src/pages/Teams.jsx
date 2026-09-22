@@ -59,6 +59,7 @@ export default function Teams() {
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['staffProfiles'] });
     },
     onError: (err) => {
       toast.error(err.message);
@@ -115,6 +116,7 @@ export default function Teams() {
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['staffProfiles'] });
       setShowForm(false);
       setForm(emptyMember);
     } catch (err) {
