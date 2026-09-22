@@ -141,8 +141,8 @@ export default function MessagesPage() {
       if (!merged.some(c => c.id === contact.id)) merged.unshift(contact);
       setContacts(merged);
     }
-    handleOpenChat(contact.id);
-  }, [userId, staffProfiles, contactPartners, mergeContacts, handleOpenChat]);
+    handleOpenChatRef.current(contact.id);
+  }, [userId, staffProfiles, contactPartners, mergeContacts]);
 
   const sortedMessages = useMemo(
     () => [...messages].sort((a, b) => {
