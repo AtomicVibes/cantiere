@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { DateInput } from '@/components/ui/inputWithIcon';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
@@ -48,6 +49,7 @@ export default function ProjectDetail() {
   const [addingEntry, setAddingEntry] = useState(false);
   const [entryFile, setEntryFile] = useState(null);
   const [entryUploading, setEntryUploading] = useState(false);
+  const [entryAudience, setEntryAudience] = useState([]);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -131,6 +133,16 @@ export default function ProjectDetail() {
     enabled: !!id && !!userId,
   });
 
+  const { data: entryAudienceMembers = [] } = useQuery({
+    queryKey: ['documentAudienceMembers'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, full_name, email').order('full_name');
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!userId,
+  });
+
   const canSeeTeam = isSuperAdminLive || !!currentMember;
 
   const updateMutation = useMutation({
@@ -168,6 +180,7 @@ export default function ProjectDetail() {
       queryClient.invalidateQueries({ queryKey: ['timeline', id] });
       setNewEntry({ title: '', description: '', date: '' });
       setEntryFile(null);
+      setEntryAudience([]);
       setAddingEntry(false);
     },
     onError: (err) => handleMutationError(err, t, toast),
@@ -194,6 +207,10 @@ export default function ProjectDetail() {
 
   const handleAddEntry = async () => {
     if (!newEntry.title) return;
+    if (entryFile && entryAudience.length === 0) {
+      toast.error('Select at least one person who can see the document.');
+      return;
+    }
     let uploadedDocument = null;
     setEntryUploading(true);
     try {
@@ -203,6 +220,8 @@ export default function ProjectDetail() {
             file: entryFile,
             name: entryFile.name,
             project_id: id,
+            visibility: 'selected',
+            audience_user_ids: entryAudience,
           });
         } catch (uploadError) {
           logDocumentError('Add entry document upload failed', uploadError, { projectId: id, fileName: entryFile?.name });
@@ -406,12 +425,29 @@ export default function ProjectDetail() {
                   </Button>
                 )}
               </div>
+              {entryFile && (
+                <div className="space-y-2 border rounded-md p-3">
+                  <div className="flex items-center justify-between">
+                    <Label>{t('selectAudience')}</Label>
+                    <span className="text-xs text-muted-foreground">{entryAudience.length} {t('selected')}</span>
+                  </div>
+                  <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                    {entryAudienceMembers.map(member => (
+                      <label key={member.id} className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={entryAudience.includes(member.id)} onChange={() => setEntryAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />
+                        {member.full_name || member.email}
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t('audienceHelp')}</p>
+                </div>
+              )}
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title || entryUploading}>
                   {entryUploading && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
                   {t('save')}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); }}>{t('cancel')}</Button>
+                <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); setEntryAudience([]); }}>{t('cancel')}</Button>
               </div>
             </div>
           )}
