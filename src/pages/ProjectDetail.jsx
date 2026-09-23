@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import TopBar from '@/components/layout/TopBar';
 import StatusBadge from '@/components/shared/StatusBadge';
@@ -9,6 +9,12 @@ import PriorityBadge from '@/components/shared/PriorityBadge';
 import ProjectFormDialog from '@/components/projects/ProjectFormDialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 import { Input } from '@/components/ui/input';
 import { DateInput } from '@/components/ui/inputWithIcon';
@@ -17,7 +23,7 @@ import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
-  Plus, Loader2, Archive, Upload, X
+  Plus, Loader2, Archive, Trash2, Upload, X
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { getEntity, createEntity, updateEntity } from '@/services/dataService';
@@ -43,13 +49,16 @@ export default function ProjectDetail() {
   const canAddEntry = PERMISSIONS.canAddTimelineEntry.includes(userRole);
   const { id } = useParams();
   const { isSuperAdmin: isSuperAdminLive } = useIsSuperAdmin();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
   const [newEntry, setNewEntry] = useState({ title: '', description: '', date: '' });
   const [addingEntry, setAddingEntry] = useState(false);
   const [entryFile, setEntryFile] = useState(null);
   const [entryUploading, setEntryUploading] = useState(false);
+  const [entryVisibility, setEntryVisibility] = useState('private');
   const [entryAudience, setEntryAudience] = useState([]);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -181,9 +190,29 @@ export default function ProjectDetail() {
       setNewEntry({ title: '', description: '', date: '' });
       setEntryFile(null);
       setEntryAudience([]);
+      setEntryVisibility('private');
       setAddingEntry(false);
     },
     onError: (err) => handleMutationError(err, t, toast),
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: () => supabase.rpc('delete_project', { p_project_id: id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      toast.success(t('projectDeleted'));
+      navigate('/projects');
+    },
+    onError: (err) => {
+      const message = err?.message || '';
+      if (message.includes('super_admin')) {
+        toast.error(t('accessDenied'));
+      } else if (message.includes('not_found') || message.toLowerCase().includes('not found')) {
+        toast.error(t('projectNotFound'));
+      } else {
+        toast.error(t('deleteProjectError'));
+      }
+    },
   });
 
   if (isLoading) {
@@ -207,8 +236,8 @@ export default function ProjectDetail() {
 
   const handleAddEntry = async () => {
     if (!newEntry.title) return;
-    if (entryFile && entryAudience.length === 0) {
-      toast.error('Select at least one person who can see the document.');
+    if (entryFile && entryVisibility === 'selected' && entryAudience.length === 0) {
+      toast.error(t('selectAudienceRequired'));
       return;
     }
     let uploadedDocument = null;
@@ -220,8 +249,8 @@ export default function ProjectDetail() {
             file: entryFile,
             name: entryFile.name,
             project_id: id,
-            visibility: 'selected',
-            audience_user_ids: entryAudience,
+            visibility: entryVisibility,
+            audience_user_ids: entryVisibility === 'selected' ? entryAudience : [],
           });
         } catch (uploadError) {
           logDocumentError('Add entry document upload failed', uploadError, { projectId: id, fileName: entryFile?.name });
@@ -284,6 +313,11 @@ export default function ProjectDetail() {
             {canEdit && (
               <Button variant="outline" size="sm" onClick={() => setShowEdit(true)} className="gap-2">
                 <Pencil className="w-3.5 h-3.5" /> {t('edit')}
+              </Button>
+            )}
+            {isSuperAdminLive && (
+              <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)} className="gap-2">
+                <Trash2 className="w-3.5 h-3.5" /> {t('deleteProject')}
               </Button>
             )}
           </div>
@@ -426,20 +460,35 @@ export default function ProjectDetail() {
                 )}
               </div>
               {entryFile && (
-                <div className="space-y-2 border rounded-md p-3">
-                  <div className="flex items-center justify-between">
-                    <Label>{t('selectAudience')}</Label>
-                    <span className="text-xs text-muted-foreground">{entryAudience.length} {t('selected')}</span>
+                <div className="space-y-2">
+                  <div>
+                    <Label>{t('visibility.label') || 'Visibility'}</Label>
+                    <Select value={entryVisibility} onValueChange={value => { setEntryVisibility(value); if (value !== 'selected') setEntryAudience([]); }}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="private">{t('visibility.private') || 'Private'}</SelectItem>
+                        <SelectItem value="public">{t('visibility.public') || 'Public'}</SelectItem>
+                        <SelectItem value="selected">{t('visibility.selected') || 'Selected audience'}</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                    {entryAudienceMembers.map(member => (
-                      <label key={member.id} className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={entryAudience.includes(member.id)} onChange={() => setEntryAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />
-                        {member.full_name || member.email}
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{t('audienceHelp')}</p>
+                  {entryVisibility === 'selected' && (
+                    <div className="space-y-2 border rounded-md p-3">
+                      <div className="flex items-center justify-between">
+                        <Label>{t('selectAudience')}</Label>
+                        <span className="text-xs text-muted-foreground">{entryAudience.length} {t('visibility.selected') || 'Selected'}</span>
+                      </div>
+                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                        {entryAudienceMembers.map(member => (
+                          <label key={member.id} className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={entryAudience.includes(member.id)} onChange={() => setEntryAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />
+                            {member.full_name || member.email}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{t('audienceHelp')}</p>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex gap-2">
@@ -447,7 +496,7 @@ export default function ProjectDetail() {
                   {entryUploading && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
                   {t('save')}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); setEntryAudience([]); }}>{t('cancel')}</Button>
+                <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); setEntryAudience([]); setEntryVisibility('private'); }}>{t('cancel')}</Button>
               </div>
             </div>
           )}
@@ -503,6 +552,31 @@ export default function ProjectDetail() {
           await updateMutation.mutateAsync(data);
         }}
       />
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('deleteProjectTitle')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('deleteProjectDescription')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteProjectMutation.isPending}>{t('cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteProjectMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                deleteProjectMutation.mutate();
+              }}
+            >
+              {deleteProjectMutation.isPending && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+              {t('deleteProjectConfirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
