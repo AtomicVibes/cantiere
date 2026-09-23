@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "geometra",
+  // Cloudflare Pages build output. Pages deploys this directory itself —
+  // do NOT configure "npx wrangler deploy" as the deploy command.
   "pages_build_output_dir": "dist",
   "compatibility_date": "2026-06-20",
   "vars": {
