@@ -25,7 +25,7 @@ import {
   validateGoogleInvoiceLink, saveInvoiceItems, removeInvoiceItems, upsertInvoiceRecord,
 } from '@/services/invoiceService';
 import { openInvoicePdf } from '@/services/invoicePdf';
-import { Plus, Trash2, Paperclip, Link2, Loader2, FileText, Eye, X, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Paperclip, Link2, Loader2, FileText, Eye, X, ExternalLink, CalendarIcon } from 'lucide-react';
 
 const NATURA_CODES = ['N1', 'N2.1', 'N2.2', 'N3', 'N4', 'N5', 'N6'];
 
