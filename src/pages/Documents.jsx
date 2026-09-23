@@ -30,21 +30,12 @@ import { supabase } from '@/services/supabase';
 import DocumentPreview from '@/components/shared/DocumentPreview';
 import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
 import { parseGoogleDocLink, getGoogleDocMime } from '@/lib/googleLinks';
+import { uploadDocumentFile } from '@/services/documentUploadService';
 
 const DOC_CATEGORIES = [
   'blueprint', 'contract', 'permit', 'invoice', 'photo',
   'video', 'audio_note', 'cad_file', 'report', 'word', 'excel', 'google', 'other',
 ];
-
-const MAX_DOCUMENT_SIZE = 50 * 1024 * 1024;
-const SUPPORTED_DOCUMENT_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-  'application/pdf', 'video/mp4', 'video/webm', 'video/quicktime',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-]);
 
 export default function Documents() {
   const { t } = useTranslation();
@@ -270,47 +261,22 @@ export default function Documents() {
       }
 
       debugUpload('UPLOAD START');
-      let file_url = '';
-      let uploadedPath = '';
-      if (!SUPPORTED_DOCUMENT_TYPES.has(file.type)) {
-        throw new Error('Unsupported file type. Use JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, or XLSX.');
-      }
-      if (file.size > MAX_DOCUMENT_SIZE) {
-        throw new Error('File is too large. The maximum size is 50 MB.');
-      }
       debugUpload('FILE SELECTED', {
         name: file.name,
         type: file.type,
         size: file.size,
       });
       debugUpload('SUPABASE STORAGE UPLOAD START');
-      const result = await base44.integrations.Core.UploadFile({ file });
-      file_url = result.file_url;
-      uploadedPath = file_url;
-      debugUpload('SUPABASE STORAGE UPLOAD RESULT', { uploaded: !!file_url });
-      debugUpload('DATABASE INSERT START');
-      let createdDocument;
-      try {
-        createdDocument = await createMutation.mutateAsync({
-          ...form,
-          file_url,
-          mime_type: file?.type || 'application/octet-stream',
-          file_format: file?.name?.split('.').pop() || '',
-          file_size: file?.size || 0,
-          project_id: form.project_id || null,
-          visibility: form.visibility,
-          audience_user_ids: selectedAudience,
-        });
-      } catch (error) {
-        if (uploadedPath) {
-          try {
-            await base44.integrations.Core.DeleteFile({ filePath: uploadedPath });
-          } catch (cleanupError) {
-            console.error('[Documents] failed to clean up uploaded file:', cleanupError);
-          }
-        }
-        throw error;
-      }
+      const createdDocument = await uploadDocumentFile({
+        file,
+        name: form.name,
+        project_id: form.project_id || null,
+        visibility: form.visibility,
+        notes: form.notes,
+        type: form.type,
+        audience_user_ids: selectedAudience,
+      });
+      debugUpload('SUPABASE STORAGE UPLOAD RESULT', { uploaded: !!createdDocument?.storage_path });
       debugUpload('DATABASE INSERT RESULT', { saved: true, id: createdDocument?.id });
       debugUpload('UPLOAD COMPLETE');
       closeUploadDialog();

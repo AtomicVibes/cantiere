@@ -16,10 +16,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
-  Plus, Loader2, Archive
+  Plus, Loader2, Archive, Upload, X
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { getEntity, createEntity, updateEntity } from '@/services/dataService';
+import { uploadDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -28,6 +29,7 @@ import { getInitials } from '@/lib/avatar';
 import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
+import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
 import ProjectAssignmentDropdown from '@/components/projects/ProjectAssignmentDropdown';
 import DocumentPreview from '@/components/shared/DocumentPreview';
 
@@ -44,6 +46,8 @@ export default function ProjectDetail() {
   const [showEdit, setShowEdit] = useState(false);
   const [newEntry, setNewEntry] = useState({ title: '', description: '', date: '' });
   const [addingEntry, setAddingEntry] = useState(false);
+  const [entryFile, setEntryFile] = useState(null);
+  const [entryUploading, setEntryUploading] = useState(false);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -163,6 +167,7 @@ export default function ProjectDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timeline', id] });
       setNewEntry({ title: '', description: '', date: '' });
+      setEntryFile(null);
       setAddingEntry(false);
     },
     onError: (err) => handleMutationError(err, t, toast),
@@ -189,12 +194,57 @@ export default function ProjectDetail() {
 
   const handleAddEntry = async () => {
     if (!newEntry.title) return;
-    await createEntryMutation.mutateAsync({
-      project_id: id,
-      title: newEntry.title,
-      description: newEntry.description || null,
-      date: newEntry.date || null,
-    });
+    let uploadedDocument = null;
+    setEntryUploading(true);
+    try {
+      if (entryFile) {
+        try {
+          uploadedDocument = await uploadDocumentFile({
+            file: entryFile,
+            name: entryFile.name,
+            project_id: id,
+          });
+        } catch (uploadError) {
+          logDocumentError('Add entry document upload failed', uploadError, { projectId: id, fileName: entryFile?.name });
+          toast.error(getDocumentUserFriendlyError(
+            uploadError,
+            'Unable to upload the document. Please try again.',
+            "You don't have permission to upload a document."
+          ));
+          return;
+        }
+      }
+
+      try {
+        await createEntryMutation.mutateAsync({
+          project_id: id,
+          title: newEntry.title,
+          description: newEntry.description || null,
+          date: newEntry.date || null,
+          document_id: uploadedDocument?.id || null,
+        });
+      } catch (error) {
+        // The timeline insert failed after a document was uploaded: roll the
+        // document back so the project is not left with an orphaned record.
+        if (uploadedDocument?.id) {
+          try {
+            await supabase.from('documents').delete().eq('id', uploadedDocument.id);
+          } catch (cleanupError) {
+            console.error('[ProjectDetail] failed to clean up uploaded document row:', cleanupError);
+          }
+          if (uploadedDocument.storage_path) {
+            try {
+              await supabase.storage.from('documents').remove([uploadedDocument.storage_path]);
+            } catch (cleanupError) {
+              console.error('[ProjectDetail] failed to clean up uploaded document file:', cleanupError);
+            }
+          }
+        }
+        throw error;
+      }
+    } finally {
+      setEntryUploading(false);
+    }
   };
 
   return (
@@ -339,9 +389,29 @@ export default function ProjectDetail() {
               <Input placeholder={t('entryTitle')} value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
               <Textarea placeholder="Description" value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
               <DateInput value={newEntry.date} onChange={e => setNewEntry({...newEntry, date: e.target.value})} />
+              <div className="flex items-center gap-2">
+                <label className="flex-1 cursor-pointer flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground hover:border-primary/60 hover:bg-muted/50 transition-colors">
+                  <Upload className="w-4 h-4" />
+                  <span className="truncate">{entryFile ? entryFile.name : t('attachDocument')}</span>
+                  <input
+                    type="file"
+                    accept={DOCUMENT_FILE_ACCEPT}
+                    className="hidden"
+                    onChange={e => setEntryFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+                {entryFile && (
+                  <Button size="sm" variant="ghost" onClick={() => setEntryFile(null)} title={t('removeFile')}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title}>{t('save')}</Button>
-                <Button size="sm" variant="outline" onClick={() => setAddingEntry(false)}>{t('cancel')}</Button>
+                <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title || entryUploading}>
+                  {entryUploading && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                  {t('save')}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); }}>{t('cancel')}</Button>
               </div>
             </div>
           )}
