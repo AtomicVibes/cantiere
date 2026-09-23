@@ -23,10 +23,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
-import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check, Bell } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
-const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '', visibility: 'private', project_id: 'none' };
+const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '', visibility: 'private', project_id: 'none', reminder_frequency: '24_hours', reminder_interval_value: '', reminder_interval_unit: 'hours' };
 
 const toPgTime = (t) => {
   if (!t) return null;
@@ -199,6 +199,18 @@ export default function CalendarPage() {
 
       if (error) throw error;
       if (!newEvent) throw new Error('Event was not returned after saving');
+
+      const reminderRow = {
+        reminder_frequency: row.reminder_frequency || '24_hours',
+        reminder_interval_value: row.reminder_interval_value,
+        reminder_interval_unit: row.reminder_interval_unit,
+      };
+      const { error: reminderError } = await supabase
+        .from('events')
+        .update(reminderRow)
+        .eq('id', newEvent.id);
+      if (reminderError) throw reminderError;
+
       return newEvent;
     },
     onSuccess: () => {
@@ -484,6 +496,16 @@ export default function CalendarPage() {
                       <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
                         {getEventLabel(ev.type)}
                       </span>
+                      {ev.reminder_display && ev.reminder_frequency !== 'disabled' && (
+                        <span
+                          title={ev.reminder_display}
+                          aria-label={ev.reminder_display}
+                          className="inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                        >
+                          <Bell className="w-3 h-3" />
+                          {ev.reminder_short}
+                        </span>
+                      )}
                     </div>
                   </button>
                 );
@@ -514,10 +536,13 @@ export default function CalendarPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>{t('type') || 'Type'}</Label>
-                <Select value={form.type} onValueChange={v => setForm({...form, type: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-                </Select>
+                <div className="flex items-center gap-2">
+                  <Select value={form.type} onValueChange={v => setForm({...form, type: v})}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <span aria-hidden className={`w-5 h-5 rounded-full flex-shrink-0 border border-border ${getEventColor(form.type)}`} title={getEventColor(form.type)} />
+                </div>
               </div>
               <div><Label>{t('date') || 'Date'} *</Label><DateInput value={form.date} onChange={e => setForm({...form, date: e.target.value})} required /></div>
             </div>
@@ -550,6 +575,58 @@ export default function CalendarPage() {
                 {form.visibility === 'selected' && (t('selectedHelp') || 'Only the audience you select can see this event')}
               </p>
             </div>
+
+            {/* Event Reminder */}
+            <div className="space-y-2">
+              <Label>{t('reminder.section') || 'Event Reminder'}</Label>
+              <Select value={form.reminder_frequency || '24_hours'} onValueChange={v => {
+                setForm({ ...form, reminder_frequency: v });
+                if (v !== 'custom') delete form.reminder_interval_value;
+              }}>
+                <SelectTrigger><SelectValue placeholder={t('reminder.frequency') || 'Reminder'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="disabled">{t('reminder.noReminder') || 'No reminder'}</SelectItem>
+                  <SelectItem value="30_minutes">{t('reminder.30_minutes') || '30 minutes before'}</SelectItem>
+                  <SelectItem value="1_hour">{t('reminder.1_hour') || '1 hour before'}</SelectItem>
+                  <SelectItem value="24_hours">{t('reminder.24_hours') || '24 hours before'}</SelectItem>
+                  <SelectItem value="weekly">{t('reminder.weekly') || '1 week before'}</SelectItem>
+                  <SelectItem value="monthly">{t('reminder.monthly') || '1 month before'}</SelectItem>
+                  <SelectItem value="custom">{t('reminder.custom') || 'Custom'}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.reminder_frequency === 'custom' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('reminder.value') || 'Value'}</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.reminder_interval_value ?? ''}
+                    onChange={e => setForm({ ...form, reminder_interval_value: e.target.value })}
+                    aria-label={t('reminder.value') || 'Reminder value'}
+                    aria-invalid={form.reminder_interval_value !== undefined && Number(form.reminder_interval_value) <= 0}
+                  />
+                  {form.reminder_interval_value !== undefined && Number(form.reminder_interval_value) <= 0 && (
+                    <p className="text-xs text-destructive mt-1">{t('reminder.mustBePositive') || 'Reminder value must be greater than zero'}</p>
+                  )}
+                </div>
+                <div>
+                  <Label>{t('reminder.unit') || 'Unit'}</Label>
+                  <Select value={form.reminder_interval_unit || 'hours'} onValueChange={v => setForm({ ...form, reminder_interval_unit: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="minutes">{t('reminder.unitMinutes') || 'Minutes'}</SelectItem>
+                      <SelectItem value="hours">{t('reminder.unitHours') || 'Hours'}</SelectItem>
+                      <SelectItem value="days">{t('reminder.unitDays') || 'Days'}</SelectItem>
+                      <SelectItem value="weeks">{t('reminder.unitWeeks') || 'Weeks'}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
 
             {/* Audience Picker (if visibility === 'selected') */}
             {form.visibility === 'selected' && (

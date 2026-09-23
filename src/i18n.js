@@ -5,6 +5,26 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 const resources = {
   en: {
     translation: {
+      reminder: {
+        section: 'Event Reminder',
+        frequency: 'Reminder',
+        noReminder: 'No reminder',
+        '30_minutes': '30 minutes before',
+        '1_hour': '1 hour before',
+        '24_hours': '24 hours before',
+        weekly: '1 week before',
+        monthly: '1 month before',
+        custom: 'Custom',
+        value: 'Value',
+        unit: 'Unit',
+        unitMinutes: 'Minutes',
+        unitHours: 'Hours',
+        unitDays: 'Days',
+        unitWeeks: 'Weeks',
+        invalidValue: 'Invalid reminder value',
+        mustBePositive: 'Reminder value must be greater than zero',
+        customFormat: 'Custom - {{value}} {{unit}} before'
+      },
       loading: 'Loading...',
       login: 'Login',
       register: 'Register',
@@ -378,6 +398,26 @@ const resources = {
   },
   ar: {
     translation: {
+      reminder: {
+        section: 'تذكير الحدث',
+        frequency: 'تذكير',
+        noReminder: 'بدون تذكير',
+        '30_minutes': 'قبل 30 دقيقة',
+        '1_hour': 'قبل ساعة واحدة',
+        '24_hours': 'قبل 24 ساعة',
+        weekly: 'قبل أسبوع واحد',
+        monthly: 'قبل شهر واحد',
+        custom: 'مخصص',
+        value: 'القيمة',
+        unit: 'الوحدة',
+        unitMinutes: 'دقائق',
+        unitHours: 'ساعات',
+        unitDays: 'أيام',
+        unitWeeks: 'أسابيع',
+        invalidValue: 'قيمة تذكير غير صالحة',
+        mustBePositive: 'يجب أن تكون قيمة التذكير أكبر من صفر',
+        customFormat: 'مخصص - {{value}} {{unit}} قبل الحدث'
+      },
       loading: 'جارٍ التحميل...',
       login: 'تسجيل الدخول',
       register: 'إنشاء حساب',
@@ -750,6 +790,26 @@ const resources = {
   },
   fr: {
     translation: {
+      reminder: {
+        section: "Rappel de l'événement",
+        frequency: 'Rappel',
+        noReminder: 'Aucun rappel',
+        '30_minutes': '30 minutes avant',
+        '1_hour': '1 heure avant',
+        '24_hours': '24 heures avant',
+        weekly: '1 semaine avant',
+        monthly: '1 mois avant',
+        custom: 'Personnalisé',
+        value: 'Valeur',
+        unit: 'Unité',
+        unitMinutes: 'Minutes',
+        unitHours: 'Heures',
+        unitDays: 'Jours',
+        unitWeeks: 'Semaines',
+        invalidValue: 'Valeur de rappel invalide',
+        mustBePositive: 'La valeur du rappel doit être supérieure à zéro',
+        customFormat: 'Personnalisé - {{value}} {{unit}} avant'
+      },
       loading: 'Chargement...',
       login: 'Connexion',
       register: 'S\'inscrire',
@@ -1123,6 +1183,26 @@ const resources = {
   },
   it: {
     translation: {
+      reminder: {
+        section: 'Promemoria evento',
+        frequency: 'Promemoria',
+        noReminder: 'Nessun promemoria',
+        '30_minutes': '30 minuti prima',
+        '1_hour': '1 ora prima',
+        '24_hours': '24 ore prima',
+        weekly: '1 settimana prima',
+        monthly: '1 mese prima',
+        custom: 'Personalizzato',
+        value: 'Valore',
+        unit: 'Unità',
+        unitMinutes: 'Minuti',
+        unitHours: 'Ore',
+        unitDays: 'Giorni',
+        unitWeeks: 'Settimane',
+        invalidValue: 'Valore promemoria non valido',
+        mustBePositive: 'Il valore del promemoria deve essere maggiore di zero',
+        customFormat: 'Personalizzato - {{value}} {{unit}} prima'
+      },
       loading: 'Caricamento...',
       login: 'Accedi',
       register: 'Registrati',
