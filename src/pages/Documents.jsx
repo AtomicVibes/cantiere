@@ -17,7 +17,9 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, FileText, Upload, ExternalLink, Archive, RotateCcw, Trash2, Loader2, Download } from 'lucide-react';
+import { Search, FileText, Upload, ExternalLink, Archive, RotateCcw, Trash2, Loader2, Download, ShieldCheck } from 'lucide-react';
+import VisibilitySelect, { VisibilityBadge } from '@/components/documents/VisibilitySelect';
+import AudiencePicker from '@/components/documents/AudiencePicker';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -626,7 +628,7 @@ export default function Documents() {
                       <ExternalLink className="w-3 h-3" /> {t('google')}
                     </span>
                   )}
-                  {doc.visibility && <span className="capitalize">{doc.visibility}</span>}
+                  {doc.visibility && <VisibilityBadge value={doc.visibility} />}
                   <span>{doc.created_at ? format(new Date(doc.created_at), 'MMM d, yyyy') : ''}</span>
                 </div>
                 {doc.project_id && <p className="text-xs text-primary mt-1">{projects.find(project => project.id === doc.project_id)?.name || 'Project assigned'}</p>}
@@ -736,25 +738,18 @@ export default function Documents() {
                 <SelectContent><SelectItem value="none">No project</SelectItem>{projects.map(project => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Visibility</Label>
-              <Select value={form.visibility} onValueChange={value => { setForm({...form, visibility: value}); if (value !== 'selected') setSelectedAudience([]); }}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="private">Private</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="selected">Selected audience</SelectItem></SelectContent>
-              </Select>
-            </div>
+            <VisibilitySelect
+              id="doc-visibility"
+              value={form.visibility}
+              onValueChange={value => { setForm({...form, visibility: value}); if (value !== 'selected') setSelectedAudience([]); }}
+            />
             {form.visibility === 'selected' && (
-              <div className="space-y-2 border rounded-md p-3">
-                <Label>Select audience</Label>
-                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                  {audienceMembers.map(member => (
-                    <label key={member.id} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={selectedAudience.includes(member.id)} onChange={() => setSelectedAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />
-                      {member.full_name || member.email}
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <AudiencePicker
+                idPrefix="doc-upload"
+                members={audienceMembers}
+                selectedIds={selectedAudience}
+                onToggle={(id) => setSelectedAudience(previous => previous.includes(id) ? previous.filter(memberId => memberId !== id) : [...previous, id])}
+              />
             )}
             <DialogFooter className="sticky bottom-0 bg-background pt-2">
               <Button type="button" variant="outline" onClick={closeUploadDialog}>{t('cancel')}</Button>
@@ -766,18 +761,20 @@ export default function Documents() {
 
       <Dialog open={!!accessDocument} onOpenChange={open => !open && setAccessDocument(null)}>
         <DialogContent className="max-h-[85vh] flex flex-col">
-          <DialogHeader><DialogTitle>Edit document access</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-heading flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-muted-foreground" aria-hidden />{t('editAccess', 'Edit document access')}</DialogTitle></DialogHeader>
           <div className="flex-1 min-h-0 space-y-3 overflow-y-auto pr-1">
-            <Select value={accessVisibility} onValueChange={setAccessVisibility}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="private">Private</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="selected">Selected audience</SelectItem></SelectContent>
-            </Select>
+            <VisibilitySelect
+              id="doc-access-visibility"
+              value={accessVisibility}
+              onValueChange={setAccessVisibility}
+            />
             {accessVisibility === 'selected' && (
-              <div className="space-y-2 border rounded-md p-3">
-                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                  {audienceMembers.map(member => <label key={member.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={accessAudience.includes(member.id)} onChange={() => setAccessAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />{member.full_name || member.email}</label>)}
-                </div>
-              </div>
+              <AudiencePicker
+                idPrefix="doc-access"
+                members={audienceMembers}
+                selectedIds={accessAudience}
+                onToggle={(id) => setAccessAudience(previous => previous.includes(id) ? previous.filter(memberId => memberId !== id) : [...previous, id])}
+              />
             )}
           </div>
           <DialogFooter className="sticky bottom-0 bg-background pt-2"><Button variant="outline" disabled={accessSaving} onClick={() => setAccessDocument(null)}>Cancel</Button><Button disabled={accessSaving} onClick={saveAccess}>{accessSaving ? 'Saving...' : 'Save access'}</Button></DialogFooter>

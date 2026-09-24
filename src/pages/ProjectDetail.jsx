@@ -9,7 +9,8 @@ import PriorityBadge from '@/components/shared/PriorityBadge';
 import ProjectFormDialog from '@/components/projects/ProjectFormDialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import VisibilitySelect from '@/components/documents/VisibilitySelect';
+import AudiencePicker from '@/components/documents/AudiencePicker';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -19,7 +20,6 @@ import {
 import { Input } from '@/components/ui/input';
 import DatePicker from '@/components/ui/DatePicker';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
@@ -462,32 +462,19 @@ export default function ProjectDetail() {
               {entryFile && (
                 <div className="space-y-2">
                   <div>
-                    <Label>{t('visibility.label') || 'Visibility'}</Label>
-                    <Select value={entryVisibility} onValueChange={value => { setEntryVisibility(value); if (value !== 'selected') setEntryAudience([]); }}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="private">{t('visibility.private') || 'Private'}</SelectItem>
-                        <SelectItem value="public">{t('visibility.public') || 'Public'}</SelectItem>
-                        <SelectItem value="selected">{t('visibility.selected') || 'Selected audience'}</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <VisibilitySelect
+                      id="entry-visibility"
+                      value={entryVisibility}
+                      onValueChange={value => { setEntryVisibility(value); if (value !== 'selected') setEntryAudience([]); }}
+                    />
                   </div>
                   {entryVisibility === 'selected' && (
-                    <div className="space-y-2 border rounded-md p-3">
-                      <div className="flex items-center justify-between">
-                        <Label>{t('selectAudience')}</Label>
-                        <span className="text-xs text-muted-foreground">{entryAudience.length} {t('visibility.selected') || 'Selected'}</span>
-                      </div>
-                      <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
-                        {entryAudienceMembers.map(member => (
-                          <label key={member.id} className="flex items-center gap-2 text-sm">
-                            <input type="checkbox" checked={entryAudience.includes(member.id)} onChange={() => setEntryAudience(previous => previous.includes(member.id) ? previous.filter(id => id !== member.id) : [...previous, member.id])} />
-                            {member.full_name || member.email}
-                          </label>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground">{t('audienceHelp')}</p>
-                    </div>
+                    <AudiencePicker
+                      idPrefix="entry-audience"
+                      members={entryAudienceMembers}
+                      selectedIds={entryAudience}
+                      onToggle={(id) => setEntryAudience(previous => previous.includes(id) ? previous.filter(memberId => memberId !== id) : [...previous, id])}
+                    />
                   )}
                 </div>
               )}
