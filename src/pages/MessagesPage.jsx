@@ -167,23 +167,22 @@ export default function MessagesPage() {
     scrollToBottom();
   }, [lastMessageId, scrollToBottom]);
 
-// Fetches profile metadata for a set of partner profile IDs.
+  // Fetches profile metadata for a set of partner profile IDs.
   const fetchPartners = useCallback(async (ids) => {
     if (!ids?.length) return [];
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, email, full_name, phone, job_title, department, role_id, roles(name)')
+      .select('id, full_name, email, avatar_url, job_title, department, role, status')
       .in('id', ids);
     if (error) throw error;
     return (data ?? []).map(p => ({
       id: p.id,
       full_name: p.full_name || '',
       email: p.email || '',
-      phone: p.phone || '',
+      avatar_url: p.avatar_url || '',
       job_title: p.job_title || '',
       department: p.department || '',
-      role_id: p.role_id || '',
-      role_name: p.roles?.find(r => r?.name)?.name || '',
+      role_name: p.role || '',
     }));
   }, []);
 
@@ -294,7 +293,7 @@ export default function MessagesPage() {
 
     const { data } = await supabase
       .from('profiles')
-      .select('id, email, full_name, phone, job_title, department, role_id, roles(name)')
+      .select('id, full_name, email, avatar_url, job_title, department, role, status')
       .eq('id', openId)
       .single();
 
@@ -303,11 +302,10 @@ export default function MessagesPage() {
           id: data.id,
           full_name: data.full_name || '',
           email: data.email || '',
-          phone: data.phone || '',
+          avatar_url: data.avatar_url || '',
           job_title: data.job_title || '',
           department: data.department || '',
-          role_id: data.role_id || '',
-          role_name: data.roles?.find(r => r?.name)?.name || '',
+          role_name: data.role || '',
         }
       : { id: openId, full_name: null, email: null };
 
@@ -513,7 +511,7 @@ export default function MessagesPage() {
       if (!contactsRef.current.some(c => c.id === selectedUserId)) {
         supabase
           .from('profiles')
-          .select('id, email, full_name, phone, job_title, department, role_id, roles(name)')
+          .select('id, full_name, email, avatar_url, job_title, department, role, status')
           .eq('id', selectedUserId)
           .single()
           .then(({ data }) => {
@@ -522,11 +520,11 @@ export default function MessagesPage() {
                   id: data.id,
                   full_name: data.full_name || '',
                   email: data.email || '',
-                  phone: data.phone || '',
+                  avatar_url: data.avatar_url || '',
                   job_title: data.job_title || '',
                   department: data.department || '',
-                  role_id: data.role_id || '',
-                  role_name: data.roles?.find(r => r?.name)?.name || '',
+                  role: data.role || '',
+                  status: data.status || 'active',
                 }
               : { id: selectedUserId, full_name: null, email: null };
             const merged = mergeContacts(staffProfiles, contactPartners);
@@ -610,7 +608,7 @@ export default function MessagesPage() {
   const filteredContacts = contacts.filter(c => {
     if (!search) return true;
     const q = search.toLowerCase();
-    const fields = [c.full_name, c.email, c.phone, c.job_title, c.department, c.role_name];
+    const fields = [c.full_name, c.email, c.job_title, c.department, c.role_name, c.role];
     return fields.some(f => (f || '').toLowerCase().includes(q));
   });
 
@@ -765,6 +763,7 @@ export default function MessagesPage() {
                   currentUserId={userId}
                   onSelectContact={openContactChat}
                   triggerLabel="Contacts"
+                  scopeAll={isSuperAdmin}
                 />
                 <Button variant="ghost" size="icon" onClick={() => setIsContactsCollapsed(true)} className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground">
                   <ChevronLeft className="w-4 h-4" />
@@ -811,7 +810,7 @@ export default function MessagesPage() {
                       <p className="text-sm font-medium truncate">{contact.full_name || contact.email || 'Unknown'}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {contact.full_name
-                          ? (contact.job_title ? contact.job_title + (contact.department ? ` · ${contact.department}` : '') : (contact.role_name || contact.email || ''))
+                          ? (contact.job_title ? contact.job_title + (contact.department ? ` · ${contact.department}` : '') : (contact.role_name || contact.role || contact.email || ''))
                           : ''}
                       </p>
                     </div>

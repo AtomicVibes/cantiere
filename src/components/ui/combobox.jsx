@@ -42,6 +42,8 @@ export function Combobox({
   getItemValue,
   getItemKey,
   onSelect,
+  onQueryChange,
+  shouldFilter,
   children,
 }) {
   const [open, setOpen] = React.useState(false)
@@ -52,6 +54,12 @@ export function Combobox({
     setQuery("")
     if (onSelect) onSelect(item)
   }, [onSelect])
+
+  // Lets server-driven callers (e.g. profiles contact search) react to the
+  // typed query without taking over the internal input state.
+  React.useEffect(() => {
+    if (typeof onQueryChange === 'function') onQueryChange(query)
+  }, [query, onQueryChange])
 
   const value = React.useMemo(() => ({
     open,
@@ -94,11 +102,11 @@ export function ComboboxInput({ icon, placeholder = "Select...", className }) {
   )
 }
 
-export function ComboboxContent({ placeholder = "Search...", align = "start", className, children }) {
+export function ComboboxContent({ placeholder = "Search...", align = "start", className, children, shouldFilter }) {
   const { query, setQuery } = useCombobox()
   return (
     <PopoverContent align={align} sideOffset={4} className={cn("w-80 p-0", className)}>
-      <Command>
+      <Command shouldFilter={shouldFilter}>
         <CommandInput
           autoFocus
           value={query}
