@@ -1,9 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTheme } from 'next-themes';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { supabase } from '@/services/supabase';
 import { subscribeUserToPush } from '@/hooks/usePushNotification';
+import {
+  Bell,
+  Info,
+  Languages,
+  MessageSquare,
+  Monitor,
+  Moon,
+  Palette,
+  Smartphone,
+  Sun,
+  User,
+} from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,21 +48,13 @@ export default function Settings() {
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsLoaded, setSmsLoaded] = useState(false);
   const [smsSaving, setSmsSaving] = useState(false);
+  const { setTheme } = useTheme();
   const [pushPrefEnabled, setPushPrefEnabled] = useState(true);
   const [pushPrefSaving, setPushPrefSaving] = useState(false);
 
-  const applyTheme = (theme) => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else if (theme === 'light') {
-      root.classList.remove('dark');
-    } else {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      prefersDark ? root.classList.add('dark') : root.classList.remove('dark');
-    }
-  };
-
+  // Theme is owned by the root ThemeProvider (next-themes, class attribute,
+  // system tracking, single 'app-theme' storage key). This screen only edits
+  // the persisted selection; the provider applies it (no manual class writes).
   useEffect(() => {
     if (user) {
       setProfile({
@@ -58,13 +63,17 @@ export default function Settings() {
       });
       const savedTheme = user.user_metadata?.preferences?.theme || localStorage.getItem('app-theme') || 'system';
       const savedLang = user.user_metadata?.preferences?.language || localStorage.getItem('app-language') || 'en';
-      setPreferences({
+      setPreferences((p) => ({
+        ...p,
         theme: savedTheme,
         language: savedLang,
         email_notifications: user.user_metadata?.preferences?.email_notifications !== false,
-      });
-      applyTheme(savedTheme);
+      }));
+      if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system') {
+        setTheme(savedTheme);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
@@ -126,20 +135,11 @@ export default function Settings() {
     });
   }, []);
 
-  useEffect(() => {
-    if (preferences.theme !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (e) => {
-      document.documentElement.classList.toggle('dark', e.matches);
-    };
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, [preferences.theme]);
-
   const handleThemeChange = (v) => {
     setPreferences(p => ({ ...p, theme: v }));
-    applyTheme(v);
-    localStorage.setItem('app-theme', v);
+    // next-themes applies the class (incl. system tracking) and persists to
+    // the shared 'app-theme' key; no manual DOM or storage writes here.
+    setTheme(v);
   };
 
   const handleLanguageChange = (v) => {
@@ -297,7 +297,10 @@ export default function Settings() {
       <div className="p-6 max-w-3xl">
         <div className="space-y-6">
           <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold">{t('profileInformation')}</h3>
+            <h3 className="font-heading font-semibold flex items-center gap-2">
+              <User className="w-4 h-4 text-muted-foreground" aria-hidden />
+              {t('profileInformation')}
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label>{t('fullName')}</Label>
@@ -323,21 +326,38 @@ export default function Settings() {
           </div>
 
           <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold">{t('appearance')}</h3>
+            <h3 className="font-heading font-semibold flex items-center gap-2">
+              <Palette className="w-4 h-4 text-muted-foreground" aria-hidden />
+              {t('appearance')}
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label>{t('theme')}</Label>
                 <Select value={preferences.theme} onValueChange={handleThemeChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="light">{t('light')}</SelectItem>
-                    <SelectItem value="dark">{t('dark')}</SelectItem>
-                    <SelectItem value="system">{t('system')}</SelectItem>
+                    <SelectItem value="light">
+                      <span className="flex items-center gap-2">
+                        <Sun className="w-4 h-4 text-muted-foreground" aria-hidden />{t('light')}
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="dark">
+                      <span className="flex items-center gap-2">
+                        <Moon className="w-4 h-4 text-muted-foreground" aria-hidden />{t('dark')}
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="system">
+                      <span className="flex items-center gap-2">
+                        <Monitor className="w-4 h-4 text-muted-foreground" aria-hidden />{t('system')}
+                      </span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>{t('language')}</Label>
+                <Label className="flex items-center gap-2">
+                  <Languages className="w-4 h-4 text-muted-foreground" aria-hidden />{t('language')}
+                </Label>
                 <Select value={preferences.language} onValueChange={handleLanguageChange}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -351,21 +371,31 @@ export default function Settings() {
           </div>
 
           <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold">{t('notificationPreferences')}</h3>
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="font-medium">{t('emailNotifications')}</p>
-                <p className="text-sm text-muted-foreground">{t('emailNotificationsDesc')}</p>
+            <h3 className="font-heading font-semibold flex items-center gap-2">
+              <Bell className="w-4 h-4 text-muted-foreground" aria-hidden />
+              {t('notificationPreferences')}
+            </h3>
+            <div className="flex items-center justify-between gap-4 py-2">
+              <div className="flex items-start gap-3 min-w-0">
+                <Bell className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
+                <div className="min-w-0">
+                  <p className="font-medium">{t('emailNotifications')}</p>
+                  <p className="text-sm text-muted-foreground">{t('emailNotificationsDesc')}</p>
+                </div>
               </div>
               <Switch
                 checked={preferences.email_notifications}
                 onCheckedChange={v => setPreferences({...preferences, email_notifications: v})}
+                aria-label={t('emailNotifications')}
               />
             </div>
             <div className="flex items-center justify-between gap-4 py-2">
-              <div>
-                <p className="font-medium" id="sms-notifications-label">{t('smsNotifications', 'SMS Notifications')}</p>
-                <p className="text-sm text-muted-foreground" id="sms-notifications-desc">{t('smsNotificationsDesc', 'Receive supported notifications by SMS.')}</p>
+              <div className="flex items-start gap-3 min-w-0">
+                <MessageSquare className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
+                <div className="min-w-0">
+                  <p className="font-medium" id="sms-notifications-label">{t('smsNotifications', 'SMS Notifications')}</p>
+                  <p className="text-sm text-muted-foreground" id="sms-notifications-desc">{t('smsNotificationsDesc', 'Receive supported notifications by SMS.')}</p>
+                </div>
               </div>
               <Switch
                 checked={smsEnabled}
@@ -379,9 +409,12 @@ export default function Settings() {
               {smsSaving ? t('saving') : ''}
             </span>
             <div className="flex items-center justify-between gap-4 py-2">
-              <div>
-                <p className="font-medium" id="push-pref-label">{t('pushPreference', 'Push delivery')}</p>
-                <p className="text-sm text-muted-foreground" id="push-pref-desc">{t('pushPreferenceDesc', 'Allow Geometra to send you browser push notifications.')}</p>
+              <div className="flex items-start gap-3 min-w-0">
+                <Smartphone className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
+                <div className="min-w-0">
+                  <p className="font-medium" id="push-pref-label">{t('pushPreference', 'Push delivery')}</p>
+                  <p className="text-sm text-muted-foreground" id="push-pref-desc">{t('pushPreferenceDesc', 'Allow Geometra to send you browser push notifications.')}</p>
+                </div>
               </div>
               <Switch
                 checked={pushPrefEnabled}
@@ -435,7 +468,10 @@ export default function Settings() {
           </div>
 
           <div className="bg-card rounded-xl border border-border p-6 space-y-3">
-            <h3 className="font-heading font-semibold">{t('aboutTitle', `About ${APP_NAME}`)}</h3>
+            <h3 className="font-heading font-semibold flex items-center gap-2">
+              <Info className="w-4 h-4 text-muted-foreground" aria-hidden />
+              {t('aboutTitle', `About ${APP_NAME}`)}
+            </h3>
             <div className="flex items-center gap-3">
               <Logo size={36} className="text-primary shrink-0" />
               <div className="min-w-0">

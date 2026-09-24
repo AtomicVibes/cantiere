@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { MessageSquare, Send, Search, Check, CheckCheck, Mic, Square, ChevronLeft, ChevronRight, Trash2, Trash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/lib/avatar';
+import { logAppError } from '@/lib/userErrors';
 import AudioMessagePlayer from '@/components/teams/AudioMessagePlayer';
 import ContactCombobox from '@/components/teams/ContactCombobox';
 import {
@@ -534,13 +535,19 @@ export default function MessagesPage() {
       }
 
       const senderName = user?.user_metadata?.full_name || user?.email || 'Someone';
-      await supabase.from('notifications').insert({
-        user_id: selectedUserId,
-        type: 'message',
-        message: `${senderName} sent you a message`,
-        url: `/messages?user=${userId}`,
-        is_read: false,
-      });
+      // In-app notification (+ automatic Push via the central trigger pipeline).
+      // Isolated: a notification failure must never roll back the sent message.
+      try {
+        await supabase.from('notifications').insert({
+          user_id: selectedUserId,
+          type: 'message',
+          message: `${senderName} sent you a message`,
+          url: `/messages?user=${userId}`,
+          is_read: false,
+        });
+      } catch (notifyErr) {
+        logAppError('Messages', notifyErr, { operation: 'create-message-notification' });
+      }
 
       setText('');
       setAudioBlob(null);

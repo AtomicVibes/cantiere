@@ -135,15 +135,21 @@ serve(async (req) => {
 
       if (adminUsers) {
         for (const adminUser of adminUsers) {
-          await supabaseAdmin
-            .from('notifications')
-            .insert({
-              user_id: adminUser.id,
-              type: 'project_request',
-              message: `New project request: ${project_name.trim()}`,
-              url: '/requests?view=management',
-              is_read: false,
-            });
+          // Isolated: a notification failure must never roll back the request.
+          try {
+            const { error: notifyError } = await supabaseAdmin
+              .from('notifications')
+              .insert({
+                user_id: adminUser.id,
+                type: 'project_request',
+                message: `New project request: ${project_name.trim()}`,
+                url: '/requests?view=management',
+                is_read: false,
+              });
+            if (notifyError) console.error('[Push] notification insert failed', notifyError);
+          } catch (notifyErr) {
+            console.error('[Push] notification insert failed', notifyErr);
+          }
         }
       }
     }
