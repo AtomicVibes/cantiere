@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { DateInput } from '@/components/ui/inputWithIcon';
+import DatePicker from '@/components/ui/DatePicker';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -225,11 +225,11 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="start_date">{t('startDate')}</Label>
-              <DateInput id="start_date" value={form.start_date} onChange={(e) => set('start_date')(e.target.value)} />
+              <DatePicker id="start_date" value={form.start_date} onChange={(v) => set('start_date')(v)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="end_date">{t('endDate')}</Label>
-              <DateInput id="end_date" value={form.end_date} onChange={(e) => set('end_date')(e.target.value)} />
+              <DatePicker id="end_date" value={form.end_date} onChange={(v) => set('end_date')(v)} />
             </div>
           </div>
 

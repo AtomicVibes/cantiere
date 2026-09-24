@@ -403,6 +403,8 @@ const resources = {
         slate: 'Slate'
       },
       editEvent: 'Edit Event',
+      clearDate: 'Clear date',
+      estimatedDeadline: 'Estimated deadline',
       upcomingEvents: 'Upcoming Events',
       showAllUpcoming: 'Show all upcoming',
       noEventsOnThisDay: 'No events on this day.',
@@ -830,6 +832,8 @@ const resources = {
         slate: 'Ø±Ù…Ø§Ø¯ÙŠ'
       },
       editEvent: 'ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø­Ø¯Ø«',
+      clearDate: 'Ù…Ø³Ø­ Ø§Ù„ØªØ§Ø±ÙŠØ®',
+      estimatedDeadline: 'Ø§Ù„Ù…ÙˆØ¹Ø¯ Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ Ø§Ù„Ù…ØªÙˆÙ‚Ø¹',
       upcomingEvents: 'Ø§Ù„Ø£Ø­Ø¯Ø§Ø« Ø§Ù„Ù‚Ø§Ø¯Ù…Ø©',
       showAllUpcoming: 'Ø¹Ø±Ø¶ ÙƒÙ„ Ø§Ù„Ù‚Ø§Ø¯Ù…',
       noEventsOnThisDay: 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ø£Ø­Ø¯Ø§Ø« ÙÙŠ Ù‡Ø°Ø§ Ø§Ù„ÙŠÙˆÙ….',
@@ -1258,6 +1262,8 @@ const resources = {
         slate: 'Ardoise'
       },
       editEvent: "Modifier l'Ã©vÃ©nement",
+      clearDate: 'Effacer la date',
+      estimatedDeadline: 'Deadline estimÃ©e',
       upcomingEvents: 'Ã‰vÃ©nements Ã  venir',
       showAllUpcoming: 'Tout afficher',
       noEventsOnThisDay: 'Aucun Ã©vÃ©nement ce jour-lÃ .',
@@ -1686,6 +1692,8 @@ const resources = {
         slate: 'Ardesia'
       },
       editEvent: 'Modifica evento',
+      clearDate: 'Cancella data',
+      estimatedDeadline: 'Scadenza stimata',
       upcomingEvents: 'Prossimi eventi',
       showAllUpcoming: 'Mostra tutti',
       noEventsOnThisDay: 'Nessun evento in questo giorno.',

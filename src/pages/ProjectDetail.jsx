@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 import { Input } from '@/components/ui/input';
-import { DateInput } from '@/components/ui/inputWithIcon';
+import DatePicker from '@/components/ui/DatePicker';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
@@ -441,7 +441,7 @@ export default function ProjectDetail() {
             <div className="bg-card rounded-xl border border-border p-4 space-y-3 mb-4">
               <Input placeholder={t('entryTitle')} value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
               <Textarea placeholder="Description" value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
-              <DateInput value={newEntry.date} onChange={e => setNewEntry({...newEntry, date: e.target.value})} />
+              <DatePicker value={newEntry.date} onChange={v => setNewEntry({...newEntry, date: v})} />
               <div className="flex items-center gap-2">
                 <label className="flex-1 cursor-pointer flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground hover:border-primary/60 hover:bg-muted/50 transition-colors">
                   <Upload className="w-4 h-4" />

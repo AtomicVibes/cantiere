@@ -7,11 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Calendar } from '@/components/ui/calendar';
-import {
-  Popover, PopoverTrigger, PopoverContent,
-} from '@/components/ui/popover';
-import { format } from 'date-fns';
+import DatePicker from '@/components/ui/DatePicker';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -25,7 +21,7 @@ import {
   validateGoogleInvoiceLink, saveInvoiceItems, removeInvoiceItems, upsertInvoiceRecord,
 } from '@/services/invoiceService';
 import { openInvoicePdf } from '@/services/invoicePdf';
-import { Plus, Trash2, Paperclip, Link2, Loader2, FileText, Eye, X, ExternalLink, CalendarIcon } from 'lucide-react';
+import { Plus, Trash2, Paperclip, Link2, Loader2, FileText, Eye, X, ExternalLink } from 'lucide-react';
 
 const NATURA_CODES = ['N1', 'N2.1', 'N2.2', 'N3', 'N4', 'N5', 'N6'];
 
@@ -401,41 +397,17 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
             </div>
             <div>
               <Label>{t('invoiceDateField')}</Label>
-              <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start text-left font-normal" type="button">
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {form.invoice_date ? format(new Date(form.invoice_date + 'T00:00:00'), 'dd/MM/yyyy') : <span className="text-muted-foreground">{t('date')}</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={form.invoice_date ? new Date(form.invoice_date + 'T00:00:00') : undefined}
-                          onSelect={d => setForm({ ...form, invoice_date: d ? format(d, 'yyyy-MM-dd') : '' })}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+              <DatePicker
+                value={form.invoice_date}
+                onChange={v => setForm({ ...form, invoice_date: v })}
+              />
             </div>
             <div>
               <Label>{t('dueDate')}</Label>
-              <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-start text-left font-normal" type="button">
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {form.due_date ? format(new Date(form.due_date + 'T00:00:00'), 'dd/MM/yyyy') : <span className="text-muted-foreground">{t('date')}</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={form.due_date ? new Date(form.due_date + 'T00:00:00') : undefined}
-                          onSelect={d => setForm({ ...form, due_date: d ? format(d, 'yyyy-MM-dd') : '' })}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+              <DatePicker
+                value={form.due_date}
+                onChange={v => setForm({ ...form, due_date: v })}
+              />
             </div>
             <div>
               <Label>{t('category')}</Label>

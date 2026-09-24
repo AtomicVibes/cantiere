@@ -6,7 +6,8 @@ import TopBar from '@/components/layout/TopBar';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { DateInput, TimeInput } from '@/components/ui/inputWithIcon';
+import { TimeInput } from '@/components/ui/inputWithIcon';
+import DatePicker from '@/components/ui/DatePicker';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -32,6 +33,10 @@ import {
   getEventHexColorName,
   isValidHexColor,
 } from '@/lib/eventColors';
+import {
+  coerceReminderFormOnFrequencyChange,
+  normalizeEventReminder,
+} from '@/lib/eventReminders';
 import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check, Bell } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
@@ -278,12 +283,16 @@ export default function CalendarPage() {
       if (!newEvent) throw new Error('Event was not returned after saving');
 
       // Persist reminder fields plus the additive custom type/color columns.
-      // If the colors migration has not been applied yet, retry without the
-      // new columns so event creation keeps working on legacy databases.
+      // Reminder values are normalized to the events_reminder_frequency_check
+      // contract (non-custom => NULL/NULL intervals; custom => positive int +
+      // valid unit). If the colors migration has not been applied yet, retry
+      // without the new columns so event creation keeps working on legacy DBs.
       const fullRow = {
-        reminder_frequency: payload.reminder_frequency || '24_hours',
-        reminder_interval_value: payload.reminder_interval_value || null,
-        reminder_interval_unit: payload.reminder_interval_unit || null,
+        ...normalizeEventReminder({
+          frequency: payload.reminder_frequency,
+          value: payload.reminder_interval_value,
+          unit: payload.reminder_interval_unit,
+        }),
         event_type_id: payload.event_type_id || null,
         event_color:
           typeof payload.event_color === 'string' && isValidHexColor(payload.event_color)
@@ -337,9 +346,11 @@ export default function CalendarPage() {
         location: payload.location?.trim() || null,
         visibility: payload.visibility || 'private',
         project_id: payload.project_id && payload.project_id !== 'none' ? payload.project_id : null,
-        reminder_frequency: payload.reminder_frequency || '24_hours',
-        reminder_interval_value: payload.reminder_interval_value || null,
-        reminder_interval_unit: payload.reminder_interval_unit || null,
+        ...normalizeEventReminder({
+          frequency: payload.reminder_frequency,
+          value: payload.reminder_interval_value,
+          unit: payload.reminder_interval_unit,
+        }),
         event_type_id: payload.event_type_id || null,
         event_color:
           typeof payload.event_color === 'string' && isValidHexColor(payload.event_color)
@@ -842,7 +853,7 @@ export default function CalendarPage() {
                   />
                 </div>
               </div>
-              <div><Label>{t('date') || 'Date'} *</Label><DateInput value={form.date} onChange={e => setForm({...form, date: e.target.value})} required /></div>
+              <div><Label>{t('date') || 'Date'} *</Label><DatePicker value={form.date} onChange={v => setForm({ ...form, date: v })} /></div>
             </div>
 
             <div className="space-y-2">
@@ -904,8 +915,7 @@ export default function CalendarPage() {
             <div className="space-y-2">
               <Label>{t('reminder.section') || 'Event Reminder'}</Label>
               <Select value={form.reminder_frequency || '24_hours'} onValueChange={v => {
-                setForm({ ...form, reminder_frequency: v });
-                if (v !== 'custom') delete form.reminder_interval_value;
+                setForm((f) => coerceReminderFormOnFrequencyChange(f, v));
               }}>
                 <SelectTrigger><SelectValue placeholder={t('reminder.frequency') || 'Reminder'} /></SelectTrigger>
                 <SelectContent>
