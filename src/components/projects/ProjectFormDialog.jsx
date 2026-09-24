@@ -22,11 +22,19 @@ import { Loader2 } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
+import { supabase } from '@/services/supabase';
+import { logAppError } from '@/lib/userErrors';
+import VisibilitySelect from '@/components/documents/VisibilitySelect';
+import AudiencePicker from '@/components/documents/AudiencePicker';
+
+const STANDARD_STATUSES = ['draft', 'planning', 'in_progress', 'on_hold', 'completed'];
+const CUSTOM_STATUS_VALUE = '__custom__';
 
 const defaultForm = {
   name: '',
   type: 'construction',
   status: 'draft',
+  customStatus: '',
   priority: 'medium',
   description: '',
   client_id: '',
@@ -36,6 +44,8 @@ const defaultForm = {
   location: '',
   budget: '',
   progress: 0,
+  visibility: 'private',
+  audienceIds: [],
 };
 
 export default function ProjectFormDialog({ open, onOpenChange, project, clients, managers, onSave }) {
@@ -68,15 +78,21 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
   ];
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
+  const [audienceMembers, setAudienceMembers] = useState([]);
   const isEditing = !!project;
+  const isCustomStatus = form.status === CUSTOM_STATUS_VALUE;
+  const effectiveStatus = isCustomStatus ? form.customStatus.trim() : form.status;
 
   useEffect(() => {
     if (open) {
       if (project) {
+        const storedStatus = project.status || 'draft';
+        const isStandard = STANDARD_STATUSES.includes(storedStatus);
         setForm({
           name: project.name || '',
           type: project.type || 'construction',
-          status: project.status || 'draft',
+          status: isStandard ? storedStatus : CUSTOM_STATUS_VALUE,
+          customStatus: isStandard ? '' : storedStatus,
           priority: project.priority || 'medium',
           description: project.description || '',
           client_id: project.client_id || '',
@@ -86,10 +102,38 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           location: project.location || '',
           budget: project.budget ?? '',
           progress: project.progress ?? 0,
+          visibility: project.visibility || 'private',
+          audienceIds: [],
         });
+        // Preserve the existing audience so saving without changes never
+        // clears it; loaded under audience RLS (admins manage audience).
+        if (project.id) {
+          supabase
+            .from('project_audience')
+            .select('user_id')
+            .eq('project_id', project.id)
+            .then(({ data, error }) => {
+              if (error) {
+                logAppError('ProjectForm', error, { operation: 'load-audience' });
+                return;
+              }
+              setForm((prev) => ({ ...prev, audienceIds: (data ?? []).map((r) => r.user_id) }));
+            });
+        }
       } else {
         setForm(defaultForm);
       }
+      supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .order('full_name')
+        .then(({ data, error }) => {
+          if (error) {
+            logAppError('ProjectForm', error, { operation: 'load-audience-members' });
+            return;
+          }
+          setAudienceMembers(data ?? []);
+        });
     }
   }, [open, project]);
 
@@ -100,16 +144,66 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
       toast.error(t('accessDenied'));
       return;
     }
+    if (isCustomStatus && !effectiveStatus) {
+      toast.error(t('customStatusRequired') || 'Please enter a custom status.');
+      return;
+    }
+    if (form.visibility === 'selected' && form.audienceIds.length === 0) {
+      toast.error(t('selectAudienceRequired'));
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
         name: form.name || undefined,
+        type: form.type || undefined,
+        status: effectiveStatus || undefined,
+        priority: form.priority || undefined,
+        description: form.description || null,
         budget: form.budget ? Number(form.budget) : undefined,
-        status: form.status || undefined,
-        client_id: form.client_id && form.client_id !== 'none' ? form.client_id : undefined,
-        manager_id: form.manager_id && form.manager_id !== 'none' ? form.manager_id : undefined,
+        client_id: form.client_id && form.client_id !== 'none' ? form.client_id : null,
+        manager_id: form.manager_id && form.manager_id !== 'none' ? form.manager_id : null,
+        start_date: form.start_date || null,
+        end_date: form.end_date || null,
+        location: form.location || null,
+        progress: form.progress === '' || form.progress == null ? undefined : Number(form.progress),
+        visibility: form.visibility || 'private',
       };
-      await onSave(payload);
+      const saved = await onSave(payload);
+      const savedId = saved?.id || project?.id;
+      // Sync the selected audience (replace set; clearing when the
+      // visibility is no longer 'selected'). Isolated from the save above.
+      if (savedId) {
+        try {
+          const { error: clearError } = await supabase
+            .from('project_audience')
+            .delete()
+            .eq('project_id', savedId);
+          if (clearError) throw clearError;
+          if (form.visibility === 'selected' && form.audienceIds.length > 0) {
+            const { error: insertError } = await supabase
+              .from('project_audience')
+              .insert(form.audienceIds.map((user_id) => ({ project_id: savedId, user_id })));
+            if (insertError) throw insertError;
+          }
+        } catch (audError) {
+          logAppError('ProjectForm', audError, { operation: 'save-audience', projectId: savedId });
+          toast.error(t('audienceSaveError') || 'Project saved, but the audience could not be updated.');
+        }
+      }
+      // Canonical audit trail (best-effort; never blocks the save).
+      try {
+        await supabase.rpc('write_audit_log', {
+          p_action_type: isEditing ? 'PROJECT_UPDATE' : 'PROJECT_CREATE',
+          p_message: isEditing ? 'Project updated' : 'Project created',
+          p_entity_type: 'project',
+          p_entity_id: savedId || null,
+          p_project_id: savedId || null,
+          p_details: { name: form.name, status: effectiveStatus, visibility: form.visibility },
+        });
+      } catch (auditError) {
+        logAppError('ProjectForm', auditError, { operation: 'audit-project-save' });
+      }
       onOpenChange(false);
     } catch (err) {
       if (!handleMutationError(err, t, toast)) {
@@ -185,7 +279,10 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="status">{t('status')}</Label>
-              <Select value={form.status} onValueChange={set('status')}>
+              <Select
+                value={STATUS_OPTIONS.some((o) => o.value === form.status) ? form.status : CUSTOM_STATUS_VALUE}
+                onValueChange={(v) => setForm((prev) => ({ ...prev, status: v }))}
+              >
                 <SelectTrigger id="status">
                   <SelectValue />
                 </SelectTrigger>
@@ -193,8 +290,18 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
                   {STATUS_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
+                  <SelectItem value={CUSTOM_STATUS_VALUE}>{t('createCustomStatus') || '+ Create custom status'}</SelectItem>
                 </SelectContent>
               </Select>
+              {isCustomStatus && (
+                <Input
+                  value={form.customStatus}
+                  onChange={(e) => set('customStatus')(e.target.value)}
+                  placeholder={t('customStatusPlaceholder') || 'e.g. Awaiting Municipality Approval'}
+                  maxLength={60}
+                  aria-label={t('customStatusPlaceholder') || 'Custom status'}
+                />
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="priority">{t('priority')}</Label>
@@ -248,6 +355,25 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
             <Label htmlFor="progress">{t('progressPercentage')}</Label>
             <Input id="progress" type="number" min="0" max="100" value={form.progress} onChange={(e) => set('progress')(e.target.value)} />
           </div>
+
+          <VisibilitySelect
+            id="project-visibility"
+            value={form.visibility}
+            onValueChange={(v) => setForm((prev) => ({ ...prev, visibility: v, audienceIds: v === 'selected' ? prev.audienceIds : [] }))}
+          />
+          {form.visibility === 'selected' && (
+            <AudiencePicker
+              idPrefix="project-audience"
+              members={audienceMembers}
+              selectedIds={form.audienceIds}
+              onToggle={(id) => setForm((prev) => ({
+                ...prev,
+                audienceIds: prev.audienceIds.includes(id)
+                  ? prev.audienceIds.filter((memberId) => memberId !== id)
+                  : [...prev.audienceIds, id],
+              }))}
+            />
+          )}
 
           <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>

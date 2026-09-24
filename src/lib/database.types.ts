@@ -1828,6 +1828,35 @@ export type Database = {
           },
         ]
       }
+      project_audience: {
+        Row: {
+          created_at: string
+          id: string
+          project_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          project_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          project_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_audience_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_requests: {
         Row: {
           address: string | null
@@ -1899,6 +1928,7 @@ export type Database = {
           project_id: string | null
           responsible_person_id: string | null
           status: string | null
+          submitted_by: string | null
           title: string
         }
         Insert: {
@@ -1912,6 +1942,7 @@ export type Database = {
           project_id?: string | null
           responsible_person_id?: string | null
           status?: string | null
+          submitted_by?: string | null
           title: string
         }
         Update: {
@@ -1925,6 +1956,7 @@ export type Database = {
           project_id?: string | null
           responsible_person_id?: string | null
           status?: string | null
+          submitted_by?: string | null
           title?: string
         }
         Relationships: [
@@ -1958,14 +1990,22 @@ export type Database = {
           client_id: string | null
           created_at: string | null
           description: string | null
+          end_date: string | null
           id: string
+          location: string | null
           manager_id: string | null
+          manual_progress: number | null
           name: string
           on_hold_since: string | null
+          priority: string | null
           progress: number | null
+          progress_mode: string
           project_request_id: string | null
+          start_date: string | null
           status: string | null
           team_member_id: string | null
+          type: string | null
+          visibility: string
         }
         Insert: {
           assigned_to?: string | null
@@ -1973,14 +2013,22 @@ export type Database = {
           client_id?: string | null
           created_at?: string | null
           description?: string | null
+          end_date?: string | null
           id?: string
+          location?: string | null
           manager_id?: string | null
+          manual_progress?: number | null
           name: string
           on_hold_since?: string | null
+          priority?: string | null
           progress?: number | null
+          progress_mode?: string
           project_request_id?: string | null
+          start_date?: string | null
           status?: string | null
           team_member_id?: string | null
+          type?: string | null
+          visibility?: string
         }
         Update: {
           assigned_to?: string | null
@@ -1988,14 +2036,22 @@ export type Database = {
           client_id?: string | null
           created_at?: string | null
           description?: string | null
+          end_date?: string | null
           id?: string
+          location?: string | null
           manager_id?: string | null
+          manual_progress?: number | null
           name?: string
           on_hold_since?: string | null
+          priority?: string | null
           progress?: number | null
+          progress_mode?: string
           project_request_id?: string | null
+          start_date?: string | null
           status?: string | null
           team_member_id?: string | null
+          type?: string | null
+          visibility?: string
         }
         Relationships: [
           {

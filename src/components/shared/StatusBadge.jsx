@@ -1,30 +1,42 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  CheckCircle2,
+  Circle,
+  ClipboardList,
+  FileEdit,
+  PauseCircle,
+  PlayCircle,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+// Standard statuses get dedicated icons; unknown/custom statuses keep
+// their stored text with a neutral generic icon (user content is never
+// translated, surrounding UI is).
 const STATUS_CONFIG = {
-  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-600 border-slate-200' },
-  planning: { label: 'Planning', className: 'bg-blue-50 text-blue-600 border-blue-200' },
-  permit_approval: { label: 'Permit Approval', className: 'bg-amber-50 text-amber-600 border-amber-200' },
-  in_progress: { label: 'In Progress', className: 'bg-indigo-50 text-indigo-600 border-indigo-200' },
-  inspection: { label: 'Inspection', className: 'bg-purple-50 text-purple-600 border-purple-200' },
-  on_hold: { label: 'On Hold', className: 'bg-red-50 text-red-600 border-red-200' },
-  completed: { label: 'Completed', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-  archived: { label: 'Archived', className: 'bg-gray-50 text-gray-500 border-gray-200' },
-  active: { label: 'Active', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-  inactive: { label: 'Inactive', className: 'bg-gray-50 text-gray-500 border-gray-200' },
-  on_leave: { label: 'On Leave', className: 'bg-amber-50 text-amber-600 border-amber-200' },
-  paid: { label: 'Paid', className: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-  pending: { label: 'Pending', className: 'bg-amber-50 text-amber-600 border-amber-200' },
-  overdue: { label: 'Overdue', className: 'bg-red-50 text-red-600 border-red-200' },
-  partially_paid: { label: 'Partially Paid', className: 'bg-blue-50 text-blue-600 border-blue-200' },
+  draft: { icon: FileEdit, labelKey: 'draft', fallback: 'Draft' },
+  planning: { icon: ClipboardList, labelKey: 'planning', fallback: 'Planning' },
+  in_progress: { icon: PlayCircle, labelKey: 'inProgress', fallback: 'In Progress' },
+  on_hold: { icon: PauseCircle, labelKey: 'onHold', fallback: 'On Hold' },
+  completed: { icon: CheckCircle2, labelKey: 'completed', fallback: 'Completed' },
 };
 
+export const PROJECT_STATUSES = [...Object.keys(STATUS_CONFIG), 'other'];
+
 export default function StatusBadge({ status }) {
-  const config = STATUS_CONFIG[status] || { label: status, className: 'bg-gray-50 text-gray-500' };
+  const { t } = useTranslation();
+  const humanized = String(status ?? '')
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+  const config = STATUS_CONFIG[status] || { icon: Circle, labelKey: null, fallback: humanized || t('other', 'Other') };
+  const Icon = config.icon;
   return (
-    <Badge variant="outline" className={cn("text-xs font-medium border", config.className)}>
-      {config.label}
+    <Badge variant="outline" className={cn('text-xs font-medium border gap-1 bg-muted text-muted-foreground border-border')}>
+      <Icon aria-hidden className="w-3 h-3" />
+      {config.labelKey ? t(config.labelKey, config.fallback) : config.fallback}
     </Badge>
   );
 }

@@ -17,7 +17,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Search, FileText, Upload, ExternalLink, Archive, RotateCcw, Trash2, Loader2, Download, ShieldCheck } from 'lucide-react';
+import { Search, FileText, Upload, ExternalLink, Archive, RotateCcw, Trash2, Loader2, Download, ShieldCheck, Send } from 'lucide-react';
 import VisibilitySelect, { VisibilityBadge } from '@/components/documents/VisibilitySelect';
 import AudiencePicker from '@/components/documents/AudiencePicker';
 import { format } from 'date-fns';
@@ -47,6 +47,67 @@ export default function Documents() {
   const { user: currentUser } = useAuth();
   const { isSuperAdmin } = useIsSuperAdmin();
   const canUpload = PERMISSIONS.canUploadDocument.includes(role);
+  const canSubmitToTimeline = PERMISSIONS.canAddTimelineEntry.includes(role);
+  const [submittingId, setSubmittingId] = useState(null);
+
+  // Submit a project-linked document to its project timeline (reference
+  // only — the physical document is never duplicated). The timeline's
+  // unique document constraint makes this naturally idempotent.
+  const submitToTimeline = async (doc) => {
+    if (!doc?.project_id || submittingId) return;
+    setSubmittingId(doc.id);
+    try {
+      const { error } = await supabase.from('project_timeline').insert({
+        project_id: doc.project_id,
+        title: doc.name || doc.file_name || 'Document',
+        description: null,
+        date: new Date().toISOString().slice(0, 10),
+        document_id: doc.id,
+        submitted_by: currentUser?.id || null,
+      });
+      if (error) throw error;
+      try {
+        await supabase.rpc('write_audit_log', {
+          p_action_type: 'TIMELINE_CREATE',
+          p_message: 'Document submitted to project timeline',
+          p_entity_type: 'project_timeline',
+          p_entity_id: null,
+          p_project_id: doc.project_id,
+          p_details: { document_id: doc.id, title: doc.name || doc.file_name },
+        });
+      } catch (auditError) {
+        logDocumentError('Timeline submission audit failed', auditError, { documentId: doc.id });
+      }
+      toast.success(t('timelineSubmitSuccess') || 'Submitted to project timeline.');
+      queryClient.invalidateQueries({ queryKey: ['timeline', doc.project_id] });
+      // Notify the project manager (isolated: never blocks the submission).
+      try {
+        const { data: proj } = await supabase.from('projects').select('id, manager_id').eq('id', doc.project_id).maybeSingle();
+        if (proj?.manager_id && proj.manager_id !== currentUser?.id) {
+          await supabase.from('notifications').insert({
+            user_id: proj.manager_id,
+            type: 'project_update',
+            message: `New document submitted to project timeline.`,
+            url: `/projects/${doc.project_id}`,
+            is_read: false,
+          });
+        }
+      } catch (notifyError) {
+        logDocumentError('Timeline submission notification failed', notifyError, { documentId: doc.id });
+      }
+    } catch (err) {
+      const msg = String(err?.message || '').toLowerCase();
+      const code = String(err?.code || '');
+      if (code === '23505' || msg.includes('duplicate') || msg.includes('unique')) {
+        toast.info(t('timelineAlreadySubmitted') || 'This document is already on the project timeline.');
+      } else {
+        logDocumentError('Submit to timeline failed', err, { documentId: doc.id });
+        toast.error(getDocumentUserFriendlyError(err, t('timelineSubmitError') || 'We couldn\'t add this item to the project timeline. Please try again.'));
+      }
+    } finally {
+      setSubmittingId(null);
+    }
+  };
   const canDelete = PERMISSIONS.canDeleteDocument.includes(role);
   const { fields, typeOptions } = useDocumentFormFields();
   const [showUpload, setShowUpload] = useState(false);
@@ -601,6 +662,17 @@ export default function Documents() {
                           <ExternalLink className="w-3.5 h-3.5" />
                         </Button>
                       </a>
+                    )}
+                    {doc.project_id && canSubmitToTimeline && (
+                      <button
+                        onClick={() => submitToTimeline(doc)}
+                        disabled={submittingId === doc.id}
+                        className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                        title={t('submitToTimeline') || 'Submit to Project Timeline'}
+                        aria-label={`${t('submitToTimeline') || 'Submit to Project Timeline'}: ${doc.name || doc.file_name || ''}`}
+                      >
+                        {submittingId === doc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                      </button>
                     )}
                     {isSuperAdmin && (
                       view === 'active' ? (

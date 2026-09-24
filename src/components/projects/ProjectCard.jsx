@@ -5,6 +5,8 @@ import { format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
 import StatusBadge from '@/components/shared/StatusBadge';
 import PriorityBadge from '@/components/shared/PriorityBadge';
+import { VisibilityBadge } from '@/components/documents/VisibilitySelect';
+import { getEffectiveProgress } from '@/lib/projectProgress';
 
 const TYPE_LABELS = {
   construction: 'Construction',
@@ -22,7 +24,7 @@ const TYPE_LABELS = {
 export default function ProjectCard({ project, clientName }) {
   if (!project) return null;
 
-  const progress = project.progress ?? 0;
+  const progress = getEffectiveProgress(project);
   const budget = project.budget ?? 0;
 
   return (
@@ -55,6 +57,12 @@ export default function ProjectCard({ project, clientName }) {
               {format(new Date(project.start_date), 'MMM d, yyyy')}
             </span>
           )}
+          {project?.end_date && (
+            <span className="flex items-center gap-1 font-medium text-foreground/80">
+              <Calendar className="w-3.5 h-3.5" />
+              {format(new Date(project.end_date), 'MMM d, yyyy')}
+            </span>
+          )}
           {project?.location && (
             <span className="flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5" />
@@ -69,9 +77,12 @@ export default function ProjectCard({ project, clientName }) {
           )}
         </div>
 
-        <div className="flex items-center justify-between">
-          <StatusBadge status={project?.status} />
-          <div className="flex items-center gap-2 w-24">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+            <StatusBadge status={project?.status} />
+            <VisibilityBadge value={project?.visibility || 'private'} />
+          </div>
+          <div className="flex items-center gap-2 w-24 shrink-0">
             <Progress value={progress} className="h-1.5" />
             <span className="text-xs text-muted-foreground">{progress}%</span>
           </div>

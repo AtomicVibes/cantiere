@@ -23,10 +23,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
-  Plus, Loader2, Archive, Trash2, Upload, X
+  Plus, Loader2, Archive, Trash2, Upload, X, TrendingUp, Send, User as UserIcon, FileText
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { getEntity, createEntity, updateEntity } from '@/services/dataService';
+import { getEffectiveProgress, isManualProgressMode, computeAutoProgress } from '@/lib/projectProgress';
+import { logAppError } from '@/lib/userErrors';
+import { VisibilityBadge } from '@/components/documents/VisibilitySelect';
 import { uploadDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -59,6 +62,18 @@ export default function ProjectDetail() {
   const [entryVisibility, setEntryVisibility] = useState('private');
   const [entryAudience, setEntryAudience] = useState([]);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState(null);
+  const [entryDeleting, setEntryDeleting] = useState(false);
+  const [manualProgress, setManualProgress] = useState('');
+  const [progressSaving, setProgressSaving] = useState(false);
+  const [pendingManagerId, setPendingManagerId] = useState(null);
+  const [managerTouched, setManagerTouched] = useState(false);
+  const [managerSaving, setManagerSaving] = useState(false);
+
+  React.useEffect(() => {
+    setPendingManagerId(null);
+    setManagerTouched(false);
+  }, [id]);
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project', id],
@@ -270,7 +285,36 @@ export default function ProjectDetail() {
           description: newEntry.description || null,
           date: newEntry.date || null,
           document_id: uploadedDocument?.id || null,
+          submitted_by: userId || null,
         });
+        // Canonical audit (best-effort).
+        try {
+          await supabase.rpc('write_audit_log', {
+            p_action_type: 'TIMELINE_CREATE',
+            p_message: 'Timeline entry submitted',
+            p_entity_type: 'project_timeline',
+            p_entity_id: null,
+            p_project_id: id,
+            p_details: { title: newEntry.title, document_id: uploadedDocument?.id || null },
+          });
+        } catch (auditError) {
+          logAppError('ProjectDetail', auditError, { operation: 'audit-timeline-create' });
+        }
+        // Notify the project manager of document submissions (isolated:
+        // never blocks the submission). In-app + Push via central pipeline.
+        if (uploadedDocument?.id && project?.manager_id && project.manager_id !== userId) {
+          try {
+            await supabase.from('notifications').insert({
+              user_id: project.manager_id,
+              type: 'project_update',
+              message: `New document submitted to project: ${project.name}`,
+              url: `/projects/${id}`,
+              is_read: false,
+            });
+          } catch (notifyError) {
+            logAppError('ProjectDetail', notifyError, { operation: 'notify-timeline-submission' });
+          }
+        }
       } catch (error) {
         // The timeline insert failed after a document was uploaded: roll the
         // document back so the project is not left with an orphaned record.
@@ -292,6 +336,83 @@ export default function ProjectDetail() {
       }
     } finally {
       setEntryUploading(false);
+    }
+  };
+
+  // Remove a timeline submission (association only — the linked document,
+  // if any, is preserved). RLS restricts deletion to admins; the button
+  // is gated accordingly and failures are user-friendly.
+  const handleRemoveEntry = async () => {
+    if (!entryToDelete) return;
+    setEntryDeleting(true);
+    try {
+      const { error } = await supabase.from('project_timeline').delete().eq('id', entryToDelete.id);
+      if (error) throw error;
+      try {
+        await supabase.rpc('write_audit_log', {
+          p_action_type: 'TIMELINE_DELETE',
+          p_message: 'Timeline entry removed',
+          p_entity_type: 'project_timeline',
+          p_entity_id: entryToDelete.id,
+          p_project_id: id,
+          p_details: { title: entryToDelete.title },
+        });
+      } catch (auditError) {
+        logAppError('ProjectDetail', auditError, { operation: 'audit-timeline-delete' });
+      }
+      toast.success(t('timelineEntryRemoved') || 'Timeline entry removed.');
+      queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
+      setEntryToDelete(null);
+    } catch (err) {
+      logAppError('ProjectDetail', err, { operation: 'remove-timeline-entry' });
+      toast.error(t('errorsTimelineRemove', "We couldn't remove this timeline item. Please try again."));
+    } finally {
+      setEntryDeleting(false);
+    }
+  };
+
+  const handleManualProgressSave = async () => {
+    const value = Number(manualProgress);
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      toast.error(t('progressRangeError') || 'Progress must be between 0 and 100.');
+      return;
+    }
+    setProgressSaving(true);
+    try {
+      await updateMutation.mutateAsync({ progress_mode: 'manual', manual_progress: Math.round(value), progress: Math.round(value) });
+      try {
+        await supabase.rpc('write_audit_log', {
+          p_action_type: 'PROJECT_PROGRESS_OVERRIDE',
+          p_message: 'Project progress manually overridden',
+          p_entity_type: 'project',
+          p_entity_id: id,
+          p_project_id: id,
+          p_details: { manual_progress: Math.round(value) },
+        });
+      } catch (auditError) {
+        logAppError('ProjectDetail', auditError, { operation: 'audit-progress-override' });
+      }
+      toast.success(t('progressSaved') || 'Progress saved.');
+    } catch (err) {
+      logAppError('ProjectDetail', err, { operation: 'save-manual-progress' });
+      toast.error(t('errorsProjectSave', "We couldn't save the project changes. Please try again."));
+    } finally {
+      setProgressSaving(false);
+    }
+  };
+
+  const handleAutomaticProgress = async () => {
+    setProgressSaving(true);
+    try {
+      const recalculated = computeAutoProgress(timeline.length);
+      await updateMutation.mutateAsync({ progress_mode: 'auto', manual_progress: null, progress: recalculated });
+      toast.success(t('progressAutomatic') || 'Automatic progress restored.');
+    } catch (err) {
+      logAppError('ProjectDetail', err, { operation: 'restore-auto-progress' });
+      toast.error(t('errorsProjectSave', "We couldn't save the project changes. Please try again."));
+    } finally {
+      setProgressSaving(false);
     }
   };
 
@@ -334,12 +455,16 @@ export default function ProjectDetail() {
               <div className="flex flex-wrap items-center gap-3">
                 <StatusBadge status={project.status} />
                 <PriorityBadge priority={project.priority} />
+                <VisibilityBadge value={project.visibility || 'private'} />
                 {clientName && <span className="text-sm text-muted-foreground">{t('clientLabel')}: {clientName}</span>}
               </div>
             </div>
-            <div className="flex items-center gap-2 w-32">
-              <Progress value={project.progress || 0} className="h-2" />
-              <span className="text-sm font-medium">{project.progress || 0}%</span>
+            <div className="flex items-center gap-2 w-40">
+              <Progress value={getEffectiveProgress(project)} className="h-2" />
+              <span className="text-sm font-medium whitespace-nowrap">
+                {getEffectiveProgress(project)}%
+                {isManualProgressMode(project) ? ` ${t('manual') || '(manual)'}` : ''}
+              </span>
             </div>
           </div>
 
@@ -379,18 +504,97 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        {/* Team Assignment — super admin only */}
+        {/* Progress — automatic from timeline (+5% each, max 100%) with
+            super-admin manual override. Authoritative value is database-
+            backed (trigger in auto mode, stored override in manual). */}
+        <div className="bg-card rounded-xl border border-border p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-muted-foreground" aria-hidden />
+              <h3 className="font-heading font-semibold">{t('progress') || 'Progress'}</h3>
+              <span className="text-sm font-medium">{getEffectiveProgress(project)}%</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                {isManualProgressMode(project) ? (t('manual') || 'Manual') : (t('automatic') || 'Automatic')}
+              </span>
+            </div>
+            {isSuperAdminLive && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={manualProgress}
+                  onChange={(e) => setManualProgress(e.target.value)}
+                  placeholder={t('manualProgressPlaceholder') || '0–100'}
+                  aria-label={t('manualProgressPlaceholder') || 'Manual progress value'}
+                  className="w-24 h-8"
+                />
+                <Button size="sm" variant="outline" disabled={progressSaving} onClick={handleManualProgressSave}>
+                  {t('setManual') || 'Set manual'}
+                </Button>
+                {isManualProgressMode(project) && (
+                  <Button size="sm" variant="ghost" disabled={progressSaving} onClick={handleAutomaticProgress}>
+                    {t('useAutomatic') || 'Use automatic'}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {!isManualProgressMode(project) && (
+            <p className="text-xs text-muted-foreground mt-2">
+              {t('progressAutoHint') || 'Each timeline submission adds 5% (max 100%).'}
+            </p>
+          )}
+        </div>
+
+        {/* Team Assignment — super admin only. Explicit Save workflow: the
+            dropdown only stages a selection; Save persists it, so the
+            assignment can never be cleared accidentally. */}
         {isSuperAdminLive && (
         <section>
           <h3 className="font-heading font-semibold mb-3">{t('teamAssignment')}</h3>
-          <div className="bg-card rounded-xl border border-border p-4 max-w-sm">
-            <label className="text-xs text-muted-foreground mb-1.5 block">{t('projectManager')}</label>
-            <ProjectAssignmentDropdown
-              value={project.manager_id}
-              onChange={(newValue) => {
-                updateMutation.mutate({ manager_id: newValue });
+          <div className="bg-card rounded-xl border border-border p-4 max-w-sm space-y-3">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">{t('projectManager')}</label>
+              <ProjectAssignmentDropdown
+                value={managerTouched ? pendingManagerId : project.manager_id}
+                onChange={(newValue) => {
+                  setPendingManagerId(newValue);
+                  setManagerTouched(true);
+                }}
+              />
+            </div>
+            <Button
+              size="sm"
+              disabled={!managerTouched || managerSaving}
+              onClick={async () => {
+                setManagerSaving(true);
+                try {
+                  await updateMutation.mutateAsync({ manager_id: pendingManagerId });
+                  try {
+                    await supabase.rpc('write_audit_log', {
+                      p_action_type: 'TEAM_ASSIGNED',
+                      p_message: 'Project team assignment updated',
+                      p_entity_type: 'project',
+                      p_entity_id: id,
+                      p_project_id: id,
+                      p_details: { manager_id: pendingManagerId },
+                    });
+                  } catch (auditError) {
+                    console.error('[ProjectDetail] team assignment audit failed:', auditError);
+                  }
+                  toast.success(t('teamAssignmentSaved') || 'Team assignment saved.');
+                  setManagerTouched(false);
+                } catch (err) {
+                  handleMutationError(err, t, toast);
+                } finally {
+                  setManagerSaving(false);
+                }
               }}
-            />
+            >
+              {managerSaving && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+              {t('save')}
+            </Button>
           </div>
         </section>
         )}
@@ -496,19 +700,52 @@ export default function ProjectDetail() {
                 <div key={entry.id} className="relative">
                   <div className="absolute -left-[25px] w-3 h-3 rounded-full bg-primary border-2 border-card" />
                   <div className="bg-card rounded-lg border border-border p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-semibold">{entry.title}</h4>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-semibold flex items-center gap-2 flex-wrap">
+                          {entry.document_id ? (
+                            <FileText className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
+                          ) : (
+                            <Send className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
+                          )}
+                          <span className="truncate">{entry.title}</span>
+                          {!isManualProgressMode(project) && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                              +5%
+                            </span>
+                          )}
+                        </h4>
                         {entry.description && <p className="text-sm text-muted-foreground mt-1">{entry.description}</p>}
                       </div>
-                      <StatusBadge status={entry.status} />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <StatusBadge status={entry.status} />
+                        {(isSuperAdminLive || isAdmin) && (
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            title={t('removeFromTimeline') || 'Remove from timeline'}
+                            aria-label={`${t('removeFromTimeline') || 'Remove from timeline'}: ${entry.title}`}
+                            onClick={() => setEntryToDelete(entry)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                     {entry.document && <DocumentPreview document={entry.document} />}
-                    <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
                         {entry.date ? format(new Date(entry.date), 'MMM d, yyyy') : entry.created_at ? format(new Date(entry.created_at), 'MMM d, yyyy') : t('noDate')}
                       </span>
+                      {entry.submitted_by && (
+                        <span className="flex items-center gap-1">
+                          <UserIcon className="w-3 h-3" />
+                          {t('submittedBy') || 'Submitted by'}: {entry.submitted_by === userId ? (t('you') || 'You') : entry.submitted_by.slice(0, 8)}
+                        </span>
+                      )}
                       {entry.responsible_person && (
                         <span>{t('assignedTo')}: {entry.responsible_person}</span>
                       )}
@@ -536,9 +773,35 @@ export default function ProjectDetail() {
         clients={clients}
         managers={managers}
         onSave={async (data) => {
-          await updateMutation.mutateAsync(data);
+          const saved = await updateMutation.mutateAsync(data);
+          return saved;
         }}
       />
+
+      <AlertDialog open={!!entryToDelete} onOpenChange={(open) => !open && setEntryToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('removeFromTimeline') || 'Remove from timeline'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('removeFromTimelineDesc') || 'This removes the timeline entry only. The linked document, if any, is preserved.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={entryDeleting}>{t('cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={entryDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                handleRemoveEntry();
+              }}
+            >
+              {entryDeleting && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+              {t('remove') || 'Remove'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
