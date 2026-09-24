@@ -23,11 +23,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
-  Plus, Loader2, Archive, Trash2, Upload, X, TrendingUp, Send, User as UserIcon, FileText
+  Plus, Loader2, Archive, ArchiveRestore, Trash2, Upload, X, TrendingUp, Send, User as UserIcon, FileText
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { getEntity, createEntity, updateEntity } from '@/services/dataService';
-import { getEffectiveProgress, isManualProgressMode, computeAutoProgress } from '@/lib/projectProgress';
+import { getEffectiveProgress, isManualProgressMode, computeAutoProgress, getPriorityProgressClass } from '@/lib/projectProgress';
 import { logAppError } from '@/lib/userErrors';
 import { VisibilityBadge } from '@/components/documents/VisibilitySelect';
 import { uploadDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
@@ -189,13 +189,68 @@ export default function ProjectDetail() {
   });
 
   const archiveMutation = useMutation({
-    mutationFn: () => supabase.from('projects').update({ status: 'archived' }).eq('id', id),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          status: 'archived',
+          status_before_archive: project?.status && project.status !== 'archived' ? project.status : project?.status_before_archive || null,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       queryClient.invalidateQueries({ queryKey: ['project', id] });
+      try {
+        await supabase.rpc('write_audit_log', {
+          p_action_type: 'PROJECT_ARCHIVE',
+          p_message: 'Project archived',
+          p_entity_type: 'project',
+          p_entity_id: id,
+          p_project_id: id,
+          p_details: {},
+        });
+      } catch (auditError) {
+        logAppError('ProjectDetail', auditError, { operation: 'audit-project-archive' });
+      }
       toast.success(t('projectArchived'));
     },
-    onError: (err) => handleMutationError(err, t, toast),
+    onError: (err) => {
+      logAppError('ProjectDetail', err, { operation: 'archive-project' });
+      toast.error(t('errorsProjectArchive') || "We couldn't archive this project. Please try again.");
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('projects')
+        .update({ status: project?.status_before_archive || 'draft', status_before_archive: null })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
+      try {
+        await supabase.rpc('write_audit_log', {
+          p_action_type: 'PROJECT_RESTORE',
+          p_message: 'Project restored',
+          p_entity_type: 'project',
+          p_entity_id: id,
+          p_project_id: id,
+          p_details: {},
+        });
+      } catch (auditError) {
+        logAppError('ProjectDetail', auditError, { operation: 'audit-project-restore' });
+      }
+      toast.success(t('projectRestored') || 'Project restored.');
+    },
+    onError: (err) => {
+      logAppError('ProjectDetail', err, { operation: 'restore-project' });
+      toast.error(t('errorsProjectRestore') || "We couldn't restore this project. Please try again.");
+    },
   });
 
   const createEntryMutation = useMutation({
@@ -426,7 +481,12 @@ export default function ProjectDetail() {
             <ArrowLeft className="w-4 h-4" /> {t('backToProjects')}
           </Link>
           <div className="flex items-center gap-2">
-            {isAdmin && (
+            {isAdmin && project?.status === 'archived' && (
+              <Button variant="outline" size="sm" onClick={() => restoreMutation.mutate()} className="gap-2" disabled={restoreMutation.isPending}>
+                <ArchiveRestore className="w-3.5 h-3.5" /> {t('restoreProject') || 'Restore'}
+              </Button>
+            )}
+            {isAdmin && project?.status !== 'archived' && (
               <Button variant="outline" size="sm" onClick={() => archiveMutation.mutate()} className="gap-2" disabled={archiveMutation.isPending}>
                 <Archive className="w-3.5 h-3.5" /> {t('archive')}
               </Button>
@@ -460,7 +520,7 @@ export default function ProjectDetail() {
               </div>
             </div>
             <div className="flex items-center gap-2 w-40">
-              <Progress value={getEffectiveProgress(project)} className="h-2" />
+              <Progress value={getEffectiveProgress(project)} className="h-2" indicatorClassName={getPriorityProgressClass(project?.priority)} />
               <span className="text-sm font-medium whitespace-nowrap">
                 {getEffectiveProgress(project)}%
                 {isManualProgressMode(project) ? ` ${t('manual') || '(manual)'}` : ''}

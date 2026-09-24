@@ -366,6 +366,10 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
               idPrefix="project-audience"
               members={audienceMembers}
               selectedIds={form.audienceIds}
+              titleKey="projectAudienceTitle"
+              titleFallback="Who can see the project?"
+              helpKey="projectAudienceHelp"
+              helpFallback="Only the selected people can view this project."
               onToggle={(id) => setForm((prev) => ({
                 ...prev,
                 audienceIds: prev.audienceIds.includes(id)

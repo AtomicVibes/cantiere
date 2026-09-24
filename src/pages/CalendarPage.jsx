@@ -759,8 +759,9 @@ export default function CalendarPage() {
                     <div className="flex items-start justify-between gap-2 pr-6 ps-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <div
-                          aria-hidden
                           className="w-2 h-2 rounded-full flex-shrink-0"
+                          role="img"
+                          aria-label={`${t('eventColors.eventColor', 'Event color')}: ${getEventColorName(ev)}`}
                           style={{ backgroundColor: cardStyle.solid }}
                         />
                         <h4 className="font-medium text-sm text-foreground truncate group-hover:text-foreground">{ev.title}</h4>
@@ -803,9 +804,6 @@ export default function CalendarPage() {
                         style={{ backgroundColor: cardStyle.solid, color: cardStyle.text }}
                       >
                         {getEventLabel(ev.type)}
-                      </span>
-                      <span className="ms-1 text-[10px] text-muted-foreground">
-                        {getEventColorName(ev)}
                       </span>
                       {ev.reminder_display && ev.reminder_frequency !== 'disabled' && (
                         <span

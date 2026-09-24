@@ -16,8 +16,9 @@ import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Plus, Search, FolderKanban, AlertTriangle, Loader2, RefreshCw,
-  List as ListIcon, LayoutGrid, Calendar as CalendarIcon, Users,
+  List as ListIcon, LayoutGrid, Calendar as CalendarIcon, Users, Archive,
 } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { supabase } from '@/services/supabase';
 import { listEntities, createEntity, updateEntity } from '@/services/dataService';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -25,7 +26,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { matchesProjectFilters, sortProjects } from '@/lib/projectFilters';
-import { getEffectiveProgress } from '@/lib/projectProgress';
+import { getEffectiveProgress, getPriorityProgressClass } from '@/lib/projectProgress';
 import { logAppError } from '@/lib/userErrors';
 
 const VIEW_STORAGE_KEY = 'projects_view_mode';
@@ -51,6 +52,9 @@ export default function Projects() {
       return 'grid';
     }
   });
+  // Active vs archived separation happens at the data-query level so the
+  // two lists never fetch each other's rows.
+  const [projectTab, setProjectTab] = useState('active');
   const queryClient = useQueryClient();
 
   const setView = (mode) => {
@@ -63,8 +67,17 @@ export default function Projects() {
   };
 
   const { data: projects = [], isLoading, isError, error: loadError, refetch } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => listEntities('projects', { order: { column: 'created_at', direction: 'desc' } }),
+    queryKey: ['projects', projectTab],
+    queryFn: () =>
+      projectTab === 'archived'
+        ? listEntities('projects', {
+            order: { column: 'created_at', direction: 'desc' },
+            filter: { status: 'archived' },
+          })
+        : listEntities('projects', {
+            order: { column: 'created_at', direction: 'desc' },
+            exclude: { status: 'archived' },
+          }),
     placeholderData: [],
     enabled: !!user?.id,
     // A project may have been created/approved on another page (e.g. request
@@ -193,6 +206,18 @@ export default function Projects() {
     <div>
       <TopBar title={t('projects')} />
       <div className="p-6 space-y-6">
+        <Tabs value={projectTab} onValueChange={setProjectTab}>
+          <TabsList aria-label={t('projects')}>
+            <TabsTrigger value="active" className="gap-1.5">
+              <FolderKanban className="w-4 h-4" aria-hidden />
+              {t('activeProjects') || 'Active'}
+            </TabsTrigger>
+            <TabsTrigger value="archived" className="gap-1.5">
+              <Archive className="w-4 h-4" aria-hidden />
+              {t('archivedProjects') || 'Archived'}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value={projectTab} key={projectTab} className="space-y-6 mt-4">
         {/* Toolbar */}
         <div className="flex flex-col gap-3">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -369,7 +394,7 @@ export default function Projects() {
                         <VisibilityBadge value={project.visibility || 'private'} />
                       </div>
                       <div className="flex items-center gap-2 w-full sm:w-28 shrink-0">
-                        <Progress value={getEffectiveProgress(project)} className="h-1.5 flex-1" />
+                        <Progress value={getEffectiveProgress(project)} className="h-1.5 flex-1" indicatorClassName={getPriorityProgressClass(project?.priority)} />
                         <span className="text-xs text-muted-foreground whitespace-nowrap">{getEffectiveProgress(project)}%</span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground shrink-0">
@@ -393,6 +418,8 @@ export default function Projects() {
             </ul>
           </div>
         )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <ProjectFormDialog

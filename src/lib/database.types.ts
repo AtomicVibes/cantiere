@@ -2003,6 +2003,7 @@ export type Database = {
           project_request_id: string | null
           start_date: string | null
           status: string | null
+          status_before_archive: string | null
           team_member_id: string | null
           type: string | null
           visibility: string
@@ -2026,6 +2027,7 @@ export type Database = {
           project_request_id?: string | null
           start_date?: string | null
           status?: string | null
+          status_before_archive?: string | null
           team_member_id?: string | null
           type?: string | null
           visibility?: string
@@ -2049,6 +2051,7 @@ export type Database = {
           project_request_id?: string | null
           start_date?: string | null
           status?: string | null
+          status_before_archive?: string | null
           team_member_id?: string | null
           type?: string | null
           visibility?: string

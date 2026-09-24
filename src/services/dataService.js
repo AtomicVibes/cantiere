@@ -47,6 +47,14 @@ export const listEntities = (table, options = {}) => {
       });
     }
 
+    // Database-level exclusion (e.g. archived rows) so filtered-out records
+    // are never fetched into the browser in the first place.
+    if (options.exclude) {
+      Object.entries(options.exclude).forEach(([key, value]) => {
+        query = query.neq(key, value);
+      });
+    }
+
     const { data, error } = await query;
 
     if (error) throw error;

@@ -6,7 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import StatusBadge from '@/components/shared/StatusBadge';
 import PriorityBadge from '@/components/shared/PriorityBadge';
 import { VisibilityBadge } from '@/components/documents/VisibilitySelect';
-import { getEffectiveProgress } from '@/lib/projectProgress';
+import { getEffectiveProgress, getPriorityProgressClass } from '@/lib/projectProgress';
 
 const TYPE_LABELS = {
   construction: 'Construction',
@@ -83,7 +83,7 @@ export default function ProjectCard({ project, clientName }) {
             <VisibilityBadge value={project?.visibility || 'private'} />
           </div>
           <div className="flex items-center gap-2 w-24 shrink-0">
-            <Progress value={progress} className="h-1.5" />
+            <Progress value={progress} className="h-1.5" indicatorClassName={getPriorityProgressClass(project?.priority)} />
             <span className="text-xs text-muted-foreground">{progress}%</span>
           </div>
         </div>

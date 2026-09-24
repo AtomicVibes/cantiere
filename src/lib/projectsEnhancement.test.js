@@ -12,6 +12,8 @@ import {
   clampProgress,
   getEffectiveProgress,
   isManualProgressMode,
+  getPriorityProgressClass,
+  PRIORITY_PROGRESS_CLASSES,
 } from './projectProgress.js';
 import { matchesProjectFilters, sortProjects, priorityRank } from './projectFilters.js';
 
@@ -170,11 +172,99 @@ describe('form and detail wiring', () => {
     assert.ok(src.includes('23505'), 'duplicate guard');
   });
 });
-
 describe('project i18n coverage', () => {
   it('new keys exist in all four languages', () => {
     const i18n = read('src/i18n.js');
     for (const key of ['teamAssignmentSaved:', 'createCustomStatus:', 'timelineEntryRemoved:', 'removeFromTimeline:', 'submitToTimeline:', 'progress:', 'viewMode:', 'listView:', 'gridView:', 'sortBy:', 'clearFilters:', 'submittedBy:', 'errorsProjectSave:', 'errorsTimelineRemove:']) {
+      const count = (i18n.match(new RegExp(`^\\s*${key}`, 'gm')) || []).length;
+      assert.equal(count, 4, `${key} in 4 languages`);
+    }
+  });
+});
+
+describe('priority-colored progress bars', () => {
+  it('central mapping covers all priorities with distinct colors', () => {
+    assert.equal(getPriorityProgressClass('low'), PRIORITY_PROGRESS_CLASSES.low);
+    assert.ok(PRIORITY_PROGRESS_CLASSES.low.includes('emerald'), 'low is green');
+    assert.ok(PRIORITY_PROGRESS_CLASSES.medium.includes('yellow'), 'medium is yellow');
+    assert.ok(PRIORITY_PROGRESS_CLASSES.high.includes('orange'), 'high is orange');
+    assert.ok(PRIORITY_PROGRESS_CLASSES.critical.includes('red'), 'critical is red');
+    assert.equal(getPriorityProgressClass('unknown'), 'bg-primary');
+    assert.equal(getPriorityProgressClass(undefined), 'bg-primary');
+  });
+
+  it('cards, list rows and detail derive the fill from priority', () => {
+    for (const f of ['src/components/projects/ProjectCard.jsx', 'src/pages/Projects.jsx', 'src/pages/ProjectDetail.jsx']) {
+      const src = read(f);
+      assert.ok(src.includes('indicatorClassName={getPriorityProgressClass('), `${f} uses central map`);
+      assert.ok(!/indicatorClassName="bg-(red|green|emerald|yellow|orange)-500"/.test(src), `${f} has no hardcoded fill`);
+    }
+    const progress = read('src/components/ui/progress.jsx');
+    assert.ok(progress.includes('indicatorClassName'), 'shared primitive supports it');
+    assert.ok(progress.includes('bg-secondary'), 'neutral track');
+  });
+});
+
+describe('archived projects sub-tab', () => {
+  it('separates active/archived at the data-query level', () => {
+    const src = read('src/pages/Projects.jsx');
+    assert.ok(src.includes("filter: { status: 'archived' }"), 'archived query filtered');
+    assert.ok(src.includes("exclude: { status: 'archived' }"), 'active query excludes');
+    assert.ok(src.includes("queryKey: ['projects', projectTab]"), 'per-tab cache');
+    const ds = read('src/services/dataService.js');
+    assert.ok(ds.includes('.neq(key, value)'), 'exclude supported by listEntities');
+  });
+
+  it('uses accessible tabs with icons and translated labels', () => {
+    const tabs = read('src/components/ui/tabs.jsx');
+    assert.ok(tabs.includes('@radix-ui/react-tabs'), 'real tab implementation');
+    assert.ok(tabs.includes('aria-selected') || tabs.includes('data-[state=active]'), 'active state exposed');
+    const src = read('src/pages/Projects.jsx');
+    assert.ok(src.includes('TabsList') && src.includes('TabsTrigger'), 'tabs used');
+    assert.ok(src.includes('activeProjects') && src.includes('archivedProjects'), 'translated labels');
+  });
+
+  it('restore preserves exact prior state with audit trail', () => {
+    const src = read('src/pages/ProjectDetail.jsx');
+    assert.ok(src.includes('status_before_archive'), 'prior status tracked');
+    assert.ok(src.includes('restoreMutation'), 'restore flow exists');
+    assert.ok(src.includes('PROJECT_RESTORE') && src.includes('PROJECT_ARCHIVE'), 'audit events');
+    assert.ok(src.includes('ArchiveRestore'), 'restore icon');
+    const mig = codeOf(read('supabase/migrations/20261009120000_project_archive_status.sql'));
+    assert.ok(mig.includes('add column if not exists status_before_archive'), 'additive column');
+    assert.ok(!/drop table|truncate|db reset/i.test(mig), 'no destruction');
+  });
+});
+
+describe('calendar upcoming cards', () => {
+  it('shows the color visually without the color-name text', () => {
+    const src = read('src/pages/CalendarPage.jsx');
+    assert.ok(!src.includes('ms-1 text-[10px]'), 'no visible color-name span on cards');
+    assert.ok(src.includes('role="img"'), 'indicator exposed to assistive tech');
+    assert.ok(src.includes('aria-label={`${t('), 'accessible color label present');
+    assert.ok(!/aria-label=\{`[^`]*#[0-9A-Fa-f]/.test(src), 'no raw HEX in labels');
+    assert.ok(src.includes('{getEventLabel(ev.type)}'), 'event type still visible');
+  });
+
+  it('effective color precedence untouched', () => {
+    const colors = read('src/lib/eventColors.js');
+    assert.ok(colors.includes('event_color'), 'event override first');
+    assert.ok(colors.includes('event_types') || colors.includes('eventType'), 'type color second');
+    assert.ok(colors.includes('getAppAccentColor'), 'accent fallback third');
+  });
+});
+
+describe('project visibility wording', () => {
+  it('create-project uses project terminology; documents keep theirs', () => {
+    const form = read('src/components/projects/ProjectFormDialog.jsx');
+    assert.ok(form.includes('projectAudienceTitle') && form.includes('projectAudienceHelp'), 'project keys passed');
+    const picker = read('src/components/documents/AudiencePicker.jsx');
+    assert.ok(picker.includes('titleKey') && picker.includes('helpKey'), 'contextual labels supported');
+    assert.ok(picker.includes("'Select audience'") || picker.includes('Select audience'), 'document default kept');
+    const docs = read('src/pages/Documents.jsx');
+    assert.ok(!docs.includes('projectAudienceTitle'), 'documents unchanged');
+    const i18n = read('src/i18n.js');
+    for (const key of ['projectAudienceTitle:', 'projectAudienceHelp:', 'archivedProjects:', 'restoreProject:', 'errorsProjectArchive:', 'errorsProjectRestore:', 'errorsVisibilitySave:']) {
       const count = (i18n.match(new RegExp(`^\\s*${key}`, 'gm')) || []).length;
       assert.equal(count, 4, `${key} in 4 languages`);
     }

@@ -12,7 +12,16 @@ import { cn } from '@/lib/utils';
 // selected-state indicator and count. Authorization behavior is unchanged
 // (checkbox-gated selection owned by the caller); only presentation is
 // shared across the upload dialog, access dialog and timeline entry form.
-export default function AudiencePicker({ members = [], selectedIds = [], onToggle, idPrefix = 'aud' }) {
+export default function AudiencePicker({
+  members = [],
+  selectedIds = [],
+  onToggle,
+  idPrefix = 'aud',
+  titleKey = 'selectAudience',
+  titleFallback = 'Select audience',
+  helpKey = 'audienceHelp',
+  helpFallback = 'Only the selected people can view this document.',
+}) {
   const { t } = useTranslation();
   const [query, setQuery] = React.useState('');
 
@@ -31,7 +40,7 @@ export default function AudiencePicker({ members = [], selectedIds = [], onToggl
       <div className="flex items-center justify-between gap-2">
         <Label className="flex items-center gap-1.5">
           <Users aria-hidden className="w-4 h-4 text-muted-foreground" />
-          {t('selectAudience', 'Select audience')}
+          {t(titleKey, titleFallback)}
         </Label>
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" role="status">
           <UserRoundCheck aria-hidden className="w-3.5 h-3.5" />
@@ -48,7 +57,7 @@ export default function AudiencePicker({ members = [], selectedIds = [], onToggl
           className="pl-9 h-8 text-xs"
         />
       </div>
-      <div className="max-h-40 space-y-1 overflow-y-auto pr-1" role="group" aria-label={t('selectAudience', 'Select audience')}>
+      <div className="max-h-40 space-y-1 overflow-y-auto pr-1" role="group" aria-label={t(titleKey, titleFallback)}>
         {filtered.map((member) => {
           const checked = selectedIds.includes(member.id);
           const checkboxId = `${idPrefix}-${member.id}`;
@@ -94,7 +103,7 @@ export default function AudiencePicker({ members = [], selectedIds = [], onToggl
           </p>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">{t('audienceHelp', 'Only the selected people can view this document.')}</p>
+      <p className="text-xs text-muted-foreground">{t(helpKey, helpFallback)}</p>
     </div>
   );
 }
