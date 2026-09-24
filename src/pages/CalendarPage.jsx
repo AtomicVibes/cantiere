@@ -23,10 +23,22 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
+import EventColorPicker from '@/components/events/EventColorPicker';
+import EventTypeDialog from '@/components/events/EventTypeDialog';
+import {
+  APP_ACCENT_FALLBACK,
+  getAppAccentColor,
+  getEffectiveEventColor,
+  getEventHexColorName,
+  isValidHexColor,
+} from '@/lib/eventColors';
 import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check, Bell } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
-const emptyEvent = { title: '', description: '', type: 'other', date: '', time: '', location: '', visibility: 'private', project_id: 'none', reminder_frequency: '24_hours', reminder_interval_value: '', reminder_interval_unit: 'hours' };
+const emptyEvent = { title: '', description: '', type: 'other', event_type_id: null, event_color: null, date: '', time: '', location: '', visibility: 'private', project_id: 'none', reminder_frequency: '24_hours', reminder_interval_value: '', reminder_interval_unit: 'hours' };
+
+// Value used by the type selector to open the "create new event type" dialog.
+const CREATE_NEW_TYPE_VALUE = '__create_new_type__';
 
 const toPgTime = (t) => {
   if (!t) return null;
@@ -65,7 +77,14 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [showTypeDialog, setShowTypeDialog] = useState(false);
+  const [accentColor, setAccentColor] = useState(APP_ACCENT_FALLBACK);
   const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    setAccentColor(getAppAccentColor());
+  }, []);
 
   const { data: events = [], isLoading, isError, error } = useQuery({
     queryKey: ['calendarEvents', currentUser?.id],
@@ -98,6 +117,64 @@ export default function CalendarPage() {
       return data ?? [];
     },
   });
+
+  // Database-backed custom event types. When the migration has not been
+  // applied yet (or RLS denies access), fall back to an empty list so legacy
+  // string types keep working.
+  const { data: eventTypes = [] } = useQuery({
+    queryKey: ['eventTypes'],
+    enabled: !!currentUser,
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase
+          .from('event_types')
+          .select('id, name, color')
+          .eq('archived', false)
+          .order('name', { ascending: true });
+        if (error) throw error;
+        return data ?? [];
+      } catch (err) {
+        console.warn('[CalendarPage] event_types unavailable, using legacy types:', err?.message);
+        return [];
+      }
+    },
+  });
+
+  const eventTypeById = React.useMemo(
+    () => new Map((eventTypes || []).map((et) => [et.id, et])),
+    [eventTypes]
+  );
+
+  // Combined selector options: legacy string types first (backward compat),
+  // then database-backed custom types not already covered by legacy values.
+  const typeOptions = React.useMemo(() => {
+    const legacyValues = new Set(EVENT_TYPES.map((o) => o.value));
+    const customs = (eventTypes || [])
+      .filter((et) => et && et.id && et.name && !legacyValues.has(et.name))
+      .map((et) => ({
+        key: `id:${et.id}`,
+        selectValue: `id:${et.id}`,
+        label: et.name,
+        hex: getEffectiveEventColor(
+          { type: et.name, event_color: null },
+          et,
+          accentColor
+        ),
+        custom: et,
+      }));
+    const legacy = EVENT_TYPES.map((o) => ({
+      key: `type:${o.value}`,
+      selectValue: `type:${o.value}`,
+      label: o.label,
+      hex: getEffectiveEventColor(
+        { type: o.value, event_color: null },
+        (eventTypes || []).find((et) => et.name === o.value) ?? null,
+        accentColor
+      ),
+      legacyValue: o.value,
+    }));
+    return [...legacy, ...customs];
+  }, [EVENT_TYPES, eventTypes, accentColor]);
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['teamMembersAudience'],
@@ -200,16 +277,39 @@ export default function CalendarPage() {
       if (error) throw error;
       if (!newEvent) throw new Error('Event was not returned after saving');
 
-      const reminderRow = {
-        reminder_frequency: row.reminder_frequency || '24_hours',
-        reminder_interval_value: row.reminder_interval_value,
-        reminder_interval_unit: row.reminder_interval_unit,
+      // Persist reminder fields plus the additive custom type/color columns.
+      // If the colors migration has not been applied yet, retry without the
+      // new columns so event creation keeps working on legacy databases.
+      const fullRow = {
+        reminder_frequency: payload.reminder_frequency || '24_hours',
+        reminder_interval_value: payload.reminder_interval_value || null,
+        reminder_interval_unit: payload.reminder_interval_unit || null,
+        event_type_id: payload.event_type_id || null,
+        event_color:
+          typeof payload.event_color === 'string' && isValidHexColor(payload.event_color)
+            ? payload.event_color.trim().toUpperCase()
+            : null,
       };
       const { error: reminderError } = await supabase
         .from('events')
-        .update(reminderRow)
+        .update(fullRow)
         .eq('id', newEvent.id);
-      if (reminderError) throw reminderError;
+      if (reminderError) {
+        const msg = reminderError.message || '';
+        if (/event_color|event_type_id|event_types/i.test(msg)) {
+          const { error: legacyError } = await supabase
+            .from('events')
+            .update({
+              reminder_frequency: fullRow.reminder_frequency,
+              reminder_interval_value: fullRow.reminder_interval_value,
+              reminder_interval_unit: fullRow.reminder_interval_unit,
+            })
+            .eq('id', newEvent.id);
+          if (legacyError) throw legacyError;
+        } else {
+          throw reminderError;
+        }
+      }
 
       return newEvent;
     },
@@ -217,10 +317,69 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ['calendarEvents', currentUser?.id] });
       setShowForm(false);
       setForm(emptyEvent);
+      setEditingEvent(null);
       setSelectedAudience([]);
     },
     onError: (err) => {
       console.error('[CalendarPage] create error:', err);
+      alert(`Could not save event: ${err.message}`);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, payload }) => {
+      const fullRow = {
+        title: payload.title?.trim(),
+        description: payload.description ? payload.description.trim().slice(0, 150) : null,
+        type: payload.type || 'other',
+        date: payload.date,
+        time: toPgTime(payload.time),
+        location: payload.location?.trim() || null,
+        visibility: payload.visibility || 'private',
+        project_id: payload.project_id && payload.project_id !== 'none' ? payload.project_id : null,
+        reminder_frequency: payload.reminder_frequency || '24_hours',
+        reminder_interval_value: payload.reminder_interval_value || null,
+        reminder_interval_unit: payload.reminder_interval_unit || null,
+        event_type_id: payload.event_type_id || null,
+        event_color:
+          typeof payload.event_color === 'string' && isValidHexColor(payload.event_color)
+            ? payload.event_color.trim().toUpperCase()
+            : null,
+      };
+      if (!fullRow.time) throw new Error('Time is required');
+      const { data, error } = await supabase
+        .from('events')
+        .update(fullRow)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) {
+        const msg = error.message || '';
+        if (/event_color|event_type_id|event_types/i.test(msg)) {
+          const { event_color: _c, event_type_id: _t, ...legacyRow } = fullRow;
+          const { data: legacyData, error: legacyError } = await supabase
+            .from('events')
+            .update(legacyRow)
+            .eq('id', id)
+            .select()
+            .single();
+          if (legacyError) throw legacyError;
+          return legacyData;
+        }
+        throw error;
+      }
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendarEvents', currentUser?.id] });
+      setShowForm(false);
+      setForm(emptyEvent);
+      setEditingEvent(null);
+      setSelectedAudience([]);
+      setSelectedEvent(null);
+    },
+    onError: (err) => {
+      console.error('[CalendarPage] update error:', err);
       alert(`Could not save event: ${err.message}`);
     },
   });
@@ -272,8 +431,105 @@ export default function CalendarPage() {
   );
 
   const getEventsForDay = (day) => events.filter(e => e.date && isSameDay(new Date(e.date), day));
-  const getEventColor = (type) => EVENT_TYPES.find(t => t.value === type)?.color || 'bg-slate-500';
-  const getEventLabel = (type) => EVENT_TYPES.find(t => t.value === type)?.label || type;
+
+  // Single authoritative color path: event_color -> event type color ->
+  // legacy built-in default -> current application accent.
+  const getEffectiveHex = React.useCallback(
+    (ev) => {
+      if (!ev) return accentColor;
+      const typeRecord = ev.event_type_id ? eventTypeById.get(ev.event_type_id) ?? null : null;
+      return getEffectiveEventColor(ev, typeRecord ?? ev.event_type ?? null, accentColor);
+    },
+    [eventTypeById, accentColor]
+  );
+
+  // Legacy adapter (kept for backward compatibility): resolves a bare legacy
+  // `type` string through the same effective-color path. Prefer getEffectiveHex
+  // for full event objects so stored overrides and type defaults apply.
+  const getEventColor = (type) =>
+    getEffectiveEventColor({ type, event_color: null }, null, accentColor);
+
+  const getEventLabel = (type) => {
+    const custom = (eventTypes || []).find((et) => et.name === type);
+    if (custom) return custom.name;
+    return EVENT_TYPES.find((o) => o.value === type)?.label || type;
+  };
+
+  const getEventColorName = (ev) => getEventHexColorName(getEffectiveHex(ev), t);
+
+  // Select value for the type control: custom types by id, legacy by name.
+  const formTypeSelectValue = form.event_type_id
+    ? `id:${form.event_type_id}`
+    : `type:${form.type || 'other'}`;
+
+  // Changing the Event Type must NOT erase an intentional event-specific
+  // color override: only `event_type_id`/`type` change here.
+  const handleTypeSelect = (v) => {
+    if (v === CREATE_NEW_TYPE_VALUE) {
+      setShowTypeDialog(true);
+      return;
+    }
+    if (typeof v === 'string' && v.startsWith('id:')) {
+      const id = v.slice(3);
+      const found = eventTypeById.get(id);
+      if (found) {
+        setForm((f) => ({ ...f, type: found.name, event_type_id: found.id }));
+        return;
+      }
+    }
+    if (typeof v === 'string' && v.startsWith('type:')) {
+      const legacyValue = v.slice(5);
+      const backfilled = (eventTypes || []).find((et) => et.name === legacyValue);
+      setForm((f) => ({
+        ...f,
+        type: legacyValue,
+        event_type_id: backfilled ? backfilled.id : null,
+      }));
+      return;
+    }
+    setForm((f) => ({ ...f, type: v }));
+  };
+
+  const handleNewTypeCreated = (newType) => {
+    if (!newType) return;
+    queryClient.invalidateQueries({ queryKey: ['eventTypes'] });
+    // Select the freshly created type; its stored color becomes the default.
+    // A missing event_color means the effective color resolves to it.
+    setForm((f) => ({ ...f, type: newType.name, event_type_id: newType.id, event_color: null }));
+  };
+
+  const openCreateForm = (dateStr) => {
+    setEditingEvent(null);
+    setForm({ ...emptyEvent, date: dateStr || '' });
+    setSelectedAudience([]);
+    setShowForm(true);
+  };
+
+  const openEditForm = (ev) => {
+    if (!ev) return;
+    setEditingEvent(ev);
+    setForm({
+      ...emptyEvent,
+      title: ev.title || '',
+      description: ev.description || '',
+      type: ev.type || 'other',
+      event_type_id: ev.event_type_id || null,
+      event_color:
+        typeof ev.event_color === 'string' && isValidHexColor(ev.event_color)
+          ? ev.event_color.trim().toUpperCase()
+          : null,
+      date: ev.date || '',
+      time: fromPgTime(ev.time),
+      location: ev.location || '',
+      visibility: ev.visibility || 'private',
+      project_id: ev.project_id || 'none',
+      reminder_frequency: ev.reminder_frequency || '24_hours',
+      reminder_interval_value: ev.reminder_interval_value ?? '',
+      reminder_interval_unit: ev.reminder_interval_unit || 'hours',
+    });
+    setSelectedAudience([]);
+    setShowForm(true);
+  };
 
   const panelEvents = React.useMemo(() => {
     const today = startOfDay(new Date());
@@ -304,6 +560,7 @@ export default function CalendarPage() {
 
   const handleDayClick = (day) => {
     setSelectedDate(day);
+    setEditingEvent(null);
     setForm({ ...emptyEvent, date: format(day, 'yyyy-MM-dd') });
   };
 
@@ -311,7 +568,11 @@ export default function CalendarPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await createMutation.mutateAsync(form);
+      if (editingEvent?.id) {
+        await updateMutation.mutateAsync({ id: editingEvent.id, payload: form });
+      } else {
+        await createMutation.mutateAsync(form);
+      }
     } finally {
       setSaving(false);
     }
@@ -336,7 +597,7 @@ export default function CalendarPage() {
               <ChevronRight className="w-5 h-5" />
             </Button>
           </div>
-          <Button onClick={() => { setForm({ ...emptyEvent, date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '' }); setSelectedAudience([]); setShowForm(true); }} className="gap-2 w-full md:w-auto">
+          <Button onClick={() => openCreateForm(selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '')} className="gap-2 w-full md:w-auto">
             <Plus className="w-4 h-4" /> {t('addEvent') || 'Add Event'}
           </Button>
         </div>
@@ -375,7 +636,11 @@ export default function CalendarPage() {
                     <div className="mt-1 space-y-1">
                       {dayEvents.slice(0, 3).map(ev => (
                         <div key={ev.id} className="flex items-center gap-1">
-                          <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", getEventColor(ev.type))} />
+                          <div
+                            aria-hidden
+                            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: getEffectiveHex(ev) }}
+                          />
                           <span className="text-xs truncate">{ev.title}</span>
                         </div>
                       ))}
@@ -414,7 +679,7 @@ export default function CalendarPage() {
                   size="sm"
                   variant="ghost"
                   className="h-7 px-2 text-xs text-primary hover:bg-primary/10"
-                  onClick={() => { setForm({ ...emptyEvent, date: format(selectedDate, 'yyyy-MM-dd') }); setSelectedAudience([]); setShowForm(true); }}
+                  onClick={() => openCreateForm(format(selectedDate, 'yyyy-MM-dd'))}
                 >
                   <Plus className="w-3 h-3 mr-1" /> {t('addEvent') || 'Add Event'}
                 </Button>
@@ -457,7 +722,11 @@ export default function CalendarPage() {
 
                     <div className="flex items-start justify-between gap-2 pr-6">
                       <div className="flex items-center gap-2 min-w-0">
-                        <div className={cn("w-2 h-2 rounded-full flex-shrink-0", getEventColor(ev.type))} />
+                        <div
+                          aria-hidden
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: getEffectiveHex(ev) }}
+                        />
                         <h4 className="font-medium text-sm text-foreground truncate group-hover:text-foreground">{ev.title}</h4>
                       </div>
                     </div>
@@ -496,6 +765,9 @@ export default function CalendarPage() {
                       <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
                         {getEventLabel(ev.type)}
                       </span>
+                      <span className="ms-1 text-[10px] text-muted-foreground">
+                        {getEventColorName(ev)}
+                      </span>
                       {ev.reminder_display && ev.reminder_frequency !== 'disabled' && (
                         <span
                           title={ev.reminder_display}
@@ -515,10 +787,10 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* Add Event Dialog */}
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      {/* Add/Edit Event Dialog */}
+      <Dialog open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setEditingEvent(null); }}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-heading">{t('newEvent') || 'New Event'}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-heading">{editingEvent ? (t('editEvent') || 'Edit Event') : (t('newEvent') || 'New Event')}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
             <div><Label>{t('title') || 'Title'} *</Label><Input value={form.title} onChange={e => setForm({...form, title: e.target.value})} required /></div>
             
@@ -533,18 +805,70 @@ export default function CalendarPage() {
               <span className="text-xs text-muted-foreground">{form.description.length}/150</span>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Label>{t('type') || 'Type'}</Label>
+                <Label>{t('eventColors.eventType', 'Event Type')}</Label>
                 <div className="flex items-center gap-2">
-                  <Select value={form.type} onValueChange={v => setForm({...form, type: v})}>
+                  <Select value={formTypeSelectValue} onValueChange={handleTypeSelect}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{EVENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                    <SelectContent>
+                      {typeOptions.map((o) => (
+                        <SelectItem key={o.key} value={o.selectValue}>
+                          <span className="flex items-center gap-2">
+                            <span
+                              aria-hidden
+                              className="w-2.5 h-2.5 rounded-full inline-block flex-shrink-0"
+                              style={{ backgroundColor: o.hex }}
+                            />
+                            {o.label}
+                          </span>
+                        </SelectItem>
+                      ))}
+                      <SelectItem value={CREATE_NEW_TYPE_VALUE}>
+                        + {t('eventColors.createNewEventType', 'Create new event type')}
+                      </SelectItem>
+                    </SelectContent>
                   </Select>
-                  <span aria-hidden className={`w-5 h-5 rounded-full flex-shrink-0 border border-border ${getEventColor(form.type)}`} title={getEventColor(form.type)} />
+                  <span
+                    aria-hidden
+                    className="w-5 h-5 rounded-full flex-shrink-0 border border-border"
+                    style={{
+                      backgroundColor: getEffectiveEventColor(
+                        { type: form.type, event_color: form.event_color },
+                        form.event_type_id ? eventTypeById.get(form.event_type_id) ?? null : (eventTypes || []).find((et) => et.name === form.type) ?? null,
+                        accentColor
+                      ),
+                    }}
+                  />
                 </div>
               </div>
               <div><Label>{t('date') || 'Date'} *</Label><DateInput value={form.date} onChange={e => setForm({...form, date: e.target.value})} required /></div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t('eventColors.eventColor', 'Event color')}</Label>
+              <EventColorPicker
+                id="event-form-color"
+                value={form.event_color}
+                onChange={(hex) => setForm((f) => ({ ...f, event_color: hex }))}
+                accentColor={accentColor}
+              />
+              {form.event_color && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-primary"
+                  onClick={() => setForm((f) => ({ ...f, event_color: null }))}
+                >
+                  {t('eventColors.useTypeDefault', 'Use type default')}
+                </Button>
+              )}
+              {!form.event_color && (
+                <p className="text-xs text-muted-foreground">
+                  {t('eventColors.usingTypeDefault', 'Using the event type default color.')}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -711,7 +1035,11 @@ export default function CalendarPage() {
             <DialogHeader className="p-6 pb-2">
               <DialogTitle className="font-heading flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className={cn("w-3 h-3 rounded-full flex-shrink-0", getEventColor(selectedEvent.type))} />
+                  <div
+                    aria-hidden
+                    className="w-3 h-3 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: selectedEvent ? getEffectiveHex(selectedEvent) : accentColor }}
+                  />
                   <span className="truncate">{selectedEvent.title}</span>
                 </div>
               </DialogTitle>
@@ -721,7 +1049,15 @@ export default function CalendarPage() {
               {/* Badges Row */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
+                  <span
+                    aria-hidden
+                    className="w-2 h-2 rounded-full inline-block"
+                    style={{ backgroundColor: getEffectiveHex(selectedEvent) }}
+                  />
                   {getEventLabel(selectedEvent.type)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {getEventColorName(selectedEvent)}
                 </span>
                 
                 {selectedEvent.visibility === 'public' && (
@@ -804,6 +1140,19 @@ export default function CalendarPage() {
 
               <div className="flex flex-col-reverse sm:flex-row gap-2">
                 {isOwner && (
+                  <Button
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => {
+                      const ev = selectedEvent;
+                      setSelectedEvent(null);
+                      openEditForm(ev);
+                    }}
+                  >
+                    {t('edit') || 'Edit'}
+                  </Button>
+                )}
+                {isOwner && (
                   <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" className="gap-2">
@@ -842,6 +1191,14 @@ export default function CalendarPage() {
           </DialogContent>
         )}
       </Dialog>
+
+      {/* Create custom event type */}
+      <EventTypeDialog
+        open={showTypeDialog}
+        onOpenChange={setShowTypeDialog}
+        onCreated={handleNewTypeCreated}
+        accentColor={accentColor}
+      />
     </div>
   );
 }
