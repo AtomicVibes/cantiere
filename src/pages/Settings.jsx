@@ -12,6 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import TopBar from '@/components/layout/TopBar';
+import Logo from '@/components/Logo';
+import { APP_NAME, APP_VERSION_LABEL } from '@/lib/appInfo';
+import { getUserFriendlyMessage, logAppError } from '@/lib/userErrors';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -29,6 +32,9 @@ export default function Settings() {
   const [retention, setRetention] = useState(7);
   const [saving, setSaving] = useState(false);
   const [pushState, setPushState] = useState({ loading: false, enabled: null });
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [smsLoaded, setSmsLoaded] = useState(false);
+  const [smsSaving, setSmsSaving] = useState(false);
 
   const applyTheme = (theme) => {
     const root = document.documentElement;
@@ -64,13 +70,27 @@ export default function Settings() {
     let active = true;
     supabase
       .from('profiles')
-      .select('notification_retention_days')
+      .select('notification_retention_days, sms_notifications_enabled')
       .eq('id', user.id)
       .maybeSingle()
-      .then(({ data }) => {
-        if (active && data?.notification_retention_days) {
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          logAppError('Settings', error, { operation: 'load-preferences' });
+          return;
+        }
+        if (data?.notification_retention_days) {
           setRetention(data.notification_retention_days);
         }
+        // Absent column (migration not applied) reads as undefined: keep the
+        // safe default (false) and let the toggle save create it on write.
+        if (typeof data?.sms_notifications_enabled === 'boolean') {
+          setSmsEnabled(data.sms_notifications_enabled);
+        }
+        setSmsLoaded(true);
+      })
+      .catch((err) => {
+        if (active) logAppError('Settings', err, { operation: 'load-preferences' });
       });
     return () => { active = false; };
   }, [user?.id]);
@@ -159,6 +179,29 @@ export default function Settings() {
     }
   };
 
+  // SMS opt-in saves instantly with its own loading guard: duplicate toggles
+  // are ignored while a save is in flight, and the UI reverts on failure.
+  // Enabling never sends an SMS; it only makes future reminders eligible.
+  const handleSmsToggle = async (next) => {
+    if (smsSaving || !user?.id) return;
+    const previous = smsEnabled;
+    setSmsEnabled(next);
+    setSmsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ id: user.id, sms_notifications_enabled: next }, { onConflict: 'id' });
+      if (error) throw error;
+      toast.success(t('smsSettingsUpdated', 'SMS notification settings updated.'));
+    } catch (err) {
+      setSmsEnabled(previous);
+      logAppError('Settings', err, { operation: 'save-sms-preference', value: next });
+      toast.error(getUserFriendlyMessage(err, t, 'errors.saveSmsSettings'));
+    } finally {
+      setSmsSaving(false);
+    }
+  };
+
   const handleEnablePush = async () => {
     if (pushState.enabled) return;
     setPushState((s) => ({ ...s, loading: true }));
@@ -243,6 +286,22 @@ export default function Settings() {
                 onCheckedChange={v => setPreferences({...preferences, email_notifications: v})}
               />
             </div>
+            <div className="flex items-center justify-between gap-4 py-2">
+              <div>
+                <p className="font-medium" id="sms-notifications-label">{t('smsNotifications', 'SMS Notifications')}</p>
+                <p className="text-sm text-muted-foreground" id="sms-notifications-desc">{t('smsNotificationsDesc', 'Receive supported notifications by SMS.')}</p>
+              </div>
+              <Switch
+                checked={smsEnabled}
+                disabled={smsSaving || !smsLoaded}
+                onCheckedChange={handleSmsToggle}
+                aria-labelledby="sms-notifications-label"
+                aria-describedby="sms-notifications-desc"
+              />
+            </div>
+            <span className="sr-only" role="status" aria-live="polite">
+              {smsSaving ? t('saving') : ''}
+            </span>
             <div className="flex items-center justify-between py-2">
               <div>
                 <p className="font-medium">Push Notifications</p>
@@ -271,6 +330,25 @@ export default function Settings() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="bg-card rounded-xl border border-border p-6 space-y-3">
+            <h3 className="font-heading font-semibold">{t('aboutTitle', `About ${APP_NAME}`)}</h3>
+            <div className="flex items-center gap-3">
+              <Logo size={36} className="text-primary shrink-0" />
+              <div className="min-w-0">
+                <p className="font-semibold">
+                  {APP_NAME} {APP_VERSION_LABEL} — {t('aboutBetaBadge', 'Beta')}
+                </p>
+                <p>
+                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
+                    {t('aboutBetaTag', 'Beta / Experimental')}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">{t('aboutP1')}</p>
+            <p className="text-sm text-muted-foreground">{t('aboutP2')}</p>
           </div>
         </div>
 
