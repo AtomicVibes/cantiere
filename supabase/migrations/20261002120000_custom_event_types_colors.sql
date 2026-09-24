@@ -87,15 +87,20 @@ create policy "event_types_owner_select" on public.event_types
   using (created_by = auth.uid());
 
 drop policy if exists "event_types_team_select" on public.event_types;
+-- Team visibility mirrors the project_members model used across the app
+-- (project_members.profile_id <-> auth.uid(); NO projects.owner_id column
+-- exists): a member may read event types created by users who share at
+-- least one project with them.
 create policy "event_types_team_select" on public.event_types
   for select to authenticated
   using (
     created_by = auth.uid()
     or exists (
-      select 1 from public.project_members pm
-      join public.projects p on p.id = pm.project_id
-      where p.owner_id = public.event_types.created_by
-        and pm.profile_id = auth.uid()
+      select 1 from public.project_members pm_me
+      join public.project_members pm_owner
+        on pm_owner.project_id = pm_me.project_id
+      where pm_me.profile_id = auth.uid()
+        and pm_owner.profile_id = public.event_types.created_by
     )
   );
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '@/services/supabase';
 import TopBar from '@/components/layout/TopBar';
 import EmptyState from '@/components/shared/EmptyState';
@@ -22,6 +23,8 @@ import { toast } from 'sonner';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { getFeatureForAction } from '@/lib/auditFeatureMapping';
 import { exportAuditLogsToExcel } from '@/lib/exportAuditLogs';
+import { resolveAuditLogIds, hasAuditLogTargets } from '@/lib/auditAdmin';
+import { getUserFriendlyMessage, logAppError } from '@/lib/userErrors';
 
 const PAGE_SIZE = 25;
 
@@ -45,6 +48,7 @@ function FeatureCell({ actionType }) {
 }
 
 export default function Logs() {
+  const { t } = useTranslation();
   const [logs, setLogs] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -80,8 +84,12 @@ export default function Logs() {
       if (!error && data) {
         setLogs(data);
         if (count !== null) setTotalCount(count);
+      } else if (error) {
+        logAppError('AuditLogs', error, { operation: 'fetch', page, view });
       }
-    } catch { } finally {
+    } catch (err) {
+      logAppError('AuditLogs', err, { operation: 'fetch', page, view });
+    } finally {
       setLoading(false);
     }
   }, [page, view]);
@@ -180,22 +188,26 @@ export default function Logs() {
   const executeDelete = async () => {
     setMutating(true);
     try {
-      let query = supabase.from('audit_logs').delete();
-      let count = 0;
-      if (deleteTarget.mode === 'selected') {
-        query = query.in('id', [...selectedIds]);
-        count = selectedIds.size;
-      } else if (deleteTarget.mode === 'single') {
-        query = query.eq('id', deleteTarget.id);
-        count = 1;
+      // Always resolve explicit record IDs first: a DELETE without a filter
+      // is rejected by Supabase ("DELETE requires a WHERE clause") and an
+      // unrestricted delete must never happen from the UI.
+      const ids = resolveAuditLogIds(deleteTarget?.mode, {
+        selectedIds,
+        visibleLogs,
+        id: deleteTarget?.id,
+      });
+      if (!hasAuditLogTargets(ids)) {
+        toast.error(t('auditLogs.nothingSelected', 'Please select at least one log.'));
+        return;
       }
-      const { error } = await query;
+      const { error } = await supabase.from('audit_logs').delete().in('id', ids);
       if (error) throw error;
-      toast.success(`Deleted ${count} audit log${count !== 1 ? 's' : ''}`);
+      toast.success(t('auditLogs.deleted', '{{count}} audit logs deleted successfully.', { count: ids.length }));
       setSelectedIds(new Set());
       fetchLogs();
     } catch (err) {
-      toast.error(err.message || 'Failed to delete');
+      logAppError('AuditLogs', err, { operation: 'delete', mode: deleteTarget?.mode });
+      toast.error(getUserFriendlyMessage(err, t, 'errors.deleteAuditLogs'));
     } finally {
       setMutating(false);
       setConfirmDeleteOpen(false);
@@ -214,17 +226,25 @@ export default function Logs() {
   const executeRestore = async (ids) => {
     setMutating(true);
     try {
-      const idsArr = Array.isArray(ids) ? ids : [ids];
+      const idsArr = resolveAuditLogIds(Array.isArray(ids) ? 'all' : 'single', {
+        visibleLogs: ids,
+        id: ids,
+      });
+      if (!hasAuditLogTargets(idsArr)) {
+        toast.error(t('auditLogs.nothingSelected', 'Please select at least one log.'));
+        return;
+      }
       const { error } = await supabase
         .from('audit_logs')
         .update({ archived: false })
         .in('id', idsArr);
       if (error) throw error;
-      toast.success(`Restored ${idsArr.length} audit log${idsArr.length !== 1 ? 's' : ''}`);
+      toast.success(t('auditLogs.restored', '{{count}} audit logs restored.', { count: idsArr.length }));
       setSelectedIds(new Set());
       fetchLogs();
     } catch (err) {
-      toast.error(err.message || 'Failed to restore');
+      logAppError('AuditLogs', err, { operation: 'restore' });
+      toast.error(getUserFriendlyMessage(err, t, 'errors.restoreAuditLogs'));
     } finally {
       setMutating(false);
     }
@@ -233,17 +253,25 @@ export default function Logs() {
   const executeArchive = async (ids) => {
     setMutating(true);
     try {
-      const idsArr = Array.isArray(ids) ? ids : [ids];
+      const idsArr = resolveAuditLogIds(Array.isArray(ids) ? 'all' : 'single', {
+        visibleLogs: ids,
+        id: ids,
+      });
+      if (!hasAuditLogTargets(idsArr)) {
+        toast.error(t('auditLogs.nothingSelected', 'Please select at least one log.'));
+        return;
+      }
       const { error } = await supabase
         .from('audit_logs')
         .update({ archived: true })
         .in('id', idsArr);
       if (error) throw error;
-      toast.success(`Archived ${idsArr.length} audit log${idsArr.length !== 1 ? 's' : ''}`);
+      toast.success(t('auditLogs.archived', '{{count}} audit logs archived.', { count: idsArr.length }));
       setSelectedIds(new Set());
       fetchLogs();
     } catch (err) {
-      toast.error(err.message || 'Failed to archive');
+      logAppError('AuditLogs', err, { operation: 'archive' });
+      toast.error(getUserFriendlyMessage(err, t, 'errors.archiveAuditLogs'));
     } finally {
       setMutating(false);
     }
@@ -278,9 +306,10 @@ export default function Logs() {
       };
 
       await exportAuditLogsToExcel(allLogs, resolve);
-      toast.success(`Exported ${allLogs.length} audit log${allLogs.length !== 1 ? 's' : ''}`);
+      toast.success(t('auditLogs.exported', '{{count}} audit logs exported.', { count: allLogs.length }));
     } catch (err) {
-      toast.error(err.message || 'Failed to export');
+      logAppError('AuditLogs', err, { operation: 'export' });
+      toast.error(getUserFriendlyMessage(err, t, 'errors.loadAuditLogs'));
     } finally {
       setExporting(false);
     }
@@ -566,20 +595,30 @@ export default function Logs() {
       <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Permanent Deletion</AlertDialogTitle>
+            <AlertDialogTitle>{t('auditLogs.confirmDeleteTitle', 'Confirm Permanent Deletion')}</AlertDialogTitle>
             <AlertDialogDescription>
-              This action is permanent and will delete everything permanently. Do you still wish to proceed?
+              {t(
+                'auditLogs.confirmDeleteDesc',
+                'This will permanently delete {{count}} audit log(s). This action cannot be undone. Do you still wish to proceed?',
+                {
+                  count: resolveAuditLogIds(deleteTarget?.mode, {
+                    selectedIds,
+                    visibleLogs,
+                    id: deleteTarget?.id,
+                  }).length,
+                }
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={mutating}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={mutating}>{t('cancel', 'Cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={executeDelete}
               disabled={mutating}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {mutating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Confirm Delete
+              {t('delete', 'Confirm Delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

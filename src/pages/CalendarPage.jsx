@@ -30,6 +30,7 @@ import {
   APP_ACCENT_FALLBACK,
   getAppAccentColor,
   getEffectiveEventColor,
+  getEventCardStyle,
   getEventHexColorName,
   isValidHexColor,
 } from '@/lib/eventColors';
@@ -37,6 +38,10 @@ import {
   coerceReminderFormOnFrequencyChange,
   normalizeEventReminder,
 } from '@/lib/eventReminders';
+import {
+  getUserFriendlyMessage,
+  logAppError,
+} from '@/lib/userErrors';
 import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check, Bell } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
@@ -123,12 +128,14 @@ export default function CalendarPage() {
     },
   });
 
-  // Database-backed custom event types. When the migration has not been
-  // applied yet (or RLS denies access), fall back to an empty list so legacy
-  // string types keep working.
-  const { data: eventTypes = [] } = useQuery({
+  // Database-backed custom event types. A genuinely missing backend table
+  // (migration not applied / schema cache stale) is a backend failure, not
+  // "zero types": it shows a friendly notice while legacy string types keep
+  // working. An expected empty table simply yields no custom options.
+  const { data: eventTypes = [], error: eventTypesError } = useQuery({
     queryKey: ['eventTypes'],
     enabled: !!currentUser,
+    retry: false,
     queryFn: async () => {
       try {
         const { data, error } = await supabase
@@ -139,11 +146,13 @@ export default function CalendarPage() {
         if (error) throw error;
         return data ?? [];
       } catch (err) {
-        console.warn('[CalendarPage] event_types unavailable, using legacy types:', err?.message);
-        return [];
+        logAppError('CalendarPage', err, { operation: 'fetch-event-types' });
+        throw err;
       }
     },
   });
+
+  const eventTypesUnavailable = !!eventTypesError;
 
   const eventTypeById = React.useMemo(
     () => new Map((eventTypes || []).map((et) => [et.id, et])),
@@ -330,8 +339,8 @@ export default function CalendarPage() {
       setSelectedAudience([]);
     },
     onError: (err) => {
-      console.error('[CalendarPage] create error:', err);
-      alert(`Could not save event: ${err.message}`);
+      logAppError('CalendarPage', err, { operation: 'create-event' });
+      alert(getUserFriendlyMessage(err, t, 'errors.saveEvent'));
     },
   });
 
@@ -390,8 +399,8 @@ export default function CalendarPage() {
       setSelectedEvent(null);
     },
     onError: (err) => {
-      console.error('[CalendarPage] update error:', err);
-      alert(`Could not save event: ${err.message}`);
+      logAppError('CalendarPage', err, { operation: 'update-event' });
+      alert(getUserFriendlyMessage(err, t, 'errors.saveEvent'));
     },
   });
 
@@ -406,8 +415,8 @@ export default function CalendarPage() {
       setSelectedEvent(null);
     },
     onError: (err) => {
-      console.error('[CalendarPage] delete error:', err);
-      alert(`Could not delete event: ${err.message}`);
+      logAppError('CalendarPage', err, { operation: 'delete-event' });
+      alert(getUserFriendlyMessage(err, t, 'errors.deleteEvent'));
     },
   });
 
@@ -427,8 +436,8 @@ export default function CalendarPage() {
       setSelectedEvent(null);
     },
     onError: (err) => {
-      console.error('[CalendarPage] archive error:', err);
-      alert(`Could not update archive status: ${err.message}`);
+      logAppError('CalendarPage', err, { operation: 'archive-event' });
+      alert(getUserFriendlyMessage(err, t, 'errors.archiveEvent'));
     },
   });
 
@@ -645,16 +654,24 @@ export default function CalendarPage() {
                       {format(day, 'd')}
                     </span>
                     <div className="mt-1 space-y-1">
-                      {dayEvents.slice(0, 3).map(ev => (
-                        <div key={ev.id} className="flex items-center gap-1">
+                      {dayEvents.slice(0, 3).map(ev => {
+                        const blockHex = getEffectiveHex(ev);
+                        const blockStyle = getEventCardStyle(blockHex, 'block');
+                        return (
                           <div
-                            aria-hidden
-                            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: getEffectiveHex(ev) }}
-                          />
-                          <span className="text-xs truncate">{ev.title}</span>
-                        </div>
-                      ))}
+                            key={ev.id}
+                            className="flex items-center gap-1 rounded px-1 py-0.5 border"
+                            style={{ backgroundColor: blockStyle.background, borderColor: blockStyle.border }}
+                          >
+                            <div
+                              aria-hidden
+                              className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: blockStyle.solid }}
+                            />
+                            <span className="text-xs truncate text-foreground">{ev.title}</span>
+                          </div>
+                        );
+                      })}
                       {dayEvents.length > 3 && (
                         <span className="text-xs text-muted-foreground">+{dayEvents.length - 3} {t('more') || 'more'}</span>
                       )}
@@ -719,24 +736,32 @@ export default function CalendarPage() {
                 const isPublic = ev.visibility === 'public';
                 const isSelectedAudience = ev.visibility === 'selected';
                 const isPrivate = !isPublic && !isSelectedAudience;
+                const cardHex = getEffectiveHex(ev);
+                const cardStyle = getEventCardStyle(cardHex, 'card');
                 return (
                   <button
                     key={ev.id}
                     onClick={() => setSelectedEvent(ev)}
-                    className="w-full text-left p-3 rounded-lg border border-border bg-card hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-primary space-y-2 group relative"
+                    className="w-full text-left p-3 rounded-lg border bg-card hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-primary space-y-2 group relative"
+                    style={{ backgroundColor: cardStyle.background, borderColor: cardStyle.border }}
                   >
+                    <span
+                      aria-hidden
+                      className="absolute inset-y-0 left-0 w-1.5 rounded-l-lg"
+                      style={{ backgroundColor: cardStyle.solid }}
+                    />
                     <div className="absolute top-3 right-3">
                       {isPublic && <Globe className="w-4 h-4 text-primary" title={t('public') || 'Public'} />}
                       {isSelectedAudience && <Users className="w-4 h-4 text-muted-foreground" title={t('selectedAudience') || 'Selected Audience'} />}
                       {isPrivate && <Lock className="w-4 h-4 text-muted-foreground" title={t('private') || 'Private'} />}
                     </div>
 
-                    <div className="flex items-start justify-between gap-2 pr-6">
+                    <div className="flex items-start justify-between gap-2 pr-6 ps-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <div
                           aria-hidden
                           className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: getEffectiveHex(ev) }}
+                          style={{ backgroundColor: cardStyle.solid }}
                         />
                         <h4 className="font-medium text-sm text-foreground truncate group-hover:text-foreground">{ev.title}</h4>
                       </div>
@@ -773,7 +798,10 @@ export default function CalendarPage() {
                     )}
 
                     <div className="pt-1">
-                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
+                      <span
+                        className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider"
+                        style={{ backgroundColor: cardStyle.solid, color: cardStyle.text }}
+                      >
                         {getEventLabel(ev.type)}
                       </span>
                       <span className="ms-1 text-[10px] text-muted-foreground">
@@ -852,6 +880,11 @@ export default function CalendarPage() {
                     }}
                   />
                 </div>
+                {eventTypesUnavailable && (
+                  <p role="status" className="text-xs text-muted-foreground mt-1">
+                    {t('errors.eventTypesUnavailable', 'Event types are temporarily unavailable. Existing event types can still be used.')}
+                  </p>
+                )}
               </div>
               <div><Label>{t('date') || 'Date'} *</Label><DatePicker value={form.date} onChange={v => setForm({ ...form, date: v })} /></div>
             </div>
@@ -1040,30 +1073,42 @@ export default function CalendarPage() {
 
       {/* Event Detail Dialog */}
       <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-        {selectedEvent && (
-          <DialogContent className="max-w-md max-h-[90vh] flex flex-col p-0">
+        {selectedEvent && (() => {
+          const detailHex = getEffectiveHex(selectedEvent);
+          const detailStyle = getEventCardStyle(detailHex, 'card');
+          return (
+          <DialogContent
+            className="max-w-md max-h-[90vh] flex flex-col p-0 overflow-hidden border"
+            style={{ borderColor: detailStyle.border }}
+          >
+            <div
+              aria-hidden
+              className="h-2 w-full flex-shrink-0"
+              style={{ backgroundColor: detailStyle.solid }}
+            />
             <DialogHeader className="p-6 pb-2">
               <DialogTitle className="font-heading flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
                   <div
                     aria-hidden
                     className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: selectedEvent ? getEffectiveHex(selectedEvent) : accentColor }}
+                    style={{ backgroundColor: detailStyle.solid }}
                   />
                   <span className="truncate">{selectedEvent.title}</span>
                 </div>
               </DialogTitle>
             </DialogHeader>
 
-            <div className="p-6 pt-2 space-y-4 text-sm overflow-y-auto flex-1">
+            <div
+              className="p-6 pt-2 space-y-4 text-sm overflow-y-auto flex-1 rounded-b-lg"
+              style={{ backgroundColor: detailStyle.background }}
+            >
               {/* Badges Row */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
-                  <span
-                    aria-hidden
-                    className="w-2 h-2 rounded-full inline-block"
-                    style={{ backgroundColor: getEffectiveHex(selectedEvent) }}
-                  />
+                <span
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-semibold uppercase tracking-wider"
+                  style={{ backgroundColor: detailStyle.solid, color: detailStyle.text }}
+                >
                   {getEventLabel(selectedEvent.type)}
                 </span>
                 <span className="text-xs text-muted-foreground">
@@ -1199,7 +1244,8 @@ export default function CalendarPage() {
               </div>
             </DialogFooter>
           </DialogContent>
-        )}
+          );
+        })()}
       </Dialog>
 
       {/* Create custom event type */}

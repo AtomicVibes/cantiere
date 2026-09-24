@@ -204,3 +204,84 @@ export function getEventHexColorName(hex, t) {
   }
   return translate('eventColors.customColor', 'Custom color');
 }
+
+// ---------------------------------------------------------------------------
+// Full-card color treatment with contrast handling.
+//
+// getEventCardStyle(hex) returns a tinted { background, border, text } triple
+// so the selected color visually defines the ENTIRE event card while text
+// stays readable: dark colors get a light foreground, light colors get a
+// dark foreground (WCAG relative-luminance based, never one hardcoded
+// foreground for every color).
+// ---------------------------------------------------------------------------
+
+export function hexToRgb(hex) {
+  if (typeof hex !== 'string') return null;
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return null;
+  return {
+    r: parseInt(m[1].slice(0, 2), 16),
+    g: parseInt(m[1].slice(2, 4), 16),
+    b: parseInt(m[1].slice(4, 6), 16),
+  };
+}
+
+export function relativeLuminance(hex) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const channel = (v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b);
+}
+
+// Readable foreground for text placed on the given background color.
+export function getReadableTextColor(backgroundHex) {
+  const lum = relativeLuminance(backgroundHex);
+  if (lum === null) return '#1F2937';
+  return lum > 0.35 ? '#1F2937' : '#FFFFFF';
+}
+
+// Appends an alpha channel to a #RRGGBB hex (#RRGGBBAA). Returns null when invalid.
+export function withAlpha(hex, alpha) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const a = Math.round(Math.min(1, Math.max(0, Number(alpha) || 0)) * 255)
+    .toString(16)
+    .padStart(2, '0')
+    .toUpperCase();
+  return `${hex.trim().toUpperCase()}${a}`;
+}
+
+// Full-card style for an effective event color hex. `emphasis` controls the
+// tint strength: 'card' (default soft tint for list/detail cards) or 'block'
+// (stronger tint for compact calendar blocks).
+//
+// The triple works as follows:
+//   background: soft tint of the event color (whole card surface)
+//   border:     stronger event-color border (whole card outline)
+//   solid:      the event color itself (badges, indicators, header bands)
+//   onSolid:    luminance-computed readable text for content placed ON the
+//               solid color (light foreground on dark colors, dark
+//               foreground on light colors - never one hardcoded value).
+// Body copy keeps the theme foreground so it stays readable in both
+// light and dark modes.
+export function getEventCardStyle(hex, emphasis = 'card') {
+  const normalized =
+    typeof hex === 'string' && HEX_RE.test(hex.trim()) ? hex.trim().toUpperCase() : null;
+  if (!normalized) return { background: undefined, border: undefined, text: undefined, solid: undefined };
+  const alpha = emphasis === 'block' ? 0.3 : 0.14;
+  return {
+    background: withAlpha(normalized, alpha),
+    border: withAlpha(normalized, 0.55),
+    text: getReadableTextColor(normalized),
+    solid: normalized,
+  };
+}
+
+// Foreground specifically for text rendered directly ON the solid color
+// (badges, dots with labels). Delegates to the luminance check.
+export function getSolidBadgeTextColor(hex) {
+  return getReadableTextColor(hex);
+}
