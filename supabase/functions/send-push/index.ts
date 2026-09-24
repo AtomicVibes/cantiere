@@ -103,11 +103,42 @@ serve(async (req) => {
   }
 
   if (!subscriptions || subscriptions.length === 0) {
+    try {
+      await supabase.from('push_delivery_log').insert({
+        notification_id: notification_id || null,
+        user_id: receiverId,
+        subscription_id: null,
+        status: 'skipped',
+        error: 'No subscriptions found',
+      });
+    } catch (logErr) {
+      console.error('Failed to write push delivery log:', logErr);
+    }
     return respond({ sent: 0, message: 'No subscriptions found' });
   }
 
   const displayBody = bodyText && bodyText.length > 200 ? bodyText.substring(0, 200) + '…' : (bodyText || '');
   const payload = JSON.stringify({ title, body: displayBody, type, url, notification_id });
+
+  async function writeLog(entry: {
+    notification_id?: string | null;
+    user_id: string;
+    subscription_id?: string | null;
+    status: 'sent' | 'failed' | 'skipped' | 'stale_removed';
+    error?: string | null;
+  }) {
+    try {
+      await supabase.from('push_delivery_log').insert({
+        notification_id: entry.notification_id ?? (notification_id || null),
+        user_id: entry.user_id,
+        subscription_id: entry.subscription_id ?? null,
+        status: entry.status,
+        error: entry.error ?? null,
+      });
+    } catch (logErr) {
+      console.error('Failed to write push delivery log:', logErr);
+    }
+  }
 
   const results = await Promise.allSettled(
     subscriptions.map(async (sub) => {
@@ -116,10 +147,15 @@ serve(async (req) => {
           vapidDetails: vapidOptions,
           signal: AbortSignal.timeout(10_000),
         });
+        await writeLog({ user_id: receiverId, subscription_id: sub.id, status: 'sent' });
         return { ok: true, statusCode: res.statusCode };
       } catch (err) {
         if (err instanceof WebPushError) {
-          if (err.statusCode === 410 || err.statusCode === 404) {
+          // Permanent: endpoint gone (404/410) or push-service auth failure
+          // (400/401/403, e.g. after a VAPID rotation). The subscription can
+          // never succeed again, so remove it; the browser re-subscribes on
+          // next enable and the fresh endpoint is persisted + claimed.
+          if ([400, 401, 403, 404, 410].includes(err.statusCode)) {
             const { error: deleteError } = await supabase
               .from('push_subscriptions')
               .delete()
@@ -127,9 +163,29 @@ serve(async (req) => {
             if (deleteError) {
               console.error('Failed to delete stale subscription', sub.id, deleteError);
             } else {
-              console.log('Deleted stale subscription', sub.id);
+              console.log('Deleted stale subscription', sub.id, `status ${err.statusCode}`);
             }
+            await writeLog({
+              user_id: receiverId,
+              subscription_id: sub.id,
+              status: 'stale_removed',
+              error: safeMessage(err),
+            });
+          } else {
+            await writeLog({
+              user_id: receiverId,
+              subscription_id: sub.id,
+              status: 'failed',
+              error: safeMessage(err),
+            });
           }
+        } else {
+          await writeLog({
+            user_id: receiverId,
+            subscription_id: sub.id,
+            status: 'failed',
+            error: safeMessage(err),
+          });
         }
         throw err;
       }

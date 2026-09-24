@@ -9,6 +9,6 @@
   "vars": {
     "VITE_SUPABASE_URL": "https://hrtncnmmykzckemykesu.supabase.co",
     "VITE_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhydG5jbm1teWt6Y2tlbXlrZXN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2ODUzOTAsImV4cCI6MjA5NjI2MTM5MH0.Yhp0U6axL_uW6_cy2r1EdV-Gq7mLjyJaPJWy4cBGrzk",
-    "VITE_VAPID_PUBLIC_KEY": "BI2IpPMmOWwihtC8OAeSvXqKuApewLTdDW6HozdYwgG3oHJvNeOWeiF8KRR2mEWPi8OVpjyaagI86gZpURSb_vg"
+    "VITE_VAPID_PUBLIC_KEY": "BAOn9rdGcG2rxo2kIyEY5HifxzndSnwtQf4n3oam2fztPST-fbeidJPu8vP1K0FSVY1W5Zq0VlxwTv2lJPl95UQ"
   }
 }

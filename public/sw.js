@@ -1,5 +1,5 @@
-const PRECACHE = 'geometra-v2';
-const APPLICATION_SERVER_KEY = 'BI2IpPMmOWwihtC8OAeSvXqKuApewLTdDW6HozdYwgG3oHJvNeOWeiF8KRR2mEWPi8OVpjyaagI86gZpURSb_vg';
+const PRECACHE = 'geometra-v3';
+const APPLICATION_SERVER_KEY = 'BAOn9rdGcG2rxo2kIyEY5HifxzndSnwtQf4n3oam2fztPST-fbeidJPu8vP1K0FSVY1W5Zq0VlxwTv2lJPl95UQ';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

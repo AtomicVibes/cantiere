@@ -31,7 +31,7 @@ export default function Settings() {
   });
   const [retention, setRetention] = useState(7);
   const [saving, setSaving] = useState(false);
-  const [pushState, setPushState] = useState({ loading: false, enabled: null });
+  const [pushState, setPushState] = useState({ loading: false, enabled: null, permission: null, supported: null });
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsLoaded, setSmsLoaded] = useState(false);
   const [smsSaving, setSmsSaving] = useState(false);
@@ -96,13 +96,27 @@ export default function Settings() {
   }, [user?.id]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator && 'PushManager' in window) {
-      navigator.serviceWorker.ready.then((reg) =>
-        reg.pushManager.getSubscription().then((sub) =>
-          setPushState((s) => ({ ...s, enabled: !!sub }))
-        )
-      ).catch(() => {});
+    const supported = 'serviceWorker' in navigator && 'PushManager' in window;
+    if (!supported) {
+      setPushState((s) => ({ ...s, supported: false, enabled: false }));
+      return;
     }
+    setPushState((s) => ({
+      ...s,
+      supported: true,
+      permission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+    }));
+    navigator.serviceWorker.ready.then((reg) =>
+      reg.pushManager.getSubscription().then((sub) =>
+        setPushState((s) => ({
+          ...s,
+          enabled: !!sub,
+          permission: typeof Notification !== 'undefined' ? Notification.permission : s.permission,
+        }))
+      )
+    ).catch((err) => {
+      logAppError('Settings', err, { operation: 'push-status' });
+    });
   }, []);
 
   useEffect(() => {
@@ -203,17 +217,49 @@ export default function Settings() {
   };
 
   const handleEnablePush = async () => {
-    if (pushState.enabled) return;
+    if (pushState.enabled || pushState.loading) return;
     setPushState((s) => ({ ...s, loading: true }));
-    const sub = await subscribeUserToPush(user?.id);
-    if (sub) {
-      setPushState({ loading: false, enabled: true });
-      toast.success('Push notifications enabled');
-    } else {
-      setPushState((s) => ({ ...s, loading: false }));
-      toast.error('Could not enable push notifications. Check browser permissions.');
+    try {
+      const sub = await subscribeUserToPush(user?.id);
+      if (sub) {
+        setPushState((s) => ({
+          ...s,
+          loading: false,
+          enabled: true,
+          permission: typeof Notification !== 'undefined' ? Notification.permission : s.permission,
+        }));
+        toast.success(t('pushEnabled', 'Push notifications are enabled.'));
+      } else {
+        setPushState((s) => ({
+          ...s,
+          loading: false,
+          permission: typeof Notification !== 'undefined' ? Notification.permission : s.permission,
+        }));
+        toast.error(t('pushEnableFailed', 'Unable to enable push notifications.'));
+      }
+    } catch (err) {
+      logAppError('Settings', err, { operation: 'enable-push' });
+      setPushState((s) => ({
+        ...s,
+        loading: false,
+        permission: typeof Notification !== 'undefined' ? Notification.permission : s.permission,
+      }));
+      toast.error(getUserFriendlyMessage(err, t, 'errors.pushEnable'));
     }
   };
+
+  // Application preference (subscribed) and browser permission (granted)
+  // are separate: push counts as working only when both hold.
+  const pushSupported = pushState.supported !== false;
+  const pushBlocked = pushSupported && pushState.permission === 'denied';
+  const pushWorking = pushSupported && !pushBlocked && !!pushState.enabled;
+  const pushStatusKey = !pushSupported
+    ? 'pushUnsupported'
+    : pushBlocked
+      ? 'pushBlocked'
+      : pushState.enabled
+        ? 'pushEnabledState'
+        : 'pushDisabledState';
 
   return (
     <div>
@@ -302,18 +348,31 @@ export default function Settings() {
             <span className="sr-only" role="status" aria-live="polite">
               {smsSaving ? t('saving') : ''}
             </span>
-            <div className="flex items-center justify-between py-2">
-              <div>
-                <p className="font-medium">Push Notifications</p>
-                <p className="text-sm text-muted-foreground">Receive alerts via browser push</p>
+            <div className="flex items-center justify-between gap-4 py-2">
+              <div className="min-w-0">
+                <p className="font-medium">{t('pushNotifications', 'Push Notifications')}</p>
+                <p className="text-sm text-muted-foreground">{t('pushNotificationsDesc', 'Receive alerts via browser push.')}</p>
+                <p className="text-xs text-muted-foreground mt-1" role="status">
+                  {t(pushStatusKey, pushStatusKey)}
+                </p>
+                {pushBlocked && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {t('pushBlockedHelp', 'Notifications are blocked by your browser. Allow them in your browser site settings, then try again.')}
+                  </p>
+                )}
               </div>
               <Button
                 size="sm"
-                variant={pushState.enabled ? 'outline' : 'default'}
+                variant={pushWorking ? 'outline' : 'default'}
                 onClick={handleEnablePush}
-                disabled={pushState.loading || pushState.enabled}
+                disabled={pushState.loading || pushWorking || !pushSupported || pushBlocked}
+                aria-live="polite"
               >
-                {pushState.loading ? 'Enabling...' : pushState.enabled ? 'Enabled' : 'Enable'}
+                {pushState.loading
+                  ? t('pushEnabling', 'Enabling…')
+                  : pushWorking
+                    ? t('pushEnabledCta', 'Enabled')
+                    : t('pushEnableCta', 'Enable')}
               </Button>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2">

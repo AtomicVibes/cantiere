@@ -62,6 +62,16 @@ export async function subscribeUserToPush(userId) {
     return null;
   }
 
+  // Browser permission and the app subscription are separate concepts.
+  // subscribe() itself triggers the browser prompt when called from a user
+  // gesture; a hard denial must surface so Settings can show "blocked".
+  if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+    const err = new Error('Push: browser notification permission is denied');
+    err.name = 'PermissionDeniedError';
+    console.error(err.message);
+    throw err;
+  }
+
   const applicationServerKey = urlB64ToUint8Array(VITE_VAPID_PUBLIC_KEY);
   if (!applicationServerKey) {
     console.error('Push: cannot subscribe — invalid VAPID public key');
@@ -128,6 +138,29 @@ export async function subscribeUserToPush(userId) {
   return sub;
 }
 
+// Reclaims the current browser endpoint for the signed-in user WITHOUT
+// subscribing or prompting: safe to run on every login/session change.
+// Prevents cross-account leakage on shared browsers (User A logs out,
+// User B logs in -> the endpoint moves to B, so A stops receiving pushes
+// here and B receives their own). Idempotent server-side.
+export async function claimCurrentSubscription() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 0;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub?.endpoint) return 0;
+    const { error } = await supabase
+      .rpc('claim_push_subscription', { p_endpoint: sub.endpoint });
+    if (error) {
+      console.error('Push: claim failed', error);
+      return 0;
+    }
+    return 1;
+  } catch (err) {
+    console.error('Push: claim failed', err);
+    return 0;
+  }
+}
 // Bridges service-worker pushsubscriptionchange renewals (public/sw.js
 // posts PUSH_SUBSCRIPTION_CHANGED) into push_subscriptions for the user
 // that is currently signed in, and reclaims the endpoint for that user.

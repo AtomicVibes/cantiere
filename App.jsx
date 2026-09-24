@@ -19,7 +19,7 @@ import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import AuthCallback from '@/pages/AuthCallback';
 
-import { startPushSubscriptionRelay, subscribeUserToPush } from '@/hooks/usePushNotification';
+import { startPushSubscriptionRelay, subscribeUserToPush, claimCurrentSubscription } from '@/hooks/usePushNotification';
 
 // App pages
 import Dashboard from '@/pages/Dashboard';
@@ -140,6 +140,10 @@ function PushSubscriptionRelay() {
 // the signed-in user whenever the browser permission is already "granted" and
 // there is no active subscription. It NEVER calls requestPermission(), so it can
 // never show a prompt on load.
+//
+// It also reclaims the current browser endpoint for the signed-in user on every
+// login/account switch (prompt-free): on a shared browser this moves the device
+// endpoint to the current user so the previous user stops receiving pushes here.
 function PushSubscriptionManager() {
   const { user } = useAuth();
   const inFlightRef = React.useRef(false);
@@ -147,6 +151,10 @@ function PushSubscriptionManager() {
   React.useEffect(() => {
     if (!user?.id) return;
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    // Claim first: no permission involved, fixes cross-account leakage.
+    claimCurrentSubscription().catch((err) => {
+      console.error('Push: auto-claim failed', err);
+    });
     if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') return;
     if (inFlightRef.current) return;
 
