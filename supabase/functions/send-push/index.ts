@@ -102,6 +102,34 @@ serve(async (req) => {
     return respond({ error: 'Failed to fetch subscriptions' }, 500);
   }
 
+  // Account-level push preference: OFF means no push delivery for this user.
+  // In-app notifications and SMS are unaffected (handled elsewhere).
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('push_notifications_enabled')
+    .eq('id', receiverId)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error('Error fetching push preference:', profileError);
+    return respond({ error: 'Failed to fetch push preference' }, 500);
+  }
+
+  if (profile && profile.push_notifications_enabled === false) {
+    try {
+      await supabase.from('push_delivery_log').insert({
+        notification_id: notification_id || null,
+        user_id: receiverId,
+        subscription_id: null,
+        status: 'skipped',
+        error: 'Push disabled by user preference',
+      });
+    } catch (logErr) {
+      console.error('Failed to write push delivery log:', logErr);
+    }
+    return respond({ sent: 0, message: 'Push disabled by user preference' });
+  }
+
   if (!subscriptions || subscriptions.length === 0) {
     try {
       await supabase.from('push_delivery_log').insert({

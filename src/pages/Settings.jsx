@@ -35,6 +35,8 @@ export default function Settings() {
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [smsLoaded, setSmsLoaded] = useState(false);
   const [smsSaving, setSmsSaving] = useState(false);
+  const [pushPrefEnabled, setPushPrefEnabled] = useState(true);
+  const [pushPrefSaving, setPushPrefSaving] = useState(false);
 
   const applyTheme = (theme) => {
     const root = document.documentElement;
@@ -70,7 +72,7 @@ export default function Settings() {
     let active = true;
     supabase
       .from('profiles')
-      .select('notification_retention_days, sms_notifications_enabled')
+      .select('notification_retention_days, sms_notifications_enabled, push_notifications_enabled')
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -86,6 +88,11 @@ export default function Settings() {
         // safe default (false) and let the toggle save create it on write.
         if (typeof data?.sms_notifications_enabled === 'boolean') {
           setSmsEnabled(data.sms_notifications_enabled);
+        }
+        // Push preference defaults to true (preserves current delivery); an
+        // absent column keeps the default until the toggle saves it.
+        if (typeof data?.push_notifications_enabled === 'boolean') {
+          setPushPrefEnabled(data.push_notifications_enabled);
         }
         setSmsLoaded(true);
       })
@@ -213,6 +220,29 @@ export default function Settings() {
       toast.error(getUserFriendlyMessage(err, t, 'errors.saveSmsSettings'));
     } finally {
       setSmsSaving(false);
+    }
+  };
+
+  // Account-level push preference: instant save with its own loading guard.
+  // OFF stops server-side push delivery; in-app notifications and SMS are
+  // unaffected. Browser permission/subscription is tracked separately below.
+  const handlePushPrefToggle = async (next) => {
+    if (pushPrefSaving || !user?.id) return;
+    const previous = pushPrefEnabled;
+    setPushPrefEnabled(next);
+    setPushPrefSaving(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ id: user.id, push_notifications_enabled: next }, { onConflict: 'id' });
+      if (error) throw error;
+      toast.success(t('pushPrefUpdated', 'Push notification preference updated.'));
+    } catch (err) {
+      setPushPrefEnabled(previous);
+      logAppError('Settings', err, { operation: 'save-push-preference', value: next });
+      toast.error(getUserFriendlyMessage(err, t, 'errors.savePushPreference'));
+    } finally {
+      setPushPrefSaving(false);
     }
   };
 
@@ -348,6 +378,19 @@ export default function Settings() {
             <span className="sr-only" role="status" aria-live="polite">
               {smsSaving ? t('saving') : ''}
             </span>
+            <div className="flex items-center justify-between gap-4 py-2">
+              <div>
+                <p className="font-medium" id="push-pref-label">{t('pushPreference', 'Push delivery')}</p>
+                <p className="text-sm text-muted-foreground" id="push-pref-desc">{t('pushPreferenceDesc', 'Allow Geometra to send you browser push notifications.')}</p>
+              </div>
+              <Switch
+                checked={pushPrefEnabled}
+                disabled={pushPrefSaving || !smsLoaded}
+                onCheckedChange={handlePushPrefToggle}
+                aria-labelledby="push-pref-label"
+                aria-describedby="push-pref-desc"
+              />
+            </div>
             <div className="flex items-center justify-between gap-4 py-2">
               <div className="min-w-0">
                 <p className="font-medium">{t('pushNotifications', 'Push Notifications')}</p>
