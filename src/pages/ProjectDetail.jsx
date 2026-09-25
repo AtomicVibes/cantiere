@@ -29,6 +29,7 @@ import { supabase } from '@/services/supabase';
 import { getEntity, createEntity, updateEntity } from '@/services/dataService';
 import { getEffectiveProgress, isManualProgressMode, computeAutoProgress, getPriorityProgressClass } from '@/lib/projectProgress';
 import { logAppError } from '@/lib/userErrors';
+import { logAction } from '@/lib/activityTracking';
 import { VisibilityBadge } from '@/components/documents/VisibilitySelect';
 import { uploadDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
 import { useAuth } from '@/lib/AuthContext';
@@ -79,6 +80,10 @@ export default function ProjectDetail() {
     queryKey: ['project', id],
     queryFn: () => getEntity('projects', id),
   });
+
+  React.useEffect(() => {
+    if (project?.id) logAction('project_view', { entityType: 'project', entityId: project.id });
+  }, [project?.id]);
 
   const { data: timeline = [] } = useQuery({
     queryKey: ['timeline', id],

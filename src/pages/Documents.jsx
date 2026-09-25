@@ -31,6 +31,7 @@ import { handleMutationError } from '@/lib/rbac';
 import { supabase } from '@/services/supabase';
 import DocumentPreview from '@/components/shared/DocumentPreview';
 import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
+import { logAction } from '@/lib/activityTracking';
 import { parseGoogleDocLink, getGoogleDocMime } from '@/lib/googleLinks';
 import { uploadDocumentFile } from '@/services/documentUploadService';
 
@@ -232,6 +233,7 @@ export default function Documents() {
       link.href = data.signedUrl;
       link.download = fileName;
       link.rel = 'noopener';
+      logAction('document_view', { entityType: 'document', entityId: doc.id });
       document.body.appendChild(link);
       link.click();
       link.remove();

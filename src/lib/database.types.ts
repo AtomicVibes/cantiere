@@ -1301,6 +1301,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_action_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          metadata: Json
+          session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          metadata?: Json
+          session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          metadata?: Json
+          session_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      agent_sessions: {
+        Row: {
+          id: string
+          is_active: boolean
+          last_heartbeat_at: string
+          login_at: string
+          logout_at: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          is_active?: boolean
+          last_heartbeat_at?: string
+          login_at?: string
+          logout_at?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          is_active?: boolean
+          last_heartbeat_at?: string
+          login_at?: string
+          logout_at?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action_type: string

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import DatePicker from '@/components/ui/DatePicker';
+import { logAction } from '@/lib/activityTracking';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -214,6 +215,7 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
         { invoice: previewInvoice, items: rows, logoUrl: seller.logo_url || '/Invoice_logo.png' },
         `fattura-${form.invoice_number || 'bozza'}.pdf`
       );
+      logAction('invoice_check', { entityType: 'invoice', entityId: invoice?.id || null });
     } catch (err) {
       console.error('[invoice] PDF preview failed', err);
       toast.error(t('previewFailed'));

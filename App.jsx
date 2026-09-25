@@ -20,6 +20,7 @@ import ResetPassword from '@/pages/ResetPassword';
 import AuthCallback from '@/pages/AuthCallback';
 
 import { startPushSubscriptionRelay, subscribeUserToPush, claimCurrentSubscription } from '@/hooks/usePushNotification';
+import { startSession, endSession, startHeartbeat } from '@/lib/activityTracking';
 
 // App pages
 import Dashboard from '@/pages/Dashboard';
@@ -110,6 +111,7 @@ function App() {
         </Router>
         <PushSubscriptionRelay />
         <PushSubscriptionManager />
+        <ActivityTracker />
         <Toaster />
         <SonnerToaster position="top-right" richColors />
       </AuthProvider>
@@ -166,6 +168,32 @@ function PushSubscriptionManager() {
       .finally(() => {
         inFlightRef.current = false;
       });
+  }, [user?.id]);
+
+  return null;
+}
+
+// Agent activity tracking: opens a session row on sign-in, closes it on
+// sign-out, and runs the 30s visibility-gated heartbeat. Null component:
+// no UI, no layout impact, all writes fire-and-forget and RLS-scoped.
+function ActivityTracker() {
+  const { user } = useAuth();
+
+  React.useEffect(() => {
+    if (!user?.id) {
+      endSession(true);
+      return;
+    }
+    let cancelled = false;
+    let stop = null;
+    startSession(user.id).then(() => {
+      if (!cancelled) stop = startHeartbeat();
+    });
+    return () => {
+      cancelled = true;
+      if (typeof stop === 'function') stop();
+      endSession(true);
+    };
   }, [user?.id]);
 
   return null;
