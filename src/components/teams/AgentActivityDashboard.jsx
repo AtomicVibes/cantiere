@@ -2,7 +2,8 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Activity, Award, ListChecks, X, ChevronLeft, ChevronRight,
+  Activity, Award, ListChecks, X, ChevronLeft, ChevronRight, ChevronDown,
+  Globe, Lock, Users,
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import StatCard from '@/components/dashboard/StatCard';
@@ -40,8 +41,101 @@ function actionLabel(action, t) {
     project_view: t('activityProjectView', 'Viewed project'),
     document_view: t('activityDocumentView', 'Opened document'),
     invoice_check: t('activityInvoiceCheck', 'Checked invoice'),
+    DOCUMENT_UPLOADED: t('activityDocumentUploaded', 'Uploaded document'),
+    DOCUMENT_UPDATED: t('activityDocumentUpdated', 'Updated document'),
+    DOCUMENT_DELETED: t('activityDocumentDeleted', 'Deleted document'),
+    SECTION_NAVIGATED: t('activitySectionOpened', 'Opened section'),
+    PROJECT_CREATED: t('activityProjectCreated', 'Created project'),
+    PROJECT_UPDATED: t('activityProjectUpdated', 'Updated project'),
+    INVOICE_CREATED: t('activityInvoiceCreated', 'Created invoice'),
+    INVOICE_UPDATED: t('activityInvoiceUpdated', 'Updated invoice'),
+    EVENT_CREATED: t('activityEventCreated', 'Created event'),
+    EVENT_UPDATED: t('activityEventUpdated', 'Updated event'),
+    BUDGET_CREATED: t('activityBudgetCreated', 'Created budget'),
+    BUDGET_UPDATED: t('activityBudgetUpdated', 'Updated budget'),
+    EXPENSE_CREATED: t('activityExpenseCreated', 'Created expense'),
+    EXPENSE_UPDATED: t('activityExpenseUpdated', 'Updated expense'),
   };
   return map[action] || action;
+}
+
+function formatBytes(bytes, t) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function VisibilityBadge({ value, t }) {
+  if (!value) return null;
+  const config = {
+    public: { icon: Globe, cls: 'text-primary', label: t('visibility.public', 'Public') },
+    private: { icon: Lock, cls: 'text-muted-foreground', label: t('visibility.private', 'Private') },
+    selected: { icon: Users, cls: 'text-accent-foreground', label: t('visibility.selected', 'Selected') },
+  }[String(value).toLowerCase()] || null;
+  if (!config) return null;
+  const Icon = config.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${config.cls}`}>
+      <Icon aria-hidden className="w-3.5 h-3.5" />
+      {config.label}
+    </span>
+  );
+}
+
+function FeedEntryDetails({ entry, t, resolveProjectName }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+  const rows = [];
+  if (metadata.section_name) {
+    rows.push([t('activityDetailSection', 'Section'), metadata.sub_tab ? `${metadata.section_name} > ${metadata.sub_tab}` : String(metadata.section_name)]);
+  }
+  if (metadata.file_name) {
+    const size = metadata.file_size_bytes != null ? ` (${formatBytes(metadata.file_size_bytes, t)})` : '';
+    const type = metadata.file_type ? ` · ${metadata.file_type}` : '';
+    rows.push([t('activityDetailFile', 'File'), `${metadata.file_name}${size}${type}`]);
+  }
+  if (metadata.budget) {
+    rows.push([t('budget', 'Budget'), String(metadata.budget)]);
+  }
+  if (metadata.project_id) {
+    rows.push([t('project', 'Project'), resolveProjectName(metadata.project_id)]);
+  }
+  if (metadata.vendor) rows.push([t('expenseVendor', 'Vendor'), String(metadata.vendor)]);
+  if (metadata.total != null) rows.push([t('amount', 'Amount'), String(metadata.total)]);
+  if (metadata.client_name) rows.push([t('client', 'Client'), String(metadata.client_name)]);
+  if (metadata.url) rows.push([t('activityDetailLink', 'Link'), String(metadata.url)]);
+  if (rows.length === 0) return null;
+  return (
+    <div className="mt-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="inline-flex items-center gap-1 text-xs text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+      >
+        <ChevronDown aria-hidden className={`w-3.5 h-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        {t('activityDetails', 'Details')}
+      </button>
+      {expanded && (
+        <dl className="mt-1.5 rounded-lg border border-border bg-muted/40 px-3 py-2 space-y-1">
+          {rows.map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-3 text-xs">
+              <dt className="text-muted-foreground shrink-0">{label}</dt>
+              <dd className="text-right text-foreground break-words min-w-0">{value}</dd>
+            </div>
+          ))}
+          {metadata.visibility && (
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <dt className="text-muted-foreground shrink-0">{t('visibility.label', 'Visibility')}</dt>
+              <dd><VisibilityBadge value={metadata.visibility} t={t} /></dd>
+            </div>
+          )}
+        </dl>
+      )}
+    </div>
+  );
 }
 
 export default function AgentActivityDashboard({ active }) {
@@ -144,6 +238,26 @@ export default function AgentActivityDashboard({ active }) {
     setFeedPage(0);
   };
 
+  const projectsQuery = useQuery({
+    queryKey: ['agent-activity-projects'],
+    enabled: active && !!selectedAgent,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('projects').select('id, name').limit(300);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const resolveProjectName = React.useCallback(
+    (projectId) => {
+      if (!projectId) return '—';
+      const found = (projectsQuery.data ?? []).find((p) => p.id === projectId);
+      return found?.name || String(projectId).slice(0, 8);
+    },
+    [projectsQuery.data]
+  );
+
   const isLoading = sessionsQuery.isLoading || profilesQuery.isLoading;
   const loadError = sessionsQuery.error || profilesQuery.error;
 
@@ -244,15 +358,23 @@ export default function AgentActivityDashboard({ active }) {
           ) : (
             <>
               <ul className="mt-4 space-y-3">
-                {(feedQuery.data ?? []).map((entry) => (
-                  <li key={entry.id} className="border-b border-border/50 pb-2.5">
-                    <p className="text-sm font-medium">{actionLabel(entry.action, t)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatDateTime(entry.created_at, t)}
-                      {entry.entity_type ? ` · ${entry.entity_type}` : ''}
-                    </p>
-                  </li>
-                ))}
+                {(feedQuery.data ?? []).map((entry) => {
+                  const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+                  const headline = metadata.file_name || metadata.section_name || null;
+                  return (
+                    <li key={entry.id} className="border-b border-border/50 pb-2.5">
+                      <p className="text-sm font-medium">
+                        {actionLabel(entry.action, t)}
+                        {headline ? `: ${headline}` : ''}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDateTime(entry.created_at, t)}
+                        {entry.entity_type ? ` · ${entry.entity_type}` : ''}
+                      </p>
+                      <FeedEntryDetails entry={entry} t={t} resolveProjectName={resolveProjectName} />
+                    </li>
+                  );
+                })}
               </ul>
               <div className="flex items-center justify-between mt-4">
                 <Button variant="outline" size="sm" disabled={feedPage === 0} onClick={() => setFeedPage((p) => Math.max(0, p - 1))}>

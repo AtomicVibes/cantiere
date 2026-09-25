@@ -6,6 +6,7 @@ import {
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { logAppError, getUserFriendlyMessage } from '@/lib/userErrors';
+import { logAction } from '@/lib/activityTracking';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -180,6 +181,11 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
         }
       }
       toast.success(t('save') || 'Save');
+      logAction(editing ? 'EXPENSE_UPDATED' : 'EXPENSE_CREATED', {
+        entityType: 'expense',
+        entityId: editing?.id || null,
+        metadata: { amount: payload.amount, currency: payload.currency, budget: payload.budget_id },
+      });
       setShowForm(false);
       onChanged();
     } catch (err) {

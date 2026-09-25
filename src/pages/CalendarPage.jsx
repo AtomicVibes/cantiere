@@ -42,6 +42,7 @@ import {
   getUserFriendlyMessage,
   logAppError,
 } from '@/lib/userErrors';
+import { logAction } from '@/lib/activityTracking';
 import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check, Bell } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
@@ -589,9 +590,21 @@ export default function CalendarPage() {
     setSaving(true);
     try {
       if (editingEvent?.id) {
-        await updateMutation.mutateAsync({ id: editingEvent.id, payload: form });
+        const updated = await updateMutation.mutateAsync({ id: editingEvent.id, payload: form });
+        logAction('EVENT_UPDATED', {
+          entityType: 'event',
+          entityId: editingEvent.id,
+          metadata: { visibility: form.visibility || null, type: form.type || null },
+        });
+        void updated;
       } else {
-        await createMutation.mutateAsync(form);
+        const created = await createMutation.mutateAsync(form);
+        logAction('EVENT_CREATED', {
+          entityType: 'event',
+          entityId: created?.id || null,
+          metadata: { visibility: form.visibility || null, type: form.type || null },
+        });
+        void created;
       }
     } finally {
       setSaving(false);

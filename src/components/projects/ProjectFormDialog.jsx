@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
+import { logAction } from '@/lib/activityTracking';
 import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
@@ -171,6 +172,15 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
       };
       const saved = await onSave(payload);
       const savedId = saved?.id || project?.id;
+      logAction(isEditing ? 'PROJECT_UPDATED' : 'PROJECT_CREATED', {
+        entityType: 'project',
+        entityId: savedId || null,
+        metadata: {
+          budget: payload.budget ?? null,
+          visibility: payload.visibility || null,
+          type: payload.type || null,
+        },
+      });
       // Sync the selected audience (replace set; clearing when the
       // visibility is no longer 'selected'). Isolated from the save above.
       if (savedId) {

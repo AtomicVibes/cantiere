@@ -114,6 +114,41 @@ export function stopHeartbeat() {
 }
 
 // Fire-and-forget action telemetry. Never throws, never blocks callers.
+// Fire-and-forget action telemetry. Never throws, never blocks callers.
+//
+// @typedef {Object} TelemetryMetadata
+// @property {string} [file_name]
+// @property {string} [file_type]
+// @property {number} [file_size_bytes]
+// @property {string} [visibility]
+// @property {string} [section_name]
+// @property {string} [sub_tab]
+// @property {string} [url]
+// @property {string} [project_id]
+// @property {string} [budget]
+// @property {string} [vendor]
+// @property {number} [total]
+// @property {string} [client_name]
+//
+// Only JSON-safe primitives survive sanitization (max 25 keys, strings
+// capped at 500 chars) so metadata always conforms to the jsonb column.
+const MAX_METADATA_KEYS = 25;
+const MAX_STRING_LENGTH = 500;
+
+export function sanitizeMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+  const clean = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (Object.keys(clean).length >= MAX_METADATA_KEYS) break;
+    if (typeof key !== 'string' || key.length === 0) continue;
+    if (typeof value === 'string') clean[key] = value.slice(0, MAX_STRING_LENGTH);
+    else if (typeof value === 'number' && Number.isFinite(value)) clean[key] = value;
+    else if (typeof value === 'boolean') clean[key] = value;
+    else if (value === null) clean[key] = null;
+  }
+  return clean;
+}
+
 export function logAction(action, options = {}) {
   if (!action || !trackedUserId) return;
   const payload = {
@@ -122,7 +157,7 @@ export function logAction(action, options = {}) {
     action: String(action).slice(0, 120),
     entity_type: options.entityType ? String(options.entityType).slice(0, 60) : null,
     entity_id: options.entityId || null,
-    metadata: options.metadata && typeof options.metadata === 'object' ? options.metadata : {},
+    metadata: sanitizeMetadata(options.metadata),
   };
   supabase
     .from('agent_action_logs')

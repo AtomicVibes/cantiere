@@ -4,6 +4,7 @@ import { Plus, Pencil, Archive, RotateCcw, Trash2, FolderKanban } from 'lucide-r
 import { supabase } from '@/services/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { logAppError, getUserFriendlyMessage } from '@/lib/userErrors';
+import { logAction } from '@/lib/activityTracking';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -143,6 +144,11 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
         }
       }
       toast.success(t('save') || 'Save');
+      logAction(editing ? 'BUDGET_UPDATED' : 'BUDGET_CREATED', {
+        entityType: 'budget',
+        entityId: savedId || null,
+        metadata: { total: payload.total_amount, currency: payload.currency },
+      });
       setShowForm(false);
       onChanged();
     } catch (err) {

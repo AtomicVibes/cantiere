@@ -291,6 +291,11 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
       }
 
       toast.success(invoice?.id ? t('invoiceSaved') : t('invoiceCreated'));
+      logAction(invoice?.id ? 'INVOICE_UPDATED' : 'INVOICE_CREATED', {
+        entityType: 'invoice',
+        entityId: invoiceId || null,
+        metadata: { total: totalsToSave.total, client_name: customerSnapshot?.display_name || null },
+      });
       onOpenChange(false);
       onSaved?.(saved);
     } catch (err) {

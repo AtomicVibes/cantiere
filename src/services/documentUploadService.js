@@ -1,4 +1,5 @@
 import { base44 } from '@/api/base44Client';
+import { logAction } from '@/lib/activityTracking';
 
 export const MAX_DOCUMENT_SIZE = 50 * 1024 * 1024;
 
@@ -64,6 +65,18 @@ export async function uploadDocumentFile({
     }
     throw error;
   }
+
+  logAction('DOCUMENT_UPLOADED', {
+    entityType: 'documents',
+    entityId: createdDocument?.id || null,
+    metadata: {
+      file_name: createdDocument?.name || file.name,
+      file_type: file?.type || createdDocument?.mime_type || null,
+      file_size_bytes: file?.size ?? createdDocument?.file_size ?? null,
+      visibility,
+      project_id: project_id || null,
+    },
+  });
 
   return createdDocument;
 }

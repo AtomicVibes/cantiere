@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "sonner"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useLocation } from 'react-router-dom';
 import PageNotFound from '@/lib/PageNotFound';
 import { useTranslation } from 'react-i18next';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
@@ -20,7 +20,7 @@ import ResetPassword from '@/pages/ResetPassword';
 import AuthCallback from '@/pages/AuthCallback';
 
 import { startPushSubscriptionRelay, subscribeUserToPush, claimCurrentSubscription } from '@/hooks/usePushNotification';
-import { startSession, endSession, startHeartbeat } from '@/lib/activityTracking';
+import { startSession, endSession, startHeartbeat, logAction } from '@/lib/activityTracking';
 
 // App pages
 import Dashboard from '@/pages/Dashboard';
@@ -65,6 +65,7 @@ const AuthenticatedApp = () => {
   }
 
   return (
+    <>
     <Routes>
       {/* Auth routes */}
       <Route path="/login" element={<Login />} />
@@ -98,6 +99,8 @@ const AuthenticatedApp = () => {
 
       <Route path="*" element={<PageNotFound />} />
     </Routes>
+    <RouteTracker />
+    </>
   );
 };
 
@@ -195,6 +198,51 @@ function ActivityTracker() {
       endSession(true);
     };
   }, [user?.id]);
+
+  return null;
+}
+
+// Section navigation telemetry: logs one fire-and-forget entry per route
+// transition (mount included). Null component: no UI, no layout impact,
+// never blocks route transitions.
+const SECTION_NAMES = {
+  '/': 'Dashboard',
+  '/dashboard': 'Dashboard',
+  '/projects': 'Projects',
+  '/teams': 'Teams',
+  '/clients': 'Clients',
+  '/notifications': 'Notifications',
+  '/finance': 'Finance',
+  '/calendar': 'Calendar',
+  '/reports': 'Reports',
+  '/documents': 'Documents',
+  '/settings': 'Settings',
+  '/logs': 'Logs',
+  '/requests': 'Requests',
+  '/messages': 'Messages',
+};
+
+function sectionForPath(pathname) {
+  if (SECTION_NAMES[pathname]) return SECTION_NAMES[pathname];
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length === 0) return 'Dashboard';
+  if (segments[0] === 'projects' && segments[1]) return 'Project Detail';
+  const fallback = segments[0].charAt(0).toUpperCase() + segments[0].slice(1);
+  return SECTION_NAMES[`/${segments[0]}`] || fallback;
+}
+
+function RouteTracker() {
+  const location = useLocation();
+
+  React.useEffect(() => {
+    if (location.pathname.startsWith('/login') || location.pathname.startsWith('/register')) return;
+    logAction('SECTION_NAVIGATED', {
+      metadata: {
+        section_name: sectionForPath(location.pathname),
+        url: location.pathname + location.search,
+      },
+    });
+  }, [location.pathname, location.search]);
 
   return null;
 }

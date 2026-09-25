@@ -188,6 +188,11 @@ export default function Documents() {
         return;
       }
       console.info('[Documents] update_document_access success', { documentId: data?.id, visibility: data?.visibility });
+      logAction('DOCUMENT_UPDATED', {
+        entityType: 'documents',
+        entityId: accessDocument.id,
+        metadata: { file_name: accessDocument.file_name || accessDocument.name || null, visibility: accessVisibility },
+      });
       setAccessDocument(null);
       queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
       toast.success('Document access updated.');
@@ -527,6 +532,14 @@ export default function Documents() {
         // then refetch once so the list stays in sync with the database.
         queryClient.setQueryData(['documents', currentUser?.id], (previous) =>
           (previous || []).filter(item => !deletedIds.includes(item.id)));
+        for (const deleted of results.filter(result => result.dbDeleted)) {
+          const document = documents.find(item => item.id === deleted.id);
+          logAction('DOCUMENT_DELETED', {
+            entityType: 'documents',
+            entityId: deleted.id,
+            metadata: { file_name: document?.file_name || document?.name || null },
+          });
+        }
         queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
         setSelectedIds(previous => {
           const remaining = new Set(previous);
