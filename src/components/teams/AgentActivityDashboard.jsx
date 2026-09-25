@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  formatDuration, rangeStart, summarizeAgents, getTimelineIcon,
+  formatDuration, rangeStart, summarizeAgents, getActivityIcon, getTimelineIcon,
 } from '@/lib/agentActivity';
 
 const PAGE_SIZE = 50;

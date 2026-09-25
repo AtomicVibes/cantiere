@@ -193,4 +193,16 @@ describe('sidebar section icons for timeline nodes', () => {
     const src = read('src/components/teams/AgentActivityDashboard.jsx');
     assert.ok(src.includes('getTimelineIcon(entry)'), 'node uses resolver');
   });
+
+  it('every helper the dashboard calls is imported (no unbound references)', () => {
+    const src = read('src/components/teams/AgentActivityDashboard.jsx');
+    for (const name of ['getTimelineIcon', 'getActivityIcon', 'formatDuration', 'summarizeAgents', 'rangeStart']) {
+      const used = new RegExp(`\\b${name}\\s*\\(`).test(src);
+      if (!used) continue;
+      assert.ok(
+        new RegExp(`import\\s*\\{[^}]*\\b${name}\\b`).test(src),
+        `${name} is used but not imported (ReferenceError)`
+      );
+    }
+  });
 });
