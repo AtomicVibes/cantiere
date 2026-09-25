@@ -7,7 +7,7 @@ import {
   LayoutDashboard, FolderKanban, Users, UserCircle,
   Bell, DollarSign, Calendar, BarChart3, FileText,
   Settings, ScrollText, ChevronLeft, ChevronRight, LogOut,
-  ClipboardList, MessageSquare, Activity
+  ClipboardList, MessageSquare
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/lib/AuthContext';
@@ -16,13 +16,12 @@ import { useUserRole } from '@/hooks/useUserRole';
 export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCollapsedProp }) {
   const { t } = useTranslation();
   const { isLoadingAuth } = useAuth();
-  const { isAdmin, isManager } = useUserRole();
+  const { isAdmin } = useUserRole();
 
   const allNavItems = [
     { label: t('dashboard'), icon: LayoutDashboard, path: '/' },
     { label: t('projects'), icon: FolderKanban, path: '/projects' },
     { label: t('teams'), icon: Users, path: '/teams', requires: true },
-    { label: t('activityDashboard', 'Agent Activity'), icon: Activity, path: '/activity', requiresManager: true },
     { label: t('clients'), icon: UserCircle, path: '/clients', requires: true },
     { label: 'Messages', icon: MessageSquare, path: '/messages' },
     { label: t('notifications'), icon: Bell, path: '/notifications' },
@@ -36,8 +35,8 @@ export default function Sidebar({ collapsed: collapsedProp, setCollapsed: setCol
   ];
 
   const navItems = isLoadingAuth
-    ? allNavItems.filter((item) => !item.requires && !item.requiresManager)
-    : allNavItems.filter((item) => (!item.requires || isAdmin) && (!item.requiresManager || isManager));
+    ? allNavItems.filter((item) => !item.requires)
+    : allNavItems.filter((item) => !item.requires || isAdmin);
 
   const [collapsedInternal, setCollapsedInternal] = useState(false);
   const collapsed = collapsedProp !== undefined ? collapsedProp : collapsedInternal;

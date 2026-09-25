@@ -3,7 +3,7 @@
 // Run with: node --test src/lib/agentActivityScreen.test.js
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -13,27 +13,19 @@ const read = (rel) => readFileSync(path.join(root, rel), 'utf8');
 const codeOf = (sql) => sql.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
 
 describe('standalone screen wiring', () => {
-  it('route, nav entry and page exist without touching existing screens', () => {
+  it('has no duplicate sidebar entry or route; Teams sub-tab is canonical', () => {
     const app = read('App.jsx');
-    assert.ok(app.includes("path=\"/activity\""), 'route registered');
-    assert.ok(app.includes("import AgentActivity from '@/pages/AgentActivity'"), 'page imported');
+    assert.ok(!app.includes('pages/AgentActivity'), 'no dead page import');
+    assert.ok(!app.includes('path="/activity"'), 'no dead route');
     assert.ok(app.includes('path="/teams"'), 'teams route kept');
     const nav = read('src/components/layout/Sidebar.jsx');
-    assert.ok(nav.includes("path: '/activity'"), 'nav entry added');
-    assert.ok(nav.includes('requiresManager'), 'manager-gated flag');
-    assert.ok(nav.includes('isManager'), 'manager check used');
-    assert.ok(nav.includes("path: '/teams'"), 'existing nav kept');
+    assert.ok(!nav.includes("path: '/activity'"), 'no sidebar duplicate');
+    assert.ok(!nav.includes('requiresManager'), 'no orphan gate flag');
+    assert.ok(nav.includes("path: '/teams'"), 'teams nav kept');
   });
 
-  it('page reuses the dashboard and gates non-managers', () => {
-    const page = read('src/pages/AgentActivity.jsx');
-    assert.ok(page.includes('AgentActivityDashboard'), 'reuses dashboard');
-    assert.ok(page.includes('isManager'), 'role gate');
-    assert.ok(page.includes('accessDenied') || page.includes('EmptyState'), 'denied state');
-    assert.ok(!page.includes('TeamMemberCard') && !page.includes('EditMemberDialog'), 'no member-logic duplication');
-  });
-
-  it('existing Teams sub-tab is preserved', () => {
+  it('page file is gone and the Teams sub-tab is preserved', () => {
+    assert.ok(!existsSync(path.join(root, 'src', 'pages', 'AgentActivity.jsx')), 'dead page removed');
     const teams = read('src/pages/Teams.jsx');
     assert.ok(teams.includes('AgentActivityDashboard'), 'sub-tab intact');
     assert.ok(teams.includes('TeamMemberCard'), 'member UI intact');
