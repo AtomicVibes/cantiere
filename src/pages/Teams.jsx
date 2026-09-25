@@ -17,7 +17,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, Users, LayoutGrid, List } from 'lucide-react';
+import { Plus, Search, Users, LayoutGrid, List, Activity } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useTeamFormFields } from '@/hooks/useFormSchema';
@@ -25,6 +25,8 @@ import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { inviteUserByEmail, deleteUser } from '@/services/inviteService';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import AgentActivityDashboard from '@/components/teams/AgentActivityDashboard';
 
 const emptyMember = { full_name: '', email: '', phone: '', job_title: '', department: '', status: 'active' };
 
@@ -46,6 +48,7 @@ export default function Teams() {
   const [friendlyError, setFriendlyError] = useState('');
   const [viewMode, setViewMode] = useState('grid');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [activeTab, setActiveTab] = useState('members');
   const queryClient = useQueryClient();
 
   const { members, isLoading } = useTeamMembers({ userRole: role, isSuperAdmin });
@@ -134,6 +137,18 @@ export default function Teams() {
     <div>
       <TopBar title={t('teams')} />
       <div className="p-6 space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList aria-label={t('teams')}>
+            <TabsTrigger value="members" className="gap-1.5">
+              <Users className="w-4 h-4" aria-hidden />
+              {t('teamMembers')}
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="gap-1.5">
+              <Activity className="w-4 h-4" aria-hidden />
+              {t('activityTracking', 'Activity Tracking')}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="members" className="space-y-6 mt-4">
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -175,6 +190,11 @@ export default function Teams() {
             ))}
           </div>
         )}
+          </TabsContent>
+          <TabsContent value="activity" className="mt-4">
+            <AgentActivityDashboard active={activeTab === 'activity'} />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); setFriendlyError(''); if (!v) setForm(emptyMember); }}>
