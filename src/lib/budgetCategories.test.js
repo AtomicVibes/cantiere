@@ -97,8 +97,7 @@ describe('localized labels without mojibake', () => {
   });
 });
 
-describe('custom subcategory data model', () => {
-  it('migration adds stable identity without touching RLS or history', () => {
+describe('custom subcategory data model', () => {  it('migration adds stable identity without touching RLS or history', () => {
     const sql = codeOf(read('supabase/migrations/20261012120000_budget_subcategory_library.sql'));
     assert.ok(sql.includes('add column if not exists subcategory_key'), 'key column');
     assert.ok(sql.includes('add column if not exists is_custom'), 'custom flag');
@@ -119,5 +118,24 @@ describe('custom subcategory data model', () => {
     assert.equal(DEFAULT_CURRENCY, 'EUR');
     const mig = codeOf(read('supabase/migrations/20261011120000_budget_currency_eur.sql'));
     assert.ok(mig.includes("set default 'EUR'"), 'DB default intact');
+  });
+});
+
+describe('accordion category grouping', () => {
+  it('groups children under parents in collapsible items, collapsed by default', () => {
+    const src = read('src/components/budget/CategoryManager.jsx');
+    assert.ok(src.includes('AccordionItem') && src.includes('AccordionTrigger') && src.includes('AccordionContent'), 'accordion parts');
+    assert.ok(src.includes('type="multiple"'), 'multi-expand allowed');
+    assert.ok(src.includes('useState([])') || src.includes('React.useState([])'), 'collapsed by default');
+    assert.ok(src.includes('childrenOf(cat.id)'), 'parent grouping preserved');
+    assert.ok(src.includes('stopPropagation') || src.includes('stop(e)'), 'row actions do not toggle');
+  });
+
+  it('CRUD, selection flows and schema stay intact', () => {
+    const src = read('src/components/budget/CategoryManager.jsx');
+    assert.ok(src.includes('openEdit') && src.includes('openCreate') && src.includes('handleArchive'), 'CRUD handlers kept');
+    assert.ok(src.includes("from('budget_categories')"), 'same table, no new tables');
+    const exp = read('src/components/budget/ExpenseManager.jsx');
+    assert.ok(exp.includes('SubcategorySelect'), 'expense form untouched by refactor');
   });
 });

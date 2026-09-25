@@ -13,6 +13,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '@/components/ui/badge';
 import EmptyState from '@/components/shared/EmptyState';
 import CategoryIconPicker from '@/components/budget/CategoryIconPicker';
+import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from '@/components/ui/accordion';
 import { getBudgetCategoryIcon, DEFAULT_CATEGORY_ICON } from '@/lib/budgetCategoryIcons';
 import { toast } from 'sonner';
 
@@ -30,6 +33,8 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
 
   const tops = (categories || []).filter((c) => !c.parent_category_id);
   const childrenOf = (id) => (categories || []).filter((c) => c.parent_category_id === id);
+  // Collapsed by default; local state only (resets on remount).
+  const [expanded, setExpanded] = React.useState([]);
 
   function openCreate(parentId = null) {
     setEditing(null);
@@ -96,43 +101,78 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
     }
   }
 
-  function renderCategory(cat, depth = 0) {
+  function renderRow(cat, depth = 0) {
     const Icon = getBudgetCategoryIcon(cat.icon);
+    // Row actions stop propagation so clicks inside an accordion trigger
+    // never toggle the parent while editing, adding or (un)archiving.
+    const stop = (e) => e.stopPropagation();
     return (
-      <div key={cat.id} className={depth > 0 ? 'ml-4 sm:ml-8 border-l-2 border-border pl-3' : ''}>
-        <div className="flex items-center gap-2 bg-card rounded-lg border border-border px-3 py-2">
-          <span aria-hidden className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
-            <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate">{cat.name}</p>
-            {cat.description && <p className="text-xs text-muted-foreground truncate">{cat.description}</p>}
-          </div>
-          {!cat.active && (
-            <Badge variant="outline" className="text-[10px]">{t('archived', 'Archived')}</Badge>
-          )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(cat)} aria-label={`${t('edit') || 'Edit'}: ${cat.name}`}>
-            <Pencil className="w-3.5 h-3.5" />
+      <div className="flex items-center gap-2 bg-card rounded-lg border border-border px-3 py-2">
+        <span aria-hidden className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
+          <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium truncate">{cat.name}</p>
+          {cat.description && <p className="text-xs text-muted-foreground truncate">{cat.description}</p>}
+        </div>
+        {!cat.active && (
+          <Badge variant="outline" className="text-[10px]">{t('archived', 'Archived')}</Badge>
+        )}
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { stop(e); openEdit(cat); }} aria-label={`${t('edit') || 'Edit'}: ${cat.name}`}>
+          <Pencil className="w-3.5 h-3.5" />
+        </Button>
+        {depth === 0 && (
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { stop(e); openCreate(cat.id); }} aria-label={`${t('subcategoryNew', 'New subcategory')} (${cat.name})`} title={t('subcategoryNew', 'New subcategory')}>
+            <Plus className="w-3.5 h-3.5" />
           </Button>
-          {depth === 0 && (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openCreate(cat.id)} aria-label={`${t('subcategoryNew', 'New subcategory')} (${cat.name})`} title={t('subcategoryNew', 'New subcategory')}>
-              <Plus className="w-3.5 h-3.5" />
-            </Button>
-          )}
-          {cat.active ? (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleArchive(cat, false)} aria-label={`${t('archive') || 'Archive'}: ${cat.name}`}>
-              <Archive className="w-3.5 h-3.5" />
-            </Button>
-          ) : (
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleArchive(cat, true)} aria-label={`${t('restore') || 'Restore'}: ${cat.name}`}>
-              <RotateCcw className="w-3.5 h-3.5" />
-            </Button>
-          )}
-        </div>
-        <div className="mt-1.5 space-y-1.5">
-          {childrenOf(cat.id).map((child) => renderCategory(child, depth + 1))}
-        </div>
+        )}
+        {cat.active ? (
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { stop(e); handleArchive(cat, false); }} aria-label={`${t('archive') || 'Archive'}: ${cat.name}`}>
+            <Archive className="w-3.5 h-3.5" />
+          </Button>
+        ) : (
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { stop(e); handleArchive(cat, true); }} aria-label={`${t('restore') || 'Restore'}: ${cat.name}`}>
+            <RotateCcw className="w-3.5 h-3.5" />
+          </Button>
+        )}
       </div>
+    );
+  }
+
+  function renderCategory(cat, depth = 0) {
+    // Top-level parents with children collapse into an accordion (collapsed
+    // by default); leaf rows and nested children render inline as before.
+    if (depth > 0) {
+      return (
+        <div key={cat.id}>
+          {renderRow(cat, depth)}
+        </div>
+      );
+    }
+    const children = childrenOf(cat.id);
+    if (children.length === 0) {
+      return (
+        <div key={cat.id}>
+          {renderRow(cat, depth)}
+        </div>
+      );
+    }
+    return (
+      <AccordionItem key={cat.id} value={cat.id} className="border-b-0">
+        <AccordionTrigger className="py-0 hover:no-underline focus-visible:ring-2 focus-visible:ring-ring rounded-lg [&>svg]:ml-1">
+          <span className="flex-1 min-w-0 text-left">
+            {renderRow(cat, depth)}
+          </span>
+          <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+            {children.length}
+          </span>
+        </AccordionTrigger>
+        <AccordionContent className="pb-1">
+          <div className="ml-4 sm:ml-8 border-l-2 border-border pl-3 mt-1.5 space-y-1.5">
+            {children.map((child) => renderCategory(child, depth + 1))}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
     );
   }
 
@@ -146,9 +186,9 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
       {tops.length === 0 ? (
         <EmptyState icon={Shapes} title={t('categoryEmpty', 'No categories yet')} description={t('categoryEmptyHint', 'Create categories to organize spending.')} />
       ) : (
-        <div className="space-y-2">
+        <Accordion type="multiple" value={expanded} onValueChange={setExpanded} className="space-y-2">
           {tops.map((cat) => renderCategory(cat))}
-        </div>
+        </Accordion>
       )}
 
       <Dialog open={showForm} onOpenChange={setShowForm}>
