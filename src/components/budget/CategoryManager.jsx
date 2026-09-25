@@ -12,10 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import EmptyState from '@/components/shared/EmptyState';
+import CategoryIconPicker from '@/components/budget/CategoryIconPicker';
+import { getBudgetCategoryIcon, DEFAULT_CATEGORY_ICON } from '@/lib/budgetCategoryIcons';
 import { toast } from 'sonner';
 
 function emptyCategory(parentId = null) {
-  return { name: '', description: '', icon: '', parent_category_id: parentId, sort_order: '0' };
+  return { name: '', description: '', icon: DEFAULT_CATEGORY_ICON, parent_category_id: parentId, sort_order: '0' };
 }
 
 export default function CategoryManager({ categories, onChanged, onAudit }) {
@@ -95,9 +97,13 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
   }
 
   function renderCategory(cat, depth = 0) {
+    const Icon = getBudgetCategoryIcon(cat.icon);
     return (
       <div key={cat.id} className={depth > 0 ? 'ml-4 sm:ml-8 border-l-2 border-border pl-3' : ''}>
         <div className="flex items-center gap-2 bg-card rounded-lg border border-border px-3 py-2">
+          <span aria-hidden className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
+            <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+          </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate">{cat.name}</p>
             {cat.description && <p className="text-xs text-muted-foreground truncate">{cat.description}</p>}
@@ -155,6 +161,7 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
           <form onSubmit={handleSave} className="space-y-3">
             <div><Label>{t('categoryName', 'Name')} *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={120} /></div>
             <div><Label>{t('description', 'Description')}</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} maxLength={300} /></div>
+            <CategoryIconPicker id="category-icon" value={form.icon} onChange={(v) => setForm({ ...form, icon: v })} />
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>{t('categoryParent', 'Parent category')}</Label>

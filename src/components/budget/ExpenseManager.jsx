@@ -16,7 +16,9 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import DatePicker from '@/components/ui/DatePicker';
 import EmptyState from '@/components/shared/EmptyState';
+import SubcategorySelect from '@/components/budget/SubcategorySelect';
 import { netExpense, refundedTotal, formatMoney, variance, DEFAULT_CURRENCY, CURRENCY_OPTIONS } from '@/lib/budgetMath';
+import { getBudgetCategoryIcon } from '@/lib/budgetCategoryIcons';
 import { toast } from 'sonner';
 
 const STATUSES = ['planned', 'pending', 'approved', 'paid', 'partially_paid', 'overdue', 'cancelled', 'refunded', 'partially_refunded'];
@@ -46,12 +48,13 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
   const [documents, setDocuments] = React.useState([]);
 
   const categoryName = React.useCallback(
-    (id) => (categories || []).find((c) => c.id === id)?.name || '',
-    [categories]
-  );
-  const subcategories = React.useMemo(
-    () => (categories || []).filter((c) => c.parent_category_id),
-    [categories]
+    (id) => {
+      const cat = (categories || []).find((c) => c.id === id);
+      if (!cat) return '';
+      if (cat.subcategory_key) return t(`subcat_${cat.subcategory_key}`, cat.name);
+      return cat.name || '';
+    },
+    [categories, t]
   );
   const topCategories = React.useMemo(
     () => (categories || []).filter((c) => !c.parent_category_id),
@@ -261,7 +264,16 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
                         <Badge variant="outline" className="ml-1 text-[10px] gap-1"><Repeat className="w-3 h-3" aria-hidden />{t('recurring', 'Recurring')}</Badge>
                       ) : null}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{categoryName(e.category_id)}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        {(() => {
+                          const cat = (categories || []).find((c) => c.id === e.category_id);
+                          const Icon = getBudgetCategoryIcon(cat?.icon);
+                          return <Icon aria-hidden className="w-3.5 h-3.5 shrink-0" />;
+                        })()}
+                        {categoryName(e.category_id)}
+                      </span>
+                    </TableCell>
                     <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                       {(projects || []).find((p) => p.id === e.project_id)?.name || ''}
                     </TableCell>
@@ -337,15 +349,13 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
               </div>
               <div>
                 <Label>{t('subcategory', 'Subcategory')}</Label>
-                <Select value={form.subcategory_id} onValueChange={(v) => setForm({ ...form, subcategory_id: v })}>
-                  <SelectTrigger><SelectValue placeholder={t('none', 'None')} /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">{t('none', 'None')}</SelectItem>
-                    {subcategories
-                      .filter((c) => !form.category_id || form.category_id === 'none' || c.parent_category_id === form.category_id)
-                      .map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SubcategorySelect
+                  id="expense-subcategory"
+                  value={form.subcategory_id !== 'none' ? form.subcategory_id : null}
+                  onChange={(v) => setForm({ ...form, subcategory_id: v || 'none' })}
+                  categories={categories}
+                  parentCategoryId={form.category_id}
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
