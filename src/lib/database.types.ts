@@ -1363,6 +1363,357 @@ export type Database = {
           },
         ]
       }
+      budget_categories: {
+        Row: {
+          active: boolean
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+          parent_category_id: string | null
+          sort_order: number
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          parent_category_id?: string | null
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          parent_category_id?: string | null
+          sort_order?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      budget_expenses: {
+        Row: {
+          amount: number
+          archived: boolean
+          budget_id: string | null
+          category_id: string | null
+          created_at: string | null
+          created_by: string | null
+          currency: string
+          description: string | null
+          document_id: string | null
+          expense_date: string
+          expense_kind: string
+          expense_type: string
+          expected_amount: number | null
+          id: string
+          notes: string | null
+          payment_status: string
+          project_id: string | null
+          recurrence_key: string | null
+          recurring_id: string | null
+          reference: string | null
+          subcategory_id: string | null
+          title: string
+          updated_at: string | null
+          vendor: string | null
+        }
+        Insert: {
+          amount: number
+          archived?: boolean
+          budget_id?: string | null
+          category_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          document_id?: string | null
+          expense_date?: string
+          expense_kind?: string
+          expense_type?: string
+          expected_amount?: number | null
+          id?: string
+          notes?: string | null
+          payment_status?: string
+          project_id?: string | null
+          recurrence_key?: string | null
+          recurring_id?: string | null
+          reference?: string | null
+          subcategory_id?: string | null
+          title: string
+          updated_at?: string | null
+          vendor?: string | null
+        }
+        Update: {
+          amount?: number
+          archived?: boolean
+          budget_id?: string | null
+          category_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          document_id?: string | null
+          expense_date?: string
+          expense_kind?: string
+          expense_type?: string
+          expected_amount?: number | null
+          id?: string
+          notes?: string | null
+          payment_status?: string
+          project_id?: string | null
+          recurrence_key?: string | null
+          recurring_id?: string | null
+          reference?: string | null
+          subcategory_id?: string | null
+          title?: string
+          updated_at?: string | null
+          vendor?: string | null
+        }
+        Relationships: []
+      }
+      budget_recurring: {
+        Row: {
+          active: boolean
+          amount: number
+          budget_id: string | null
+          category_id: string | null
+          created_at: string | null
+          created_by: string | null
+          currency: string
+          end_date: string | null
+          frequency: string
+          id: string
+          last_generated_at: string | null
+          next_run_date: string
+          notes: string | null
+          project_id: string | null
+          start_date: string
+          title: string
+          updated_at: string | null
+          vendor: string | null
+        }
+        Insert: {
+          active?: boolean
+          amount: number
+          budget_id?: string | null
+          category_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          currency?: string
+          end_date?: string | null
+          frequency?: string
+          id?: string
+          last_generated_at?: string | null
+          next_run_date?: string
+          notes?: string | null
+          project_id?: string | null
+          start_date?: string
+          title: string
+          updated_at?: string | null
+          vendor?: string | null
+        }
+        Update: {
+          active?: boolean
+          amount?: number
+          budget_id?: string | null
+          category_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          currency?: string
+          end_date?: string | null
+          frequency?: string
+          id?: string
+          last_generated_at?: string | null
+          next_run_date?: string
+          notes?: string | null
+          project_id?: string | null
+          start_date?: string
+          title?: string
+          updated_at?: string | null
+          vendor?: string | null
+        }
+        Relationships: []
+      }
+      budget_refunds: {
+        Row: {
+          amount: number
+          category_id: string | null
+          created_at: string | null
+          created_by: string | null
+          document_id: string | null
+          expense_id: string
+          id: string
+          notes: string | null
+          project_id: string | null
+          reason: string | null
+          refund_date: string
+          source: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          category_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          document_id?: string | null
+          expense_id: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          reason?: string | null
+          refund_date?: string
+          source?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          category_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          document_id?: string | null
+          expense_id?: string
+          id?: string
+          notes?: string | null
+          project_id?: string | null
+          reason?: string | null
+          refund_date?: string
+          source?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      budget_rules: {
+        Row: {
+          action: string
+          created_at: string | null
+          created_by: string | null
+          effective_from: string | null
+          effective_to: string | null
+          enabled: boolean
+          id: string
+          last_triggered_at: string | null
+          last_value: number | null
+          metric: string
+          name: string
+          notes: string | null
+          operator: string
+          period: string
+          scope_id: string | null
+          scope_type: string
+          threshold: number
+          updated_at: string | null
+        }
+        Insert: {
+          action?: string
+          created_at?: string | null
+          created_by?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          enabled?: boolean
+          id?: string
+          last_triggered_at?: string | null
+          last_value?: number | null
+          metric?: string
+          name: string
+          notes?: string | null
+          operator?: string
+          period?: string
+          scope_id?: string | null
+          scope_type?: string
+          threshold: number
+          updated_at?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          created_by?: string | null
+          effective_from?: string | null
+          effective_to?: string | null
+          enabled?: boolean
+          id?: string
+          last_triggered_at?: string | null
+          last_value?: number | null
+          metric?: string
+          name?: string
+          notes?: string | null
+          operator?: string
+          period?: string
+          scope_id?: string | null
+          scope_type?: string
+          threshold?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      budgets: {
+        Row: {
+          alert_threshold: number | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          description: string | null
+          end_date: string | null
+          id: string
+          name: string
+          notes: string | null
+          parent_budget_id: string | null
+          project_id: string | null
+          start_date: string | null
+          status: string
+          total_amount: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          alert_threshold?: number | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          parent_budget_id?: string | null
+          project_id?: string | null
+          start_date?: string | null
+          status?: string
+          total_amount: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          alert_threshold?: number | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          parent_budget_id?: string | null
+          project_id?: string | null
+          start_date?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
           address: string | null

@@ -18,7 +18,9 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Archive, RotateCcw, Trash2, Loader2, FileText, Paperclip } from 'lucide-react';
+import { Plus, Search, DollarSign, TrendingUp, TrendingDown, Receipt, Pencil, Archive, RotateCcw, Trash2, Loader2, FileText, Paperclip, Wallet } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import BudgetSection from '@/components/budget/BudgetSection';
 import { format } from 'date-fns';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -43,6 +45,7 @@ export default function Finance() {
   const [mutating, setMutating] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [financeSection, setFinanceSection] = useState('invoices');
   const queryClient = useQueryClient();
 
   const { data: invoices = [] } = useQuery({
@@ -188,6 +191,20 @@ export default function Finance() {
     <div>
       <TopBar title={t('finance')} />
       <div className="p-6 space-y-6">
+        <Tabs value={financeSection} onValueChange={setFinanceSection}>
+          <TabsList aria-label={t('finance')}>
+            <TabsTrigger value="invoices" className="gap-1.5">
+              <Receipt className="w-4 h-4" aria-hidden />
+              {t('invoices') || 'Invoices'}
+            </TabsTrigger>
+            {isSuperAdmin && (
+              <TabsTrigger value="budget" className="gap-1.5">
+                <Wallet className="w-4 h-4" aria-hidden />
+                {t('budgetManagement', 'Budget Management')}
+              </TabsTrigger>
+            )}
+          </TabsList>
+          <TabsContent value="invoices" className="space-y-6 mt-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <StatCard title={t('revenuePaid')} value={`€${totalRevenue.toLocaleString()}`} icon={TrendingUp} color="success" />
           <StatCard title={t('pending')} value={`€${totalPending.toLocaleString()}`} icon={DollarSign} color="warning" />
@@ -333,6 +350,13 @@ export default function Finance() {
             </Table>
           </div>
         )}
+          </TabsContent>
+          {isSuperAdmin && (
+            <TabsContent value="budget" className="space-y-6 mt-4">
+              <BudgetSection />
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
 
       <InvoiceFormDialog
