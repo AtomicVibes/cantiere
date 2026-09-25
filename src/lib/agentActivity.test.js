@@ -13,6 +13,7 @@ import {
   formatDuration,
   rangeStart,
   summarizeAgents,
+  getActivityIcon,
   ONLINE_WINDOW_MS,
   IDLE_WINDOW_MS,
 } from './agentActivity.js';
@@ -99,5 +100,49 @@ describe('dashboard wiring', () => {
     const teams = read('src/pages/Teams.jsx');
     assert.ok(teams.includes('<AgentActivityDashboard active={activeTab === '), 'gated mount');
     assert.ok(teams.includes("value=\"members\"") || teams.includes("value='members'"), 'members tab kept');
+  });
+
+  it('expands inline via accordion, never a drawer', () => {
+    const src = read('src/components/teams/AgentActivityDashboard.jsx');
+    assert.ok(!src.includes('Sheet'), 'no drawer path');
+    assert.ok(!src.includes('SheetContent'), 'no drawer content');
+    assert.ok(src.includes('AccordionItem') && src.includes('AccordionTrigger') && src.includes('AccordionContent'), 'accordion parts');
+    assert.ok(src.includes('type="multiple"'), 'multi-expand allowed');
+    assert.ok(src.includes('AgentFeedPanel'), 'per-agent inline panel');
+    assert.ok(src.includes('border-l-2'), 'timeline rail');
+  });
+});
+
+describe('central activity icon mapping', () => {
+  it('covers every tracked action with a real icon', () => {
+    const src = read('src/lib/agentActivity.js');
+    for (const action of [
+      'session_login', 'session_logout', 'project_view', 'PROJECT_CREATED',
+      'DOCUMENT_UPLOADED', 'document_view', 'EVENT_CREATED', 'request_created',
+      'message', 'EXPENSE_CREATED', 'BUDGET_CREATED', 'REFUND_CREATED',
+      'notification', 'team_assignment', 'project_assignment',
+    ]) {
+      assert.ok(src.includes(`${action}:`), `icon mapped for ${action}`);
+    }
+    assert.ok(src.includes('getActivityIcon'), 'central resolver exported');
+  });
+
+  it('every mapped icon resolves to a real component with fallback', () => {
+    const actions = [
+      'session_login', 'session_logout', 'project_view', 'PROJECT_CREATED',
+      'PROJECT_UPDATED', 'DOCUMENT_UPLOADED', 'document_view', 'DOCUMENT_UPDATED',
+      'DOCUMENT_DELETED', 'EVENT_CREATED', 'EVENT_UPDATED', 'request_created',
+      'request_approved', 'request_rejected', 'message', 'EXPENSE_CREATED',
+      'BUDGET_CREATED', 'payment', 'REFUND_CREATED', 'notification',
+      'profile_updated', 'team_assignment', 'settings_change', 'event',
+      'project_request', 'general',
+    ];
+    for (const action of actions) {
+      const Icon = getActivityIcon(action);
+      assert.ok(Icon, `icon for ${action}`);
+      assert.equal(typeof Icon, 'object', `component for ${action}`);
+    }
+    assert.equal(getActivityIcon('totally_unknown_xyz'), getActivityIcon(null));
+    assert.equal(getActivityIcon(undefined), getActivityIcon(''));
   });
 });

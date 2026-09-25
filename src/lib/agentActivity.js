@@ -1,5 +1,32 @@
 // Pure activity aggregation helpers (dependency-free, unit-tested).
 // Status and durations derive from session timestamps only.
+import {
+  Activity,
+  Bell,
+  CalendarClock,
+  CalendarPlus,
+  CircleCheck,
+  CircleX,
+  ClipboardList,
+  ClipboardPlus,
+  CreditCard,
+  Eye,
+  FilePen,
+  FileSearch,
+  FileUp,
+  FolderOpen,
+  FolderPen,
+  FolderPlus,
+  LogIn,
+  LogOut,
+  MessageSquare,
+  Receipt,
+  Settings,
+  Undo2,
+  UserPen,
+  UserPlus,
+  WalletCards,
+} from 'lucide-react';
 
 export const ONLINE_WINDOW_MS = 2 * 60 * 1000;
 export const IDLE_WINDOW_MS = 15 * 60 * 1000;
@@ -42,8 +69,7 @@ export function rangeStart(range, now = Date.now()) {
   return d.toISOString();
 }
 
-export function summarizeAgents(sessions, profilesById, now = Date.now()) {
-  const byUser = new Map();
+export function summarizeAgents(sessions, profilesById, now = Date.now()) {  const byUser = new Map();
   for (const row of sessions || []) {
     if (!row?.user_id) continue;
     if (!byUser.has(row.user_id)) byUser.set(row.user_id, []);
@@ -70,4 +96,47 @@ export function summarizeAgents(sessions, profilesById, now = Date.now()) {
       totalSeconds: totalActiveSeconds(rows, now),
     };
   });
+}
+
+// Central activity -> icon mapping (single source of truth). Every tracked
+// action resolves to a meaningful Lucide icon; unknown actions fall back to
+// the generic Activity icon. Finance actions reuse the Finance icon set.
+const ACTIVITY_ICONS = {
+  session_login: LogIn,
+  session_logout: LogOut,
+  project_view: Eye,
+  PROJECT_CREATED: FolderPlus,
+  PROJECT_UPDATED: FolderPen,
+  project_completed: CircleCheck,
+  DOCUMENT_UPLOADED: FileUp,
+  document_view: FileSearch,
+  DOCUMENT_UPDATED: FilePen,
+  DOCUMENT_DELETED: FileSearch,
+  EVENT_CREATED: CalendarPlus,
+  EVENT_UPDATED: CalendarClock,
+  request_created: ClipboardPlus,
+  request_approved: CircleCheck,
+  request_rejected: CircleX,
+  message: MessageSquare,
+  message_sent: MessageSquare,
+  EXPENSE_CREATED: Receipt,
+  EXPENSE_UPDATED: Receipt,
+  BUDGET_CREATED: WalletCards,
+  BUDGET_UPDATED: WalletCards,
+  payment: CreditCard,
+  REFUND_CREATED: Undo2,
+  notification: Bell,
+  notification_reminder: Bell,
+  profile_updated: UserPen,
+  team_assignment: UserPlus,
+  project_assignment: UserPlus,
+  settings_change: Settings,
+  event: CalendarPlus,
+  project_request: ClipboardList,
+  general: FolderOpen,
+};
+
+export function getActivityIcon(action) {
+  if (!action || typeof action !== 'string') return Activity;
+  return ACTIVITY_ICONS[action] || ACTIVITY_ICONS[action.toLowerCase()] || Activity;
 }

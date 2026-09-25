@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Activity, Award, ListChecks, X, ChevronLeft, ChevronRight, ChevronDown,
+  Activity, Award, ListChecks, ChevronLeft, ChevronRight, ChevronDown,
   Globe, Lock, Users,
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
@@ -11,11 +11,13 @@ import EmptyState from '@/components/shared/EmptyState';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from '@/components/ui/accordion';
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
-  formatDuration, rangeStart, summarizeAgents,
+  formatDuration, rangeStart, summarizeAgents, getActivityIcon,
 } from '@/lib/agentActivity';
 
 const PAGE_SIZE = 50;
@@ -138,11 +140,106 @@ function FeedEntryDetails({ entry, t, resolveProjectName }) {
   );
 }
 
+export function AgentFeedPanel({ userId, userName, since, active, t }) {
+  const [feedPage, setFeedPage] = React.useState(0);
+
+  const feedQuery = useQuery({
+    queryKey: ['agent-activity-feed', userId, feedPage, since],
+    enabled: active && !!userId,
+    queryFn: async () => {
+      const from = feedPage * FEED_PAGE_SIZE;
+      const { data, error } = await supabase
+        .from('agent_action_logs')
+        .select('id, action, entity_type, entity_id, metadata, created_at')
+        .eq('user_id', userId)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .range(from, from + FEED_PAGE_SIZE - 1);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const projectsQuery = useQuery({
+    queryKey: ['agent-activity-projects'],
+    enabled: active,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('projects').select('id, name').limit(300);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const resolveProjectName = React.useCallback(
+    (projectId) => {
+      if (!projectId) return '—';
+      const found = (projectsQuery.data ?? []).find((p) => p.id === projectId);
+      return found?.name || String(projectId).slice(0, 8);
+    },
+    [projectsQuery.data]
+  );
+
+  if (feedQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="w-6 h-6 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (feedQuery.error) {
+    return <p className="text-sm text-destructive py-6 text-center">{t('activityLoadError', 'Could not load activity data.')}</p>;
+  }
+  if ((feedQuery.data ?? []).length === 0) {
+    return <p className="text-sm text-muted-foreground py-6 text-center">{t('activityFeedEmpty', 'No actions in this period.')}</p>;
+  }
+  return (
+    <>
+      <ul className="relative mt-1 space-y-0 border-l-2 border-border ml-2 pl-0">
+        {(feedQuery.data ?? []).map((entry) => {
+          const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
+          const headline = metadata.file_name || metadata.section_name || null;
+          const Icon = getActivityIcon(entry.action);
+          return (
+            <li key={entry.id} className="relative pl-8 pb-4 last:pb-1">
+              <span aria-hidden className="absolute left-0 top-0.5 -translate-x-1/2 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center">
+                <Icon className="w-3.5 h-3.5 text-muted-foreground" />
+              </span>
+              <p className="text-sm font-medium">
+                {actionLabel(entry.action, t)}
+                {headline ? `: ${headline}` : ''}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatDateTime(entry.created_at, t)}
+                {entry.entity_type ? ` · ${entry.entity_type}` : ''}
+              </p>
+              <FeedEntryDetails entry={entry} t={t} resolveProjectName={resolveProjectName} />
+            </li>
+          );
+        })}
+      </ul>
+      <div className="flex items-center justify-between mt-3">
+        <Button variant="outline" size="sm" disabled={feedPage === 0} onClick={() => setFeedPage((p) => Math.max(0, p - 1))}>
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <span className="text-xs text-muted-foreground">{t('page', 'Page')} {feedPage + 1}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={(feedQuery.data ?? []).length < FEED_PAGE_SIZE}
+          onClick={() => setFeedPage((p) => p + 1)}
+        >
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+      </div>
+    </>
+  );
+}
+
 export default function AgentActivityDashboard({ active }) {
   const { t } = useTranslation();
   const [range, setRange] = React.useState('today');
-  const [selectedAgent, setSelectedAgent] = React.useState(null);
-  const [feedPage, setFeedPage] = React.useState(0);
+  const [expanded, setExpanded] = React.useState([]);
 
   const since = React.useMemo(() => rangeStart(range), [range]);
 
@@ -216,48 +313,6 @@ export default function AgentActivityDashboard({ active }) {
   const mostActive = agents[0] || null;
   const actionsToday = actionsTodayQuery.data ?? 0;
 
-  const feedQuery = useQuery({
-    queryKey: ['agent-activity-feed', selectedAgent?.userId, feedPage, range],
-    enabled: active && !!selectedAgent,
-    queryFn: async () => {
-      const from = feedPage * FEED_PAGE_SIZE;
-      const { data, error } = await supabase
-        .from('agent_action_logs')
-        .select('id, action, entity_type, entity_id, metadata, created_at')
-        .eq('user_id', selectedAgent.userId)
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
-        .range(from, from + FEED_PAGE_SIZE - 1);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const openAgent = (agent) => {
-    setSelectedAgent(agent);
-    setFeedPage(0);
-  };
-
-  const projectsQuery = useQuery({
-    queryKey: ['agent-activity-projects'],
-    enabled: active && !!selectedAgent,
-    staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase.from('projects').select('id, name').limit(300);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const resolveProjectName = React.useCallback(
-    (projectId) => {
-      if (!projectId) return '—';
-      const found = (projectsQuery.data ?? []).find((p) => p.id === projectId);
-      return found?.name || String(projectId).slice(0, 8);
-    },
-    [projectsQuery.data]
-  );
-
   const isLoading = sessionsQuery.isLoading || profilesQuery.isLoading;
   const loadError = sessionsQuery.error || profilesQuery.error;
 
@@ -300,103 +355,53 @@ export default function AgentActivityDashboard({ active }) {
       ) : agents.length === 0 ? (
         <EmptyState icon={Activity} title={t('activityEmpty', 'No activity yet')} description={t('activityEmptyHint', 'Agent sessions will appear here.')} />
       ) : (
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 text-left">
-                  <th className="px-4 py-2.5 font-semibold">{t('activityAgent', 'Agent')}</th>
-                  <th className="px-4 py-2.5 font-semibold hidden md:table-cell">{t('jobTitle')}</th>
-                  <th className="px-4 py-2.5 font-semibold">{t('activityStatus', 'Status')}</th>
-                  <th className="px-4 py-2.5 font-semibold hidden sm:table-cell">{t('activityLastLogin', 'Last login')}</th>
-                  <th className="px-4 py-2.5 font-semibold hidden sm:table-cell">{t('activityLastActive', 'Last active')}</th>
-                  <th className="px-4 py-2.5 font-semibold">{t('activityDuration', 'Active time')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agents.slice(0, PAGE_SIZE).map((agent) => (
-                  <tr
-                    key={agent.userId}
-                    onClick={() => openAgent(agent)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') openAgent(agent); }}
-                    tabIndex={0}
-                    className="border-t border-border hover:bg-muted/30 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-                  >
-                    <td className="px-4 py-2.5 font-medium">{agent.name}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground hidden md:table-cell">{agent.jobTitle || '—'}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant="outline" className={STATUS_STYLES[agent.status]}>
-                        {t(`activity${agent.status[0].toUpperCase()}${agent.status.slice(1)}`, agent.status)}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground hidden sm:table-cell">{formatDateTime(agent.lastLogin, t)}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground hidden sm:table-cell">{formatDateTime(agent.lastActive, t)}</td>
-                    <td className="px-4 py-2.5">{formatDuration(agent.totalSeconds)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Accordion
+          type="multiple"
+          value={expanded}
+          onValueChange={setExpanded}
+          className="bg-card rounded-xl border border-border overflow-hidden px-4"
+        >
+          {agents.slice(0, PAGE_SIZE).map((agent) => {
+            const AgentIcon = getActivityIcon('team_assignment');
+            return (
+              <AccordionItem key={agent.userId} value={agent.userId} className="border-b border-border/50 last:border-0">
+                <AccordionTrigger className="py-3 hover:no-underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset rounded">
+                  <span className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 min-w-0 text-left">
+                    <span aria-hidden className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <AgentIcon className="w-4 h-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium truncate">{agent.name}</span>
+                      <span className="block text-xs text-muted-foreground truncate">
+                        {agent.jobTitle || t('activityAgent', 'Agent')}
+                      </span>
+                    </span>
+                    <Badge variant="outline" className={STATUS_STYLES[agent.status]}>
+                      {t(`activity${agent.status[0].toUpperCase()}${agent.status.slice(1)}`, agent.status)}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDateTime(agent.lastActive, t)} · {t('activityDuration', 'Active time')}: {formatDuration(agent.totalSeconds)}
+                    </span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent className="pb-4">
+                  <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2 text-xs text-muted-foreground">
+                    <p>
+                      <span className="font-medium text-foreground">{t('activityLastLogin', 'Last login')}: </span>
+                      {formatDateTime(agent.lastLogin, t)}
+                    </p>
+                    <p>
+                      <span className="font-medium text-foreground">{t('activityLastActive', 'Last active')}: </span>
+                      {formatDateTime(agent.lastActive, t)}
+                    </p>
+                  </div>
+                  <AgentFeedPanel userId={agent.userId} userName={agent.name} since={since} active={active} t={t} />
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
       )}
-
-      <Sheet open={!!selectedAgent} onOpenChange={(v) => { if (!v) setSelectedAgent(null); }}>
-        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle className="font-heading">
-              {selectedAgent?.name} — {t('activityFeed', 'Activity feed')}
-            </SheetTitle>
-          </SheetHeader>
-          {feedQuery.isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
-            </div>
-          ) : feedQuery.error ? (
-            <p className="text-sm text-destructive py-8 text-center">{t('activityLoadError', 'Could not load activity data.')}</p>
-          ) : (feedQuery.data ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">{t('activityFeedEmpty', 'No actions in this period.')}</p>
-          ) : (
-            <>
-              <ul className="mt-4 space-y-3">
-                {(feedQuery.data ?? []).map((entry) => {
-                  const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
-                  const headline = metadata.file_name || metadata.section_name || null;
-                  return (
-                    <li key={entry.id} className="border-b border-border/50 pb-2.5">
-                      <p className="text-sm font-medium">
-                        {actionLabel(entry.action, t)}
-                        {headline ? `: ${headline}` : ''}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDateTime(entry.created_at, t)}
-                        {entry.entity_type ? ` · ${entry.entity_type}` : ''}
-                      </p>
-                      <FeedEntryDetails entry={entry} t={t} resolveProjectName={resolveProjectName} />
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="flex items-center justify-between mt-4">
-                <Button variant="outline" size="sm" disabled={feedPage === 0} onClick={() => setFeedPage((p) => Math.max(0, p - 1))}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <span className="text-xs text-muted-foreground">{t('page', 'Page')} {feedPage + 1}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={(feedQuery.data ?? []).length < FEED_PAGE_SIZE}
-                  onClick={() => setFeedPage((p) => p + 1)}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </>
-          )}
-          <Button variant="ghost" size="sm" className="mt-4 gap-2" onClick={() => setSelectedAgent(null)}>
-            <X className="w-4 h-4" /> {t('close')}
-          </Button>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }
