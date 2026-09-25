@@ -27,6 +27,7 @@ import Dashboard from '@/pages/Dashboard';
 import Projects from '@/pages/Projects';
 import ProjectDetail from '@/pages/ProjectDetail';
 import Teams from '@/pages/Teams';
+import AgentActivity from '@/pages/AgentActivity';
 import Clients from '@/pages/Clients';
 import Notifications from '@/pages/Notifications';
 import Finance from '@/pages/Finance';
@@ -82,6 +83,7 @@ const AuthenticatedApp = () => {
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/teams" element={<Teams />} />
+          <Route path="/activity" element={<AgentActivity />} />
           <Route path="/clients" element={<Clients />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/finance" element={<Finance />} />
