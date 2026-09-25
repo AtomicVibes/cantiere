@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '@/components/ui/badge';
 import DatePicker from '@/components/ui/DatePicker';
 import EmptyState from '@/components/shared/EmptyState';
-import { formatMoney } from '@/lib/budgetMath';
+import { formatMoney, DEFAULT_CURRENCY } from '@/lib/budgetMath';
 import { toast } from 'sonner';
 
 function emptyRefund() {
@@ -33,6 +33,11 @@ export default function RefundManager({ refunds, expenses, projects, categories,
   const expenseById = React.useCallback(
     (id) => (expenses || []).find((e) => e.id === id),
     [expenses]
+  );
+
+  const expenseCurrency = React.useCallback(
+    (id) => expenseById(id)?.currency || DEFAULT_CURRENCY,
+    [expenseById]
   );
 
   async function handleSave(e) {
@@ -75,7 +80,7 @@ export default function RefundManager({ refunds, expenses, projects, categories,
         .update({ payment_status: fullyRefunded ? 'refunded' : 'partially_refunded' })
         .eq('id', form.expense_id);
       await onAudit('REFUND_CREATED', 'Refund recorded', { id: data?.id, expense_id: form.expense_id, amount });
-      await onNotify(`Refund recorded: ${formatMoney(amount)} for "${expense?.title || 'expense'}".`);
+      await onNotify(`Refund recorded: ${formatMoney(amount, expenseCurrency(form.expense_id))} for "${expense?.title || 'expense'}".`);
       toast.success(t('save') || 'Save');
       setShowForm(false);
       setForm(emptyRefund());
@@ -111,7 +116,7 @@ export default function RefundManager({ refunds, expenses, projects, categories,
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="secondary" className="text-[10px]">{formatMoney(r.amount)}</Badge>
+                    <Badge variant="secondary" className="text-[10px]">{formatMoney(r.amount, expenseCurrency(r.expense_id))}</Badge>
                     <Badge variant="outline" className="text-[10px] capitalize">{r.status}</Badge>
                   </div>
                 </li>
@@ -143,6 +148,11 @@ export default function RefundManager({ refunds, expenses, projects, categories,
               <div>
                 <Label>{t('amount', 'Amount')} *</Label>
                 <Input type="number" min="0.01" step="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+                {form.expense_id !== 'none' && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    {t('refundCurrencyHint', 'Amount in the original expense currency')}: {expenseCurrency(form.expense_id)}
+                  </p>
+                )}
               </div>
               <div><Label>{t('date') || 'Date'}</Label><DatePicker value={form.refund_date} onChange={(v) => setForm({ ...form, refund_date: v })} /></div>
             </div>

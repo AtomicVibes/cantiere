@@ -29,7 +29,7 @@ export function buildExpenseRows(expenses, refunds, { resolveCategory, resolvePr
       amount,
       refunded: Math.round(refunded * 100) / 100,
       net_amount: Math.round((amount - refunded) * 100) / 100,
-      currency: e.currency || 'TND',
+      currency: e.currency || 'EUR',
       recurring: e.expense_kind === 'recurring' ? 'yes' : 'no',
       created_by: e.created_by || '',
       created_at: e.created_at || '',
@@ -52,7 +52,7 @@ export function buildBudgetSummaryRows(budgets, totalsByBudget) {
       available: Number(t.available) || 0,
       remaining: Number(t.remaining) || 0,
       utilization_pct: Number(t.utilization) || 0,
-      currency: b.currency || 'TND',
+      currency: b.currency || 'EUR',
       status: b.status || '',
     };
   });

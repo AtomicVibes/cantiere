@@ -1,8 +1,17 @@
 // Budget Management math (single source of truth, unit-tested).
 // Money uses NUMERIC(14,2) in the DB; JS uses integer cents internally in
-// aggregations to avoid floating-point drift, formatted via Intl (TND).
+// aggregations to avoid floating-point drift. Canonical database currency
+// identifier is the ISO 4217 code (EUR); formatting follows Intl.
 
-export const DEFAULT_CURRENCY = 'TND';
+export const DEFAULT_CURRENCY = 'EUR';
+
+// Select options shown across Budget Management (EUR first and default).
+// Amounts are never converted between currencies anywhere in the app.
+export const CURRENCY_OPTIONS = [
+  { value: 'EUR', label: 'EUR — Euro (€)' },
+  { value: 'TND', label: 'TND — Tunisian Dinar' },
+  { value: 'USD', label: 'USD — US Dollar' },
+];
 
 export function toCents(amount) {
   const n = Number(amount);

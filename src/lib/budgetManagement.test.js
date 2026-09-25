@@ -29,8 +29,8 @@ const codeOf = (sql) => sql.split('\n').map((l) => l.replace(/--.*$/, '')).join(
 const MIG = 'supabase/migrations/20261010120000_budget_management.sql';
 
 describe('money math', () => {
-  it('uses integer cents (no float drift) and TND default', () => {
-    assert.equal(DEFAULT_CURRENCY, 'TND');
+  it('uses integer cents (no float drift) and EUR default', () => {
+    assert.equal(DEFAULT_CURRENCY, 'EUR');
     assert.equal(toCents(0.1) + toCents(0.2), toCents(0.3));
     assert.ok(formatMoney(1500).includes('1500') || formatMoney(1500).includes('1'));
   });
@@ -108,7 +108,7 @@ describe('structured rules', () => {
 
 describe('export rows', () => {
   it('builds expense rows with net math and summary rows', () => {
-    const expenses = [{ id: 'e1', title: 'Fuel', amount: 100, currency: 'TND', payment_status: 'paid', category_id: 'c1', project_id: 'p1', expense_type: 'flexible', expense_kind: 'one_time' }];
+    const expenses = [{ id: 'e1', title: 'Fuel', amount: 100, currency: 'EUR', payment_status: 'paid', category_id: 'c1', project_id: 'p1', expense_type: 'flexible', expense_kind: 'one_time' }];
     const refunds = [{ expense_id: 'e1', amount: 20, status: 'paid' }];
     const rows = buildExpenseRows(expenses, refunds, {
       resolveCategory: () => 'Vehicles',
@@ -158,6 +158,39 @@ describe('migration safety', () => {
     for (const table of ['budgets:', 'budget_categories:', 'budget_expenses:', 'budget_recurring:', 'budget_refunds:', 'budget_rules:']) {
       assert.ok(types.includes(table), table);
     }
+  });
+});
+
+describe('EUR default currency', () => {
+  it('migration sets EUR defaults without touching existing rows', () => {
+    const sql = read('supabase/migrations/20261011120000_budget_currency_eur.sql').split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
+    assert.ok(sql.includes("alter column currency set default 'EUR'"), 'EUR default applied');
+    assert.ok(!/update public\.(budgets|budget_expenses|budget_recurring)\s+set currency/i.test(sql), 'existing rows preserved');
+    assert.ok(!/invoices|projects/i.test(sql), 'unrelated modules untouched');
+  });
+
+  it('forms default to EUR with ISO labels and parent/budget inheritance', () => {
+    for (const f of ['src/components/budget/BudgetManager.jsx', 'src/components/budget/ExpenseManager.jsx', 'src/components/budget/RecurringManager.jsx']) {
+      const src = read(f);
+      assert.ok(src.includes('DEFAULT_CURRENCY'), `${f} uses the shared default`);
+      assert.ok(src.includes('CURRENCY_OPTIONS'), `${f} uses shared options`);
+      assert.ok(!/currency: 'TND'/.test(src), `${f} has no TND default`);
+    }
+    assert.ok(read('src/components/budget/BudgetManager.jsx').includes('parent?.currency'), 'sub-budget inherits parent');
+    assert.ok(read('src/components/budget/ExpenseManager.jsx').includes('budget?.currency'), 'expense inherits budget');
+    assert.ok(!/exchange|convert/i.test(read('src/components/budget/BudgetManager.jsx') + read('src/components/budget/ExpenseManager.jsx')), 'no silent conversion');
+  });
+
+  it('refunds and exports follow the original/recorded currency', () => {
+    const refund = read('src/components/budget/RefundManager.jsx');
+    assert.ok(refund.includes('expenseCurrency'), 'refund display follows expense');
+    const exp = read('src/lib/budgetExport.js');
+    assert.ok(exp.includes("e.currency || 'EUR'") && exp.includes("b.currency || 'EUR'"), 'export carries ISO codes');
+  });
+
+  it('dashboard totals render in the stored currency', () => {
+    const overview = read('src/components/budget/BudgetOverview.jsx');
+    assert.ok(overview.includes('totals.currency'), 'totals carry currency');
   });
 });
 

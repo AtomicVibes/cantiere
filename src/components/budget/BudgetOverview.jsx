@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import StatCard from '@/components/dashboard/StatCard';
 import { Wallet, PiggyBank, Receipt, Hourglass, Undo2, Percent } from 'lucide-react';
-import { computeScopeTotals, formatMoney } from '@/lib/budgetMath';
+import { computeScopeTotals, formatMoney, DEFAULT_CURRENCY } from '@/lib/budgetMath';
 
 const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6', '#EC4899', '#64748B'];
 
@@ -18,7 +18,7 @@ export default function BudgetOverview({ budgets, expenses, refunds, categories,
     const subs = (budgets || []).filter((b) => b.parent_budget_id && b.status !== 'archived');
     const total = globals.reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
     const allocated = subs.reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
-    return computeScopeTotals({ total, allocated, expenses, refunds });
+    return { ...computeScopeTotals({ total, allocated, expenses, refunds }), currency: globals[0]?.currency || DEFAULT_CURRENCY };
   }, [budgets, expenses, refunds]);
 
   const categoryName = React.useCallback(
@@ -55,12 +55,12 @@ export default function BudgetOverview({ budgets, expenses, refunds, categories,
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-        <StatCard title={t('budgetTotal', 'Global Budget')} value={formatMoney(totals.total)} icon={Wallet} color="primary" />
-        <StatCard title={t('budgetAllocated', 'Allocated')} value={formatMoney(totals.allocated)} icon={PiggyBank} color="blue" />
-        <StatCard title={t('budgetSpent', 'Spent')} value={formatMoney(totals.spent)} icon={Receipt} color="warning" />
-        <StatCard title={t('budgetCommitted', 'Committed')} value={formatMoney(totals.committed)} icon={Hourglass} color="violet" />
-        <StatCard title={t('budgetRefunded', 'Refunded')} value={formatMoney(totals.refunded)} icon={Undo2} color="success" />
-        <StatCard title={t('budgetRemaining', 'Remaining')} value={formatMoney(totals.remaining)} icon={Percent} color={totals.remaining < 0 ? 'destructive' : 'success'} />
+        <StatCard title={t('budgetTotal', 'Global Budget')} value={formatMoney(totals.total, totals.currency)} icon={Wallet} color="primary" />
+        <StatCard title={t('budgetAllocated', 'Allocated')} value={formatMoney(totals.allocated, totals.currency)} icon={PiggyBank} color="blue" />
+        <StatCard title={t('budgetSpent', 'Spent')} value={formatMoney(totals.spent, totals.currency)} icon={Receipt} color="warning" />
+        <StatCard title={t('budgetCommitted', 'Committed')} value={formatMoney(totals.committed, totals.currency)} icon={Hourglass} color="violet" />
+        <StatCard title={t('budgetRefunded', 'Refunded')} value={formatMoney(totals.refunded, totals.currency)} icon={Undo2} color="success" />
+        <StatCard title={t('budgetRemaining', 'Remaining')} value={formatMoney(totals.remaining, totals.currency)} icon={Percent} color={totals.remaining < 0 ? 'destructive' : 'success'} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

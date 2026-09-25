@@ -13,14 +13,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '@/components/ui/badge';
 import DatePicker from '@/components/ui/DatePicker';
 import EmptyState from '@/components/shared/EmptyState';
-import { computeScopeTotals, formatMoney } from '@/lib/budgetMath';
+import { computeScopeTotals, formatMoney, DEFAULT_CURRENCY, CURRENCY_OPTIONS } from '@/lib/budgetMath';
 import { toast } from 'sonner';
 
 const STATUSES = ['draft', 'active', 'paused', 'closed', 'archived'];
 
-function emptyBudget(parentId = null) {
+function emptyBudget(parentId = null, parentCurrency = null) {
   return {
-    name: '', description: '', total_amount: '', currency: 'TND',
+    name: '', description: '', total_amount: '', currency: parentCurrency || DEFAULT_CURRENCY,
     start_date: '', end_date: '', status: 'draft', project_id: 'none',
     alert_threshold: '', notes: '', parent_budget_id: parentId,
   };
@@ -44,7 +44,7 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
     const allocated = kids.reduce((s, k) => s + (Number(k.total_amount) || 0), 0);
     const scoped = (expenses || []).filter((e) => e.budget_id === budgetId || kids.some((k) => k.id === e.budget_id));
     const b = (budgets || []).find((x) => x.id === budgetId);
-    return computeScopeTotals({ total: Number(b?.total_amount) || 0, allocated, expenses: scoped, refunds });
+    return { ...computeScopeTotals({ total: Number(b?.total_amount) || 0, allocated, expenses: scoped, refunds }), currency: b?.currency || DEFAULT_CURRENCY };
   }
 
   function siblingAllocated(parentId, excludeId) {
@@ -56,7 +56,10 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
   function openCreate(parentId) {
     setEditing(null);
     setParentForNew(parentId);
-    setForm(emptyBudget(parentId));
+    const parent = (budgets || []).find((b) => b.id === parentId);
+    // A sub-budget inherits its parent's currency so a EUR envelope never
+    // silently holds another currency; globals default to EUR.
+    setForm(emptyBudget(parentId, parent?.currency));
     setOverrideChecked(false);
     setShowForm(true);
   }
@@ -68,7 +71,7 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
       name: budget.name || '',
       description: budget.description || '',
       total_amount: budget.total_amount ?? '',
-      currency: budget.currency || 'TND',
+          currency: budget.currency || DEFAULT_CURRENCY,
       start_date: budget.start_date || '',
       end_date: budget.end_date || '',
       status: budget.status || 'draft',
@@ -106,7 +109,7 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
         name: form.name.trim(),
         description: form.description?.trim() || null,
         total_amount: amount,
-        currency: form.currency || 'TND',
+        currency: form.currency || DEFAULT_CURRENCY,
         start_date: form.start_date || null,
         end_date: form.end_date || null,
         status: form.status,
@@ -201,9 +204,9 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
             <Badge variant="outline" className="text-xs capitalize">{budget.status}</Badge>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <div><p className="text-muted-foreground">{t('budgetAllocated', 'Allocated')}</p><p className="font-semibold">{formatMoney(totals.allocated)}</p></div>
-            <div><p className="text-muted-foreground">{t('budgetSpent', 'Spent')}</p><p className="font-semibold">{formatMoney(totals.spent)}</p></div>
-            <div><p className="text-muted-foreground">{t('budgetRemaining', 'Remaining')}</p><p className="font-semibold">{formatMoney(totals.remaining)}</p></div>
+            <div><p className="text-muted-foreground">{t('budgetAllocated', 'Allocated')}</p><p className="font-semibold">{formatMoney(totals.allocated, totals.currency)}</p></div>
+            <div><p className="text-muted-foreground">{t('budgetSpent', 'Spent')}</p><p className="font-semibold">{formatMoney(totals.spent, totals.currency)}</p></div>
+            <div><p className="text-muted-foreground">{t('budgetRemaining', 'Remaining')}</p><p className="font-semibold">{formatMoney(totals.remaining, totals.currency)}</p></div>
             <div><p className="text-muted-foreground">{t('budgetUtilization', 'Utilization')}</p><p className="font-semibold">{totals.utilization}%</p></div>
           </div>
           <div className="flex flex-wrap gap-1.5 pt-1">
@@ -279,7 +282,7 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
                 <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {['TND', 'EUR', 'USD'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    {CURRENCY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

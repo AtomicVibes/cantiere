@@ -13,14 +13,14 @@ import { Badge } from '@/components/ui/badge';
 import DatePicker from '@/components/ui/DatePicker';
 import EmptyState from '@/components/shared/EmptyState';
 import { Repeat } from 'lucide-react';
-import { formatMoney, toDateOnlyString } from '@/lib/budgetMath';
+import { formatMoney, toDateOnlyString, DEFAULT_CURRENCY, CURRENCY_OPTIONS } from '@/lib/budgetMath';
 import { toast } from 'sonner';
 
 const FREQUENCIES = ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'];
 
 function emptyRecurring() {
   return {
-    title: '', amount: '', currency: 'TND', category_id: 'none', budget_id: 'none',
+    title: '', amount: '', currency: DEFAULT_CURRENCY, category_id: 'none', budget_id: 'none',
     project_id: 'none', vendor: '', frequency: 'monthly', start_date: toDateOnlyString(new Date()),
     end_date: '', notes: '',
   };
@@ -45,7 +45,7 @@ export default function RecurringManager({ recurring, categories, budgets, proje
     setForm({
       title: rec.title || '',
       amount: rec.amount ?? '',
-      currency: rec.currency || 'TND',
+      currency: rec.currency || DEFAULT_CURRENCY,
       category_id: rec.category_id || 'none',
       budget_id: rec.budget_id || 'none',
       project_id: rec.project_id || 'none',
@@ -71,7 +71,7 @@ export default function RecurringManager({ recurring, categories, budgets, proje
       const payload = {
         title: form.title.trim(),
         amount,
-        currency: form.currency || 'TND',
+        currency: form.currency || DEFAULT_CURRENCY,
         category_id: form.category_id !== 'none' ? form.category_id : null,
         budget_id: form.budget_id !== 'none' ? form.budget_id : null,
         project_id: form.project_id !== 'none' ? form.project_id : null,
@@ -174,7 +174,7 @@ export default function RecurringManager({ recurring, categories, budgets, proje
                 <Label>{t('budgetCurrency', 'Currency')}</Label>
                 <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{['TND', 'EUR', 'USD'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectContent>{CURRENCY_OPTIONS.map((c) => <SelectItem key={c} value={c}>{c.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
@@ -193,6 +193,23 @@ export default function RecurringManager({ recurring, categories, budgets, proje
             <div className="grid grid-cols-2 gap-3">
               <div><Label>{t('startDate', 'Start date')}</Label><DatePicker value={form.start_date} onChange={(v) => setForm({ ...form, start_date: v })} /></div>
               <div><Label>{t('endDate', 'End date')}</Label><DatePicker value={form.end_date} onChange={(v) => setForm({ ...form, end_date: v })} allowClear /></div>
+            </div>
+            <div>
+              <Label>{t('budget', 'Budget')}</Label>
+              <Select value={form.budget_id} onValueChange={(v) => {
+                const budget = (budgets || []).find((b) => b.id === v);
+                setForm((f) => ({
+                  ...f,
+                  budget_id: v,
+                  currency: budget?.currency || f.currency || DEFAULT_CURRENCY,
+                }));
+              }}>
+                <SelectTrigger><SelectValue placeholder={t('none', 'None')} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t('none', 'None')}</SelectItem>
+                  {(budgets || []).map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

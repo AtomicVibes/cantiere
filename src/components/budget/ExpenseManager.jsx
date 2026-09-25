@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import DatePicker from '@/components/ui/DatePicker';
 import EmptyState from '@/components/shared/EmptyState';
-import { netExpense, refundedTotal, formatMoney, variance } from '@/lib/budgetMath';
+import { netExpense, refundedTotal, formatMoney, variance, DEFAULT_CURRENCY, CURRENCY_OPTIONS } from '@/lib/budgetMath';
 import { toast } from 'sonner';
 
 const STATUSES = ['planned', 'pending', 'approved', 'paid', 'partially_paid', 'overdue', 'cancelled', 'refunded', 'partially_refunded'];
@@ -24,7 +24,7 @@ const PAGE_SIZE = 50;
 
 function emptyExpense() {
   return {
-    title: '', description: '', amount: '', expected_amount: '', currency: 'TND',
+    title: '', description: '', amount: '', expected_amount: '', currency: DEFAULT_CURRENCY,
     expense_date: '', category_id: 'none', subcategory_id: 'none', budget_id: 'none',
     project_id: 'none', vendor: '', reference: '', payment_status: 'pending',
     expense_type: 'flexible', notes: '', document_id: 'none',
@@ -92,6 +92,17 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
     setShowForm(true);
   }
 
+  function handleBudgetChange(budgetId) {
+    // An expense linked to a budget inherits that budget's currency so a
+    // EUR budget never silently holds another currency.
+    const budget = (budgets || []).find((b) => b.id === budgetId);
+    setForm((f) => ({
+      ...f,
+      budget_id: budgetId,
+      currency: budget?.currency || f.currency || DEFAULT_CURRENCY,
+    }));
+  }
+
   function openEdit(expense) {
     setEditing(expense);
     setDetail(null);
@@ -100,7 +111,7 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
       description: expense.description || '',
       amount: expense.amount ?? '',
       expected_amount: expense.expected_amount ?? '',
-      currency: expense.currency || 'TND',
+      currency: expense.currency || DEFAULT_CURRENCY,
       expense_date: expense.expense_date || '',
       category_id: expense.category_id || 'none',
       subcategory_id: expense.subcategory_id || 'none',
@@ -134,7 +145,7 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
         description: form.description?.trim() || null,
         amount,
         expected_amount: form.expected_amount === '' ? null : Number(form.expected_amount),
-        currency: form.currency || 'TND',
+        currency: form.currency || DEFAULT_CURRENCY,
         expense_date: form.expense_date,
         category_id: form.category_id !== 'none' ? form.category_id : null,
         subcategory_id: form.subcategory_id !== 'none' ? form.subcategory_id : null,
@@ -297,7 +308,7 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
                 <Label>{t('budgetCurrency', 'Currency')}</Label>
                 <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{['TND', 'EUR', 'USD'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  <SelectContent>{CURRENCY_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
@@ -340,7 +351,7 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>{t('budget', 'Budget')}</Label>
-                <Select value={form.budget_id} onValueChange={(v) => setForm({ ...form, budget_id: v })}>
+                <Select value={form.budget_id} onValueChange={handleBudgetChange}>
                   <SelectTrigger><SelectValue placeholder={t('none', 'None')} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">{t('none', 'None')}</SelectItem>
