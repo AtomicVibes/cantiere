@@ -2,29 +2,39 @@
 // Status and durations derive from session timestamps only.
 import {
   Activity,
+  BarChart3,
   Bell,
   CalendarClock,
   CalendarPlus,
+  Calendar,
   CircleCheck,
   CircleX,
   ClipboardList,
   ClipboardPlus,
   CreditCard,
+  DollarSign,
   Eye,
   FilePen,
   FileSearch,
+  FileText,
   FileUp,
+  FolderKanban,
   FolderOpen,
   FolderPen,
   FolderPlus,
+  LayoutDashboard,
+  Lock,
   LogIn,
   LogOut,
   MessageSquare,
   Receipt,
+  ScrollText,
   Settings,
   Undo2,
+  UserCircle,
   UserPen,
   UserPlus,
+  Users,
   WalletCards,
 } from 'lucide-react';
 
@@ -139,4 +149,42 @@ const ACTIVITY_ICONS = {
 export function getActivityIcon(action) {
   if (!action || typeof action !== 'string') return Activity;
   return ACTIVITY_ICONS[action] || ACTIVITY_ICONS[action.toLowerCase()] || Activity;
+}
+
+// Sidebar section -> icon mapping. Mirrors the exact icon components used
+// by the main side drawer (Sidebar.jsx) so timeline nodes speak the same
+// visual language. Case-insensitive; returns null when the section is
+// unknown so callers fall back to the action icon, then Activity.
+const SECTION_ICONS = {
+  dashboard: LayoutDashboard,
+  projects: FolderKanban,
+  'project detail': FolderKanban,
+  teams: Users,
+  clients: UserCircle,
+  messages: MessageSquare,
+  notifications: Bell,
+  finance: DollarSign,
+  calendar: Calendar,
+  reports: BarChart3,
+  documents: FileText,
+  settings: Settings,
+  logs: ScrollText,
+  audit: ScrollText,
+  requests: ClipboardList,
+  activity: Activity,
+};
+
+export function getSectionIcon(sectionName) {
+  if (!sectionName || typeof sectionName !== 'string') return null;
+  return SECTION_ICONS[sectionName.trim().toLowerCase()] || null;
+}
+
+// Timeline node icon: section icon first (matches the side drawer),
+// then the action icon, then the generic Activity fallback.
+export function getTimelineIcon(entry) {
+  return (
+    getSectionIcon(entry?.metadata?.section_name) ||
+    getActivityIcon(entry?.action) ||
+    Activity
+  );
 }

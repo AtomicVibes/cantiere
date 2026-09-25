@@ -14,6 +14,8 @@ import {
   rangeStart,
   summarizeAgents,
   getActivityIcon,
+  getSectionIcon,
+  getTimelineIcon,
   ONLINE_WINDOW_MS,
   IDLE_WINDOW_MS,
 } from './agentActivity.js';
@@ -127,8 +129,7 @@ describe('central activity icon mapping', () => {
     assert.ok(src.includes('getActivityIcon'), 'central resolver exported');
   });
 
-  it('every mapped icon resolves to a real component with fallback', () => {
-    const actions = [
+  it('every mapped icon resolves to a real component with fallback', () => {    const actions = [
       'session_login', 'session_logout', 'project_view', 'PROJECT_CREATED',
       'PROJECT_UPDATED', 'DOCUMENT_UPLOADED', 'document_view', 'DOCUMENT_UPDATED',
       'DOCUMENT_DELETED', 'EVENT_CREATED', 'EVENT_UPDATED', 'request_created',
@@ -144,5 +145,52 @@ describe('central activity icon mapping', () => {
     }
     assert.equal(getActivityIcon('totally_unknown_xyz'), getActivityIcon(null));
     assert.equal(getActivityIcon(undefined), getActivityIcon(''));
+  });
+});
+
+describe('sidebar section icons for timeline nodes', () => {
+  it('resolves every drawer section case-insensitively', async () => {
+    const L = await import('lucide-react');
+    const cases = {
+      Dashboard: 'LayoutDashboard',
+      Projects: 'FolderKanban',
+      'Project Detail': 'FolderKanban',
+      Teams: 'Users',
+      Clients: 'UserCircle',
+      Messages: 'MessageSquare',
+      Notifications: 'Bell',
+      Finance: 'DollarSign',
+      Calendar: 'Calendar',
+      Reports: 'BarChart3',
+      Documents: 'FileText',
+      Settings: 'Settings',
+      Logs: 'ScrollText',
+      Requests: 'ClipboardList',
+    };
+    for (const [section, exportName] of Object.entries(cases)) {
+      const Icon = getSectionIcon(section);
+      assert.ok(Icon, `icon for ${section}`);
+      assert.strictEqual(Icon, L[exportName], `${section} reuses sidebar icon`);
+      assert.strictEqual(getSectionIcon(section.toUpperCase()), L[exportName], `${section} case-insensitive`);
+    }
+    assert.equal(getSectionIcon('Nope'), null);
+    assert.equal(getSectionIcon(null), null);
+    assert.equal(getSectionIcon(''), null);
+  });
+
+  it('timeline prefers section, then action, then fallback', () => {
+    const section = getTimelineIcon({ action: 'message', metadata: { section_name: 'Documents' } });
+    assert.equal(section.displayName || section.name, 'FileText');
+    const action = getTimelineIcon({ action: 'DOCUMENT_UPLOADED', metadata: {} });
+    assert.equal(action.displayName || action.name, 'FileUp');
+    const fallback = getTimelineIcon({ action: '???', metadata: {} });
+    assert.equal(fallback.displayName || fallback.name, 'Activity');
+    const empty = getTimelineIcon(null);
+    assert.equal(empty.displayName || empty.name, 'Activity');
+  });
+
+  it('dashboard renders section icons on timeline nodes', () => {
+    const src = read('src/components/teams/AgentActivityDashboard.jsx');
+    assert.ok(src.includes('getTimelineIcon(entry)'), 'node uses resolver');
   });
 });

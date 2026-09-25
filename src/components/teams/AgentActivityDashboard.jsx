@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  formatDuration, rangeStart, summarizeAgents, getActivityIcon,
+  formatDuration, rangeStart, summarizeAgents, getTimelineIcon,
 } from '@/lib/agentActivity';
 
 const PAGE_SIZE = 50;
@@ -199,7 +199,7 @@ export function AgentFeedPanel({ userId, userName, since, active, t }) {
         {(feedQuery.data ?? []).map((entry) => {
           const metadata = entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {};
           const headline = metadata.file_name || metadata.section_name || null;
-          const Icon = getActivityIcon(entry.action);
+          const Icon = getTimelineIcon(entry);
           return (
             <li key={entry.id} className="relative pl-8 pb-4 last:pb-1">
               <span aria-hidden className="absolute left-0 top-0.5 -translate-x-1/2 w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center">
