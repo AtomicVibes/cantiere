@@ -19,7 +19,7 @@ function emptyFilters() {
   };
 }
 
-export default function ReportsPanel({ budgets, expenses, refunds, categories, projects }) {
+export default function ReportsPanel({ budgets, expenses, refunds, categories, projects, onAudit }) {
   const { t } = useTranslation();
   const [filters, setFilters] = React.useState(emptyFilters());
   const [exporting, setExporting] = React.useState(false);
@@ -106,6 +106,7 @@ export default function ReportsPanel({ budgets, expenses, refunds, categories, p
       }
       const summaryRows = buildBudgetSummaryRows(budgets, totalsByBudget);
       await exportBudgetExpensesToExcel(expenseRows, summaryRows, `budget-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      await onAudit?.('BUDGET_EXPORTED', 'Budget report exported', { rows: expenseRows.length });
       toast.success(t('exportSuccess') || 'Export ready.');
     } catch (err) {
       logAppError('Budget', err, { operation: 'export-excel' });

@@ -274,7 +274,7 @@ export default function BudgetSection() {
             <RefundManager refunds={refunds} expenses={expenses} projects={projects} categories={categories} onChanged={invalidateAll} onAudit={writeBudgetAudit} onNotify={notifyBudgetAlert} />
           </TabsContent>
           <TabsContent value="reports">
-            <ReportsPanel budgets={budgets} expenses={expenses} refunds={refunds} categories={categories} projects={projects} />
+            <ReportsPanel budgets={budgets} expenses={expenses} refunds={refunds} categories={categories} projects={projects} onAudit={writeBudgetAudit} />
           </TabsContent>
         </Tabs>
       )}

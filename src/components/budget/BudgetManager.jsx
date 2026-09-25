@@ -157,7 +157,9 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
     try {
       const { error } = await supabase.from('budgets').update({ status, updated_by: user?.id || null }).eq('id', budget.id);
       if (error) throw error;
-      await onAudit(status === 'archived' ? 'BUDGET_ARCHIVED' : 'BUDGET_UPDATED', `Budget ${status}`, { id: budget.id, name: budget.name });
+      const wasArchived = budget.status === 'archived';
+      const action = status === 'archived' ? 'BUDGET_ARCHIVED' : wasArchived ? 'BUDGET_RESTORED' : 'BUDGET_UPDATED';
+      await onAudit(action, `Budget ${status}`, { id: budget.id, name: budget.name });
       if (status === 'closed') {
         await onNotify(`Budget "${budget.name}" was closed.`);
       }

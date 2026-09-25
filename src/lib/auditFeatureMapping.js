@@ -8,6 +8,7 @@ import {
   Settings2,
   Shield,
   Users,
+  Wallet,
 } from 'lucide-react';
 
 const FEATURE_RULES = [
@@ -15,6 +16,7 @@ const FEATURE_RULES = [
   { match: /^DOCUMENT_/, icon: FileText, name: 'Documents' },
   { match: /^CLIENT_|^ACCOUNT_/, icon: Users, name: 'Clients' },
   { match: /^INVOICE_/, icon: Receipt, name: 'Invoices' },
+  { match: /^BUDGET_|^EXPENSE_|^REFUND_|^RECURRING_|^CATEGORY_/, icon: Wallet, name: 'Finance' },
   { match: /^EVENT_/, icon: CalendarDays, name: 'Events' },
   { match: /^REQUEST_/, icon: ClipboardList, name: 'Requests' },
   { match: /^MEMBER_|^ROLE_/, icon: Shield, name: 'Users & Roles' },
