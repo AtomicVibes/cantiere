@@ -167,6 +167,25 @@ describe('pipeline wiring', () => {
     assert.ok(!/VAPID_PRIVATE|SERVICE_ROLE|TEXTBEE|service-role/i.test(hook), 'no secrets referenced');
   });
 
+  it('never chains .catch() on supabase builders (thenables without catch)', () => {
+    const hook = read('src/hooks/usePushNotification.js');
+    assert.ok(!/supabase\.(rpc|from)\([^;]*?\)\.catch\(/.test(hook), 'no .catch on builders');
+    assert.ok(hook.includes('const { error: claimError } = await supabase.rpc('), 'claim awaited with error field');
+  });
+
+  it('lookup failure preserves the browser subscription (failure != stale)', () => {
+    const hook = read('src/hooks/usePushNotification.js');
+    assert.ok(hook.includes('lookupFailed'), 'failure state tracked');
+    assert.ok(
+      hook.includes('!lookupFailed && !serverKnowsEndpoint'),
+      'discard requires a successful lookup proving unknown status'
+    );
+    assert.ok(
+      hook.includes('Lookup failure') && hook.includes('keep the browser subscription'),
+      'intent documented'
+    );
+  });
+
   it('VAPID subject is always a valid URL, never a bare email', () => {
     const fn = read('supabase/functions/send-push/index.ts');
     assert.ok(fn.includes('resolveVapidSubject'), 'subject resolution centralized');

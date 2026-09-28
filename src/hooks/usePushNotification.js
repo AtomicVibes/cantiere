@@ -115,29 +115,41 @@ export async function subscribeUserToPush(userId) {
         ? localStorage.getItem('geometra-push-vapid-key')
         : VITE_VAPID_PUBLIC_KEY;
       let serverKnowsEndpoint = true;
+      let lookupFailed = false;
       try {
         // Adopt-then-verify: on a shared device this endpoint may belong to
         // another account. Claiming transfers it via the designed RPC instead
         // of destroying it; only an endpoint unknown to everyone is replaced.
-        await supabase.rpc('claim_push_subscription', { p_endpoint: existingSub.endpoint }).catch(() => {});
+        // NOTE: supabase-js builders are thenables WITHOUT a .catch()
+        // method, so the RPC must be awaited inside try/catch — chaining
+        // .catch() throws "not a function" and would wrongly mark a healthy
+        // subscription as unknown.
+        try {
+          const { error: claimError } = await supabase.rpc('claim_push_subscription', { p_endpoint: existingSub.endpoint });
+          if (claimError) console.error('Push: claim failed', claimError);
+        } catch (claimError) {
+          console.error('Push: claim failed', claimError);
+        }
         const { data: ownRows, error: rowsError } = await supabase
           .from('push_subscriptions')
           .select('subscription')
           .eq('user_id', userId);
-        if (!rowsError) {
-          const endpoint = existingSub.endpoint;
-          serverKnowsEndpoint = (ownRows || []).some((row) => {
-            const stored = row?.subscription;
-            const storedEndpoint = typeof stored === 'string'
-              ? (() => { try { return JSON.parse(stored).endpoint; } catch { return null; } })()
-              : stored?.endpoint;
-            return !!storedEndpoint && storedEndpoint === endpoint;
-          });
-        }
+        if (rowsError) throw rowsError;
+        const endpoint = existingSub.endpoint;
+        serverKnowsEndpoint = (ownRows || []).some((row) => {
+          const stored = row?.subscription;
+          const storedEndpoint = typeof stored === 'string'
+            ? (() => { try { return JSON.parse(stored).endpoint; } catch { return null; } })()
+            : stored?.endpoint;
+          return !!storedEndpoint && storedEndpoint === endpoint;
+        });
       } catch (lookupError) {
+        // Lookup failure ≠ stale subscription: keep the browser subscription
+        // intact and retry verification on the next load.
+        lookupFailed = true;
         console.error('Push: subscription lookup failed', lookupError);
       }
-      if ((knownKey && knownKey !== VITE_VAPID_PUBLIC_KEY) || !serverKnowsEndpoint) {
+      if ((knownKey && knownKey !== VITE_VAPID_PUBLIC_KEY) || (!lookupFailed && !serverKnowsEndpoint)) {
         console.warn('Push: discarding stale browser subscription (key rotated or unknown server-side)');
         await existingSub.unsubscribe().catch(() => {});
         existingSub = null;
