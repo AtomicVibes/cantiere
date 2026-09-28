@@ -194,4 +194,68 @@ describe('pipeline wiring', () => {
     assert.ok(fn.includes('vapid_subject_is_valid_url'), 'probe reports validity');
     assert.ok(!/VAPID_SUBJECT\s*=\s*['"][^'"]*@[^'"]*['"]/.test(fn), 'no bare-email default in source');
   });
+
+  it('sender resolves an existing subscription by user_id and only that', () => {
+    const fn = read('supabase/functions/send-push/index.ts');
+    const start = fn.indexOf("from('push_subscriptions')");
+    const end = fn.indexOf('if (subError)');
+    assert.ok(start >= 0 && end > start, 'lookup block located');
+    const fetchBlock = fn.slice(start, end);
+    assert.ok(fetchBlock.includes("select('id, subscription')"), 'selects id + payload');
+    assert.ok(fetchBlock.includes(".eq('user_id', receiverId)"), 'filters by user_id');
+    assert.equal(
+      (fetchBlock.match(/\.eq\(/g) || []).length,
+      1,
+      'user_id is the ONLY filter on the subscription lookup'
+    );
+    assert.ok(fn.includes('if (caller === \'internal\')') && fn.includes('receiverId = body?.receiver_id'),
+      'receiver_id flows from the trigger payload');
+  });
+
+  it('delivery attempts every subscription returned for the user', () => {
+    const fn = read('supabase/functions/send-push/index.ts');
+    assert.ok(fn.includes('subscriptions.map('), 'iterates all rows');
+    assert.ok(fn.includes('total: subscriptions.length'), 'reports the full count');
+  });
+
+  it('zero subscriptions still reports No subscriptions found', () => {
+    const fn = read('supabase/functions/send-push/index.ts');
+    assert.ok(fn.includes('subscriptions.length === 0'), 'guarded on empty result');
+    assert.ok(fn.includes("error: 'No subscriptions found'"), 'skip message preserved');
+  });
+
+  it('database query errors are never converted into No subscriptions found', () => {
+    const fn = read('supabase/functions/send-push/index.ts');
+    const errIdx = fn.indexOf('if (subError)');
+    const emptyIdx = fn.indexOf('subscriptions.length === 0');
+    assert.ok(errIdx >= 0 && emptyIdx > errIdx, 'error branch precedes the empty-result branch');
+    const errBlock = fn.slice(errIdx, emptyIdx);
+    assert.ok(errBlock.includes("return respond({ error: 'Failed to fetch subscriptions' }, 500)"),
+      'query error returns 500 before the empty check');
+    assert.ok(errBlock.includes('Subscription lookup failed'), 'query error logged distinctly');
+    assert.ok(!errBlock.includes('No subscriptions found'), 'error path never writes the empty message');
+  });
+
+  it('disabled push preference is reported distinctly from missing subscriptions', () => {
+    const fn = read('supabase/functions/send-push/index.ts');
+    assert.ok(fn.includes("profile.push_notifications_enabled === false"), 'preference checked separately');
+    assert.ok(fn.includes("error: 'Push disabled by user preference'"), 'distinct preference reason');
+    const prefIdx = fn.indexOf('Push disabled by user preference');
+    const emptyIdx = fn.indexOf('No subscriptions found');
+    assert.ok(prefIdx >= 0 && prefIdx < emptyIdx, 'preference short-circuit happens, not masked as empty');
+  });
+
+  it('stale subscription removal is logged before the row is deleted (FK safety)', () => {
+    const fn = read('supabase/functions/send-push/index.ts');
+    const staleLogIdx = fn.indexOf("status: 'stale_removed',");
+    const deleteIdx = fn.indexOf('.delete()');
+    assert.ok(staleLogIdx >= 0, 'stale removal logged');
+    assert.ok(deleteIdx >= 0, 'stale row cleanup still present');
+    assert.ok(staleLogIdx < deleteIdx,
+      'log precedes delete — logging afterwards violates subscription_id FK and hides the deletion');
+    const callStart = fn.lastIndexOf('await writeLog({', staleLogIdx);
+    const branch = fn.slice(callStart, deleteIdx);
+    assert.ok(branch.includes('subscription_id: sub.id'), 'stale log carries the subscription id');
+    assert.ok(fn.includes('[400, 401, 403, 404, 410]'), 'permanent-failure statuses unchanged');
+  });
 });

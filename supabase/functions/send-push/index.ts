@@ -142,6 +142,20 @@ serve(async (req) => {
 
   if (subError) {
     console.error('Error fetching subscriptions:', subError);
+    // A failed lookup must NEVER look like "no subscriptions": record it
+    // as failed so push_delivery_log distinguishes query errors (diagnose
+    // RLS/connectivity/schema) from genuinely empty results.
+    try {
+      await supabase.from('push_delivery_log').insert({
+        notification_id: notification_id || null,
+        user_id: receiverId,
+        subscription_id: null,
+        status: 'failed',
+        error: `Subscription lookup failed: ${safeMessage(subError)}`,
+      });
+    } catch (logErr) {
+      console.error('Failed to write push delivery log:', logErr);
+    }
     return respond({ error: 'Failed to fetch subscriptions' }, 500);
   }
 
@@ -155,6 +169,17 @@ serve(async (req) => {
 
   if (profileError) {
     console.error('Error fetching push preference:', profileError);
+    try {
+      await supabase.from('push_delivery_log').insert({
+        notification_id: notification_id || null,
+        user_id: receiverId,
+        subscription_id: null,
+        status: 'failed',
+        error: `Preference lookup failed: ${safeMessage(profileError)}`,
+      });
+    } catch (logErr) {
+      console.error('Failed to write push delivery log:', logErr);
+    }
     return respond({ error: 'Failed to fetch push preference' }, 500);
   }
 
@@ -227,6 +252,17 @@ serve(async (req) => {
           // never succeed again, so remove it; the browser re-subscribes on
           // next enable and the fresh endpoint is persisted + claimed.
           if ([400, 401, 403, 404, 410].includes(err.statusCode)) {
+            // Log BEFORE deleting: push_delivery_log.subscription_id references
+            // push_subscriptions(id), so logging after the delete violates the
+            // FK, the insert silently fails, and the deletion becomes invisible.
+            // The next notification then reports "No subscriptions found" with
+            // no trace of why the row disappeared (observed live 2026-09-28).
+            await writeLog({
+              user_id: receiverId,
+              subscription_id: sub.id,
+              status: 'stale_removed',
+              error: safeMessage(err),
+            });
             const { error: deleteError } = await supabase
               .from('push_subscriptions')
               .delete()
@@ -236,12 +272,6 @@ serve(async (req) => {
             } else {
               console.log('Deleted stale subscription', sub.id, `status ${err.statusCode}`);
             }
-            await writeLog({
-              user_id: receiverId,
-              subscription_id: sub.id,
-              status: 'stale_removed',
-              error: safeMessage(err),
-            });
           } else {
             await writeLog({
               user_id: receiverId,
