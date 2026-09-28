@@ -154,4 +154,13 @@ describe('pipeline wiring', () => {
       'verification reuses the existing table, no new endpoint'
     );
   });
+
+  it('VAPID subject is always a valid URL, never a bare email', () => {
+    const fn = read('supabase/functions/send-push/index.ts');
+    assert.ok(fn.includes('resolveVapidSubject'), 'subject resolution centralized');
+    assert.ok(fn.includes('mailto:${'), 'bare contact emails normalized to mailto:');
+    assert.ok(fn.includes('isValidVapidSubject'), 'validity check exists');
+    assert.ok(fn.includes('vapid_subject_is_valid_url'), 'probe reports validity');
+    assert.ok(!/VAPID_SUBJECT\s*=\s*['"][^'"]*@[^'"]*['"]/.test(fn), 'no bare-email default in source');
+  });
 });

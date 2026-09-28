@@ -6,7 +6,28 @@ const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
 const supabaseServiceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')!;
 const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')!;
-const vapidSubject = Deno.env.get('VAPID_SUBJECT') || Deno.env.get('VAPID_CONTACT_EMAIL') || 'mailto:notifications@geometra.app';
+
+// VAPID subject must be a valid URL (https:) or mailto: URI — the push
+// library rejects bare emails ("Vapid subject is not a valid URL").
+// Resolution order keeps every existing deployment working: explicit
+// VAPID_SUBJECT wins, then the contact email (normalized to mailto:),
+// then a built-in default. Never invents a domain.
+function resolveVapidSubject(): string {
+  const raw = (
+    Deno.env.get('VAPID_SUBJECT') ||
+    Deno.env.get('VAPID_CONTACT_EMAIL') ||
+    'mailto:notifications@geometra.app'
+  ).trim();
+  if (/^(https?:|mailto:)/i.test(raw)) return raw;
+  if (raw.includes('@')) return `mailto:${raw}`;
+  return raw;
+}
+
+function isValidVapidSubject(value: string): boolean {
+  return /^(https?:\/\/[^/]+\..+|mailto:[^@\s]+@[^@\s]+\.[^@\s]+)$/i.test(value.trim());
+}
+
+const vapidSubject = resolveVapidSubject();
 const internalPushToken = Deno.env.get('INTERNAL_PUSH_TOKEN')!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceRoleKey);
@@ -53,6 +74,8 @@ serve(async (req) => {
       service: 'send-push',
       version: 'v34-health',
       vapid_configured: Boolean(vapidPublicKey && vapidPrivateKey),
+      vapid_subject_configured: vapidSubject.length > 0,
+      vapid_subject_is_valid_url: isValidVapidSubject(vapidSubject),
       db_reachable: dbOk,
       time: new Date().toISOString(),
     });
