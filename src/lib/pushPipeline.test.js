@@ -41,6 +41,19 @@ describe('VAPID key consistency', () => {
     assert.ok(!sw.includes('BI2IpPMmOWwihtC8OAeSvXqKuApewLTdDW6HozdYwgG3oHJvNeOWeiF8KRR2mEWPi8OVpjyaagI86gZpURSb_vg'));
     assert.ok(!wrangler.includes('BI2IpPMmOWwihtC8OAeSvXqKuApewLTdDW6HozdYwgG3oHJvNeOWeiF8KRR2mEWPi8OVpjyaagI86gZpURSb_vg'));
   });
+
+  it('build pins VITE_VAPID_PUBLIC_KEY to wrangler.jsonc over any injected value', () => {
+    const cfg = read('vite.config.js');
+    const pinIdx = cfg.indexOf('process.env.VITE_VAPID_PUBLIC_KEY = canonicalVapid');
+    const loadIdx = cfg.indexOf('loadEnv(');
+    assert.ok(pinIdx >= 0, 'vite.config pins the canonical key into process.env');
+    assert.ok(pinIdx < loadIdx, 'pin runs before loadEnv so the forced value wins over stale CI env');
+    assert.ok(cfg.includes("wrangler.jsonc"), 'wrangler.jsonc is the source of truth');
+    assert.ok(cfg.includes('Overriding stale injected VITE_VAPID_PUBLIC_KEY'),
+      'a mismatched injected key is reported, not silently shipped');
+    assert.ok(!cfg.includes('BI2IpPMmOWwihtC8OAeSvXqKuApewLTdDW6HozdYwgG3oHJvNeOWeiF8KRR2mEWPi8OVpjyaagI86gZpURSb_vg'),
+      'the stale production key must never reappear in build config');
+  });
 });
 
 describe('service worker route mirror', () => {
