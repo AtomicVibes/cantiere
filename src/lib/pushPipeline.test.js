@@ -153,6 +153,18 @@ describe('pipeline wiring', () => {
       hook.includes("from('push_subscriptions')") && hook.includes('.select('),
       'verification reuses the existing table, no new endpoint'
     );
+    assert.ok(
+      hook.includes("rpc('claim_push_subscription'"),
+      'shared-device endpoints are claimed, not destroyed'
+    );
+  });
+
+  it('diagnostics helper reports safe booleans only', () => {
+    const hook = read('src/hooks/usePushNotification.js');
+    assert.ok(hook.includes('export async function getPushDiagnostics'), 'helper exported');
+    assert.ok(hook.includes('endpointHash'), 'endpoint redacted to a hash');
+    assert.ok(!/console\.log\(.*endpoint[^H]/.test(hook), 'no raw endpoint logging');
+    assert.ok(!/VAPID_PRIVATE|SERVICE_ROLE|TEXTBEE|service-role/i.test(hook), 'no secrets referenced');
   });
 
   it('VAPID subject is always a valid URL, never a bare email', () => {

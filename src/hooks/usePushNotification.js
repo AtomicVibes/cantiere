@@ -116,6 +116,10 @@ export async function subscribeUserToPush(userId) {
         : VITE_VAPID_PUBLIC_KEY;
       let serverKnowsEndpoint = true;
       try {
+        // Adopt-then-verify: on a shared device this endpoint may belong to
+        // another account. Claiming transfers it via the designed RPC instead
+        // of destroying it; only an endpoint unknown to everyone is replaced.
+        await supabase.rpc('claim_push_subscription', { p_endpoint: existingSub.endpoint }).catch(() => {});
         const { data: ownRows, error: rowsError } = await supabase
           .from('push_subscriptions')
           .select('subscription')
@@ -187,6 +191,59 @@ export async function subscribeUserToPush(userId) {
   }
 
   return sub;
+}
+
+// On-demand diagnostics for DevTools (never auto-run, never noisy).
+// Returns safe booleans only: permission state, worker/subscription
+// presence, a truncated SHA-256 of the endpoint (never the endpoint or
+// keys), and whether the server knows it. Usage:
+//   (await import('@/hooks/usePushNotification')).getPushDiagnostics().then(console.log)
+export async function getPushDiagnostics() {
+  const result = {
+    permission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+    serviceWorkerReady: false,
+    hasSubscription: false,
+    endpointHash: null,
+    vapidFingerprintStored: null,
+    vapidFingerprintCurrent: false,
+    serverKnowsEndpoint: null,
+  };
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return result;
+    const reg = await navigator.serviceWorker.ready;
+    result.serviceWorkerReady = true;
+    const sub = await reg.pushManager.getSubscription().catch(() => null);
+    result.hasSubscription = !!sub?.endpoint;
+    if (sub?.endpoint && typeof crypto?.subtle?.digest === 'function') {
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sub.endpoint));
+      result.endpointHash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+    }
+    try {
+      const stored = localStorage.getItem('geometra-push-vapid-key');
+      result.vapidFingerprintStored = stored ? `${stored.slice(0, 8)}…` : null;
+      result.vapidFingerprintCurrent = stored === VITE_VAPID_PUBLIC_KEY;
+    } catch {
+      // Storage unreadable: leave fingerprint fields null.
+    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data, error } = await supabase.from('push_subscriptions').select('subscription').eq('user_id', user.id);
+        if (!error) {
+          result.serverKnowsEndpoint = (data || []).some((row) => {
+            const s = row?.subscription;
+            const ep = typeof s === 'string' ? (() => { try { return JSON.parse(s).endpoint; } catch { return null; } })() : s?.endpoint;
+            return !!ep && ep === sub?.endpoint;
+          });
+        }
+      }
+    } catch {
+      // Lookup failure leaves serverKnowsEndpoint null (unknown, not false).
+    }
+  } catch (err) {
+    console.error('Push: diagnostics failed', err);
+  }
+  return result;
 }
 
 // Reclaims the current browser endpoint for the signed-in user WITHOUT
