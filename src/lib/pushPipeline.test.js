@@ -145,5 +145,13 @@ describe('pipeline wiring', () => {
       hook.indexOf('unsubscribe') > hook.indexOf('getSubscription'),
       'discard happens after reading the existing subscription'
     );
+    assert.ok(
+      hook.includes('serverKnowsEndpoint'),
+      'unknown server-side endpoints trigger a fresh subscribe (covers pre-fix browsers with no stored fingerprint)'
+    );
+    assert.ok(
+      hook.includes("from('push_subscriptions')") && hook.includes('.select('),
+      'verification reuses the existing table, no new endpoint'
+    );
   });
 });

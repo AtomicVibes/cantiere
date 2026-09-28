@@ -103,14 +103,38 @@ export async function subscribeUserToPush(userId) {
     // A subscription created under a previous VAPID key is cryptographically
     // dead: the sender signs with the current keypair, the push service
     // rejects it, and the server deletes the row — while the browser keeps
-    // re-persisting the same dead endpoint. Detect the rotation locally via
-    // the stored key fingerprint and resubscribe fresh exactly once.
+    // re-persisting the same dead endpoint. Two local detectors break the
+    // loop (either one suffices):
+    //   1. Stored key fingerprint differs from the current VAPID key, or
+    //   2. The server no longer knows this endpoint (it was cleaned up as
+    //      stale, or was never persisted for this user). The user can read
+    //      their own rows, so this check needs no new endpoint and no
+    //      gesture; a healthy subscription is left completely untouched.
     try {
       const knownKey = typeof localStorage !== 'undefined'
         ? localStorage.getItem('geometra-push-vapid-key')
         : VITE_VAPID_PUBLIC_KEY;
-      if (knownKey && knownKey !== VITE_VAPID_PUBLIC_KEY) {
-        console.warn('Push: VAPID key rotated — discarding stale subscription');
+      let serverKnowsEndpoint = true;
+      try {
+        const { data: ownRows, error: rowsError } = await supabase
+          .from('push_subscriptions')
+          .select('subscription')
+          .eq('user_id', userId);
+        if (!rowsError) {
+          const endpoint = existingSub.endpoint;
+          serverKnowsEndpoint = (ownRows || []).some((row) => {
+            const stored = row?.subscription;
+            const storedEndpoint = typeof stored === 'string'
+              ? (() => { try { return JSON.parse(stored).endpoint; } catch { return null; } })()
+              : stored?.endpoint;
+            return !!storedEndpoint && storedEndpoint === endpoint;
+          });
+        }
+      } catch (lookupError) {
+        console.error('Push: subscription lookup failed', lookupError);
+      }
+      if ((knownKey && knownKey !== VITE_VAPID_PUBLIC_KEY) || !serverKnowsEndpoint) {
+        console.warn('Push: discarding stale browser subscription (key rotated or unknown server-side)');
         await existingSub.unsubscribe().catch(() => {});
         existingSub = null;
       }
