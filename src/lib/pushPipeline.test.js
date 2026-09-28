@@ -136,4 +136,14 @@ describe('pipeline wiring', () => {
     assert.match(mig, /enable row level security/);
     assert.ok(!/drop table/i.test(mig.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n')));
   });
+
+  it('rotated VAPID keys discard dead endpoints instead of re-persisting them', () => {
+    const hook = read('src/hooks/usePushNotification.js');
+    assert.ok(hook.includes('geometra-push-vapid-key'), 'key fingerprint tracked');
+    assert.ok(hook.includes('.unsubscribe('), 'stale endpoint discarded');
+    assert.ok(
+      hook.indexOf('unsubscribe') > hook.indexOf('getSubscription'),
+      'discard happens after reading the existing subscription'
+    );
+  });
 });

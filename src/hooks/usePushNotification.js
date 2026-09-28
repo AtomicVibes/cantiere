@@ -100,6 +100,25 @@ export async function subscribeUserToPush(userId) {
     console.error('Push: getSubscription failed', err);
   }
   if (existingSub) {
+    // A subscription created under a previous VAPID key is cryptographically
+    // dead: the sender signs with the current keypair, the push service
+    // rejects it, and the server deletes the row — while the browser keeps
+    // re-persisting the same dead endpoint. Detect the rotation locally via
+    // the stored key fingerprint and resubscribe fresh exactly once.
+    try {
+      const knownKey = typeof localStorage !== 'undefined'
+        ? localStorage.getItem('geometra-push-vapid-key')
+        : VITE_VAPID_PUBLIC_KEY;
+      if (knownKey && knownKey !== VITE_VAPID_PUBLIC_KEY) {
+        console.warn('Push: VAPID key rotated — discarding stale subscription');
+        await existingSub.unsubscribe().catch(() => {});
+        existingSub = null;
+      }
+    } catch (err) {
+      console.error('Push: stale subscription check failed', err);
+    }
+  }
+  if (existingSub) {
     try {
       await persistSubscription(userId, existingSub);
     } catch (err) {
@@ -133,6 +152,14 @@ export async function subscribeUserToPush(userId) {
   } catch (err) {
     console.error('Push: DB upsert failed', err);
     return null;
+  }
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('geometra-push-vapid-key', VITE_VAPID_PUBLIC_KEY);
+    }
+  } catch {
+    // Storage failure must not break an otherwise working subscription.
   }
 
   return sub;
@@ -188,6 +215,13 @@ export function startPushSubscriptionRelay() {
           );
         await supabase
           .rpc('claim_push_subscription', { p_endpoint: subscription.endpoint });
+        try {
+          if (typeof localStorage !== 'undefined' && VITE_VAPID_PUBLIC_KEY) {
+            localStorage.setItem('geometra-push-vapid-key', VITE_VAPID_PUBLIC_KEY);
+          }
+        } catch {
+          // Marker is best-effort only.
+        }
       } catch (err) {
         console.error('Push: relay persist failed', err);
       }
