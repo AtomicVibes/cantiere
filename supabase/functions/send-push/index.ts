@@ -38,6 +38,26 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // Auth-free liveness probe. Reports booleans only: no keys, no tokens,
+  // no subscription data. Lets operators confirm WHICH code is deployed
+  // and that runtime config + database are reachable.
+  if (req.method === 'GET') {
+    let dbOk = false;
+    try {
+      const { error } = await supabase.from('push_subscriptions').select('id', { head: true, count: 'exact' }).limit(0);
+      dbOk = !error;
+    } catch {
+      dbOk = false;
+    }
+    return respond({
+      service: 'send-push',
+      version: 'v34-health',
+      vapid_configured: Boolean(vapidPublicKey && vapidPrivateKey),
+      db_reachable: dbOk,
+      time: new Date().toISOString(),
+    });
+  }
+
   if (req.method !== 'POST') {
     return respond({ error: 'Method not allowed' }, 405);
   }
