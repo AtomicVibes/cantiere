@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import StatCard from '@/components/dashboard/StatCard';
 import { Wallet, PiggyBank, Receipt, Hourglass, Undo2, Percent } from 'lucide-react';
-import { computeScopeTotals, formatMoney, DEFAULT_CURRENCY } from '@/lib/budgetMath';
+import { computeScopeTotals, budgetScope, formatMoney, DEFAULT_CURRENCY } from '@/lib/budgetMath';
 
 const PIE_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#14B8A6', '#EC4899', '#64748B'];
 
@@ -14,11 +14,10 @@ export default function BudgetOverview({ budgets, expenses, refunds, categories,
   const { t } = useTranslation();
 
   const totals = React.useMemo(() => {
-    const globals = (budgets || []).filter((b) => !b.parent_budget_id && b.status !== 'archived');
-    const subs = (budgets || []).filter((b) => b.parent_budget_id && b.status !== 'archived');
-    const total = globals.reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
-    const allocated = subs.reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
-    return { ...computeScopeTotals({ total, allocated, expenses, refunds }), currency: globals[0]?.currency || DEFAULT_CURRENCY };
+    // Global pool via the shared resolver: non-archived globals + direct
+    // carve-outs (no depth-2 double counting).
+    const scope = budgetScope(budgets, null);
+    return { ...computeScopeTotals({ total: scope.total, allocated: scope.allocated, expenses, refunds }), currency: scope.currency || DEFAULT_CURRENCY };
   }, [budgets, expenses, refunds]);
 
   const categoryName = React.useCallback(

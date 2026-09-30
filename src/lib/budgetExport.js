@@ -2,7 +2,7 @@
 // Row builders are exported separately so a future Google Sheets sync can
 // reuse the exact same shaped rows without touching export logic.
 
-export function buildExpenseRows(expenses, refunds, { resolveCategory, resolveProject, resolveBudget } = {}) {
+export function buildExpenseRows(expenses, refunds, { resolveCategory, resolveProject, resolveBudget, resolveSubBudget } = {}) {
   const byExpense = new Map();
   for (const r of refunds || []) {
     if (!r || r.status === 'cancelled') continue;
@@ -20,7 +20,7 @@ export function buildExpenseRows(expenses, refunds, { resolveCategory, resolvePr
       category: resolveCategory ? resolveCategory(e.category_id) : e.category_id || '',
       subcategory: resolveCategory && e.subcategory_id ? resolveCategory(e.subcategory_id) : e.subcategory_id || '',
       budget: resolveBudget ? resolveBudget(e.budget_id) : e.budget_id || '',
-      sub_budget: '',
+      sub_budget: resolveSubBudget ? resolveSubBudget(e.budget_id) : '',
       project: resolveProject ? resolveProject(e.project_id) : e.project_id || '',
       vendor: e.vendor || '',
       expense_type: e.expense_type || '',
@@ -37,13 +37,13 @@ export function buildExpenseRows(expenses, refunds, { resolveCategory, resolvePr
   });
 }
 
-export function buildBudgetSummaryRows(budgets, totalsByBudget) {
+export function buildBudgetSummaryRows(budgets, totalsByBudget, { resolveParent } = {}) {
   return (budgets || []).map((b) => {
     const t = (totalsByBudget || {})[b.id] || {};
     return {
       budget_id: b.id || '',
       name: b.name || '',
-      parent: b.parent_budget_id || '',
+      parent: resolveParent ? resolveParent(b.parent_budget_id) : b.parent_budget_id || '',
       total: Number(b.total_amount) || 0,
       allocated: Number(t.allocated) || 0,
       spent: Number(t.spent) || 0,
@@ -51,7 +51,8 @@ export function buildBudgetSummaryRows(budgets, totalsByBudget) {
       refunded: Number(t.refunded) || 0,
       available: Number(t.available) || 0,
       remaining: Number(t.remaining) || 0,
-      utilization_pct: Number(t.utilization) || 0,
+      // null utilization (zero-total scope) stays blank instead of a fake 0%.
+      utilization_pct: t.utilization ?? '',
       currency: b.currency || 'EUR',
       status: b.status || '',
     };

@@ -284,7 +284,21 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
                       {(projects || []).find((p) => p.id === e.project_id)?.name || ''}
                     </TableCell>
                     <TableCell className="text-right font-semibold whitespace-nowrap">
-                      {formatMoney(netExpense(e, refunds), e.currency)}
+                      {(() => {
+                        // Gross amount keeps list == cards == reports table;
+                        // refunds are shown alongside instead of netting here.
+                        const refunded = refundedTotal(e, refunds);
+                        return (
+                          <>
+                            {formatMoney(e.amount, e.currency)}
+                            {refunded > 0 && (
+                              <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                                {t('budgetRefunded', 'Refunded')} {formatMoney(refunded, e.currency)}
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       <Badge variant="secondary" className="text-[10px] capitalize">{String(e.payment_status || '').replace(/_/g, ' ')}</Badge>

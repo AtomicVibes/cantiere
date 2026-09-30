@@ -14,10 +14,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Badge } from '@/components/ui/badge';
 import DatePicker from '@/components/ui/DatePicker';
 import EmptyState from '@/components/shared/EmptyState';
-import { computeScopeTotals, formatMoney, DEFAULT_CURRENCY, CURRENCY_OPTIONS } from '@/lib/budgetMath';
+import { computeScopeTotals, budgetScope, formatMoney, DEFAULT_CURRENCY, CURRENCY_OPTIONS } from '@/lib/budgetMath';
 import { toast } from 'sonner';
 
 const STATUSES = ['draft', 'active', 'paused', 'closed', 'archived'];
+
+// Zero-total scopes have undefined utilization (null): show Over Budget
+// when there is spend, an em dash otherwise — never a misleading 0%.
+function utilizationLabel(totals, t) {
+  if (totals.utilization != null) return `${totals.utilization}%`;
+  return totals.spent > 0 ? t('budgetOverBudget', 'Over Budget') : '—';
+}
 
 function emptyBudget(parentId = null, parentCurrency = null) {
   return {
@@ -41,11 +48,10 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
   const childrenOf = (id) => (budgets || []).filter((b) => b.parent_budget_id === id);
 
   function totalsFor(budgetId) {
-    const kids = childrenOf(budgetId);
-    const allocated = kids.reduce((s, k) => s + (Number(k.total_amount) || 0), 0);
-    const scoped = (expenses || []).filter((e) => e.budget_id === budgetId || kids.some((k) => k.id === e.budget_id));
-    const b = (budgets || []).find((x) => x.id === budgetId);
-    return { ...computeScopeTotals({ total: Number(b?.total_amount) || 0, allocated, expenses: scoped, refunds }), currency: b?.currency || DEFAULT_CURRENCY };
+    const scope = budgetScope(budgets, budgetId);
+    const ids = scope.budgetIds;
+    const scoped = (expenses || []).filter((e) => ids.has(e.budget_id));
+    return { ...computeScopeTotals({ total: scope.total, allocated: scope.allocated, expenses: scoped, refunds }), currency: scope.currency };
   }
 
   function siblingAllocated(parentId, excludeId) {
@@ -139,8 +145,11 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
       // Threshold check on save: notify when already at/above the threshold.
       if (payload.alert_threshold != null && savedId) {
         const totals = totalsFor(savedId);
-        if (totals.utilization >= Number(payload.alert_threshold)) {
-          await onNotify(`Budget "${payload.name}" is at ${totals.utilization}% utilization.`);
+        const utilization = totals.utilization == null
+          ? (totals.spent > 0 ? Number.POSITIVE_INFINITY : 0)
+          : totals.utilization;
+        if (utilization >= Number(payload.alert_threshold)) {
+          await onNotify(`Budget "${payload.name}" is at ${utilizationLabel(totals, t)} utilization.`);
         }
       }
       toast.success(t('save') || 'Save');
@@ -211,11 +220,12 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
             </div>
             <Badge variant="outline" className="text-xs capitalize">{budget.status}</Badge>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
             <div><p className="text-muted-foreground">{t('budgetAllocated', 'Allocated')}</p><p className="font-semibold">{formatMoney(totals.allocated, totals.currency)}</p></div>
             <div><p className="text-muted-foreground">{t('budgetSpent', 'Spent')}</p><p className="font-semibold">{formatMoney(totals.spent, totals.currency)}</p></div>
-            <div><p className="text-muted-foreground">{t('budgetRemaining', 'Remaining')}</p><p className="font-semibold">{formatMoney(totals.remaining, totals.currency)}</p></div>
-            <div><p className="text-muted-foreground">{t('budgetUtilization', 'Utilization')}</p><p className="font-semibold">{totals.utilization}%</p></div>
+            <div><p className="text-muted-foreground">{t('budgetCommitted', 'Committed')}</p><p className="font-semibold">{formatMoney(totals.committed, totals.currency)}</p></div>
+            <div><p className="text-muted-foreground">{t('budgetRemaining', 'Remaining')}</p><p className={`font-semibold ${totals.remaining < 0 ? 'text-destructive' : ''}`}>{formatMoney(totals.remaining, totals.currency)}</p></div>
+            <div><p className="text-muted-foreground">{t('budgetUtilization', 'Utilization')}</p><p className="font-semibold">{utilizationLabel(totals, t)}</p></div>
           </div>
           <div className="flex flex-wrap gap-1.5 pt-1">
             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => openEdit(budget)}>

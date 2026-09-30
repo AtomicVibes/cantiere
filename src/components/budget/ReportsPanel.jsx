@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import DatePicker from '@/components/ui/DatePicker';
-import { computeScopeTotals, formatMoney } from '@/lib/budgetMath';
+import { computeScopeTotals, formatMoney, budgetScope, buildCategoryReportRows, isCountedExpense } from '@/lib/budgetMath';
 import { buildExpenseRows, buildBudgetSummaryRows, exportBudgetExpensesToExcel } from '@/lib/budgetExport';
 import { logAppError } from '@/lib/userErrors';
 import { toast } from 'sonner';
@@ -39,57 +39,48 @@ export default function ReportsPanel({ budgets, expenses, refunds, categories, p
     [budgets]
   );
 
-  const filtered = React.useMemo(() => {
-    const vendor = filters.vendor.trim().toLowerCase();
-    return (expenses || []).filter((e) => {
-      if (e.archived) return false;
-      if (filters.budget_id !== 'all' && e.budget_id !== filters.budget_id) return false;
-      if (filters.project_id !== 'all' && e.project_id !== filters.project_id) return false;
-      if (filters.category_id !== 'all' && e.category_id !== filters.category_id && e.subcategory_id !== filters.category_id) return false;
-      if (filters.status !== 'all' && e.payment_status !== filters.status) return false;
-      if (filters.expense_type !== 'all' && e.expense_type !== filters.expense_type) return false;
-      if (vendor && !(e.vendor || '').toLowerCase().includes(vendor)) return false;
-      if (filters.date_from && (e.expense_date || '') < filters.date_from) return false;
-      if (filters.date_to && (e.expense_date || '') > filters.date_to) return false;
-      return true;
-    });
-  }, [expenses, filters]);
+  // Single shared predicate for cards, table and export (budget scope is
+  // applied separately via budgetScope so export can reuse it per budget).
+  const matchesFilters = React.useCallback((e, f) => {
+    if (e.archived) return false;
+    if (f.project_id !== 'all' && e.project_id !== f.project_id) return false;
+    if (f.category_id !== 'all' && e.category_id !== f.category_id && e.subcategory_id !== f.category_id) return false;
+    if (f.status !== 'all' && e.payment_status !== f.status) return false;
+    if (f.expense_type !== 'all' && e.expense_type !== f.expense_type) return false;
+    const vendor = f.vendor.trim().toLowerCase();
+    if (vendor && !(e.vendor || '').toLowerCase().includes(vendor)) return false;
+    if (f.date_from && (e.expense_date || '') < f.date_from) return false;
+    if (f.date_to && (e.expense_date || '') > f.date_to) return false;
+    return true;
+  }, []);
 
-  const totals = React.useMemo(
-    () => computeScopeTotals({ total: 0, allocated: 0, expenses: filtered, refunds }),
-    [filtered, refunds]
+  // Scope: selected budget includes ALL descendant sub-budgets (same
+  // resolver as Budgets tab, rules and export).
+  const scope = React.useMemo(
+    () => budgetScope(budgets, filters.budget_id === 'all' ? null : filters.budget_id),
+    [budgets, filters.budget_id]
   );
 
-  const byCategory = React.useMemo(() => {
-    const children = new Map((categories || []).map((c) => [c.id, c]));
-    const agg = new Map();
-    for (const e of filtered) {
-      if (e.payment_status === 'cancelled') continue;
-      let catId = e.category_id;
-      let guard = 0;
-      while (catId && children.get(catId)?.parent_category_id && guard < 10) {
-        catId = children.get(catId).parent_category_id;
-        guard += 1;
-      }
-      const key = categoryName(catId) || t('miscellaneous', 'Miscellaneous');
-      // Budget vs actual per top-level category: actual = net spent here.
-      const entry = agg.get(key) || { name: key, budget: 0, actual: 0 };
-      entry.actual += Number(e.amount) || 0;
-      agg.set(key, entry);
-    }
-    // Attribute sub-budget totals as the "budget" side where names match.
-    for (const b of budgets || []) {
-      const entry = agg.get(b.name);
-      if (entry) entry.budget += Number(b.total_amount) || 0;
-    }
-    return [...agg.values()].map((r) => ({
-      ...r,
-      budget: Math.round(r.budget * 100) / 100,
-      actual: Math.round(r.actual * 100) / 100,
-      variance: Math.round((r.budget - r.actual) * 100) / 100,
-      usage: r.budget > 0 ? Math.round((r.actual / r.budget) * 10000) / 100 : 0,
-    }));
-  }, [filtered, budgets, categories, categoryName, t]);
+  const filtered = React.useMemo(
+    () => (expenses || []).filter((e) => {
+      if (scope.budgetIds && !scope.budgetIds.has(e.budget_id)) return false;
+      return matchesFilters(e, filters);
+    }),
+    [expenses, scope, filters, matchesFilters]
+  );
+
+  // Cards and table share the same counted predicate (gross basis) so
+  // sum(table Actual) === card Spent by construction.
+  const totals = React.useMemo(
+    () => computeScopeTotals({ total: scope.total, allocated: scope.allocated, expenses: filtered, refunds }),
+    [scope, filtered, refunds]
+  );
+  const expenseCount = React.useMemo(() => filtered.filter(isCountedExpense).length, [filtered]);
+
+  const byCategory = React.useMemo(
+    () => buildCategoryReportRows({ expenses: filtered, categories }),
+    [filtered, categories]
+  );
 
   async function handleExport() {
     setExporting(true);
@@ -98,13 +89,25 @@ export default function ReportsPanel({ budgets, expenses, refunds, categories, p
         resolveCategory: categoryName,
         resolveProject: projectName,
         resolveBudget: budgetName,
+        resolveSubBudget: (budgetId) => {
+          const b = (budgets || []).find((x) => x.id === budgetId);
+          return b?.parent_budget_id ? budgetName(b.parent_budget_id) : '';
+        },
       });
+      // Summary sheet: identical non-budget filters as the visible table;
+      // with a budget filter only budgets in that scope are listed, so the
+      // exported totals equal the on-screen cards for the same selection.
+      const base = (expenses || []).filter((e) => matchesFilters(e, { ...filters, budget_id: 'all' }));
+      const visible = filters.budget_id === 'all'
+        ? budgets
+        : (budgets || []).filter((b) => scope.budgetIds.has(b.id));
       const totalsByBudget = {};
-      for (const b of budgets || []) {
-        const scoped = (expenses || []).filter((e) => e.budget_id === b.id);
-        totalsByBudget[b.id] = computeScopeTotals({ total: Number(b.total_amount) || 0, allocated: 0, expenses: scoped, refunds });
+      for (const b of visible || []) {
+        const bScope = budgetScope(budgets, b.id);
+        const scoped = base.filter((e) => bScope.budgetIds.has(e.budget_id));
+        totalsByBudget[b.id] = computeScopeTotals({ total: bScope.total, allocated: bScope.allocated, expenses: scoped, refunds });
       }
-      const summaryRows = buildBudgetSummaryRows(budgets, totalsByBudget);
+      const summaryRows = buildBudgetSummaryRows(visible, totalsByBudget, { resolveParent: budgetName });
       await exportBudgetExpensesToExcel(expenseRows, summaryRows, `budget-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
       await onAudit?.('BUDGET_EXPORTED', 'Budget report exported', { rows: expenseRows.length });
       toast.success(t('exportSuccess') || 'Export ready.');
@@ -180,11 +183,12 @@ export default function ReportsPanel({ budgets, expenses, refunds, categories, p
         <div><Label>{t('dateTo', 'To')}</Label><DatePicker value={filters.date_to} onChange={set('date_to')} allowClear /></div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetSpent', 'Spent')}</p><p className="font-bold">{formatMoney(totals.spent)}</p></div>
-        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetRefunded', 'Refunded')}</p><p className="font-bold">{formatMoney(totals.refunded)}</p></div>
-        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetRemaining', 'Remaining')}</p><p className="font-bold">{formatMoney(totals.remaining)}</p></div>
-        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetCount', 'Expenses')}</p><p className="font-bold">{filtered.length}</p></div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-sm">
+        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetSpent', 'Spent')}</p><p className="font-bold">{formatMoney(totals.spent, scope.currency)}</p></div>
+        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetCommitted', 'Committed')}</p><p className="font-bold">{formatMoney(totals.committed, scope.currency)}</p></div>
+        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetRefunded', 'Refunded')}</p><p className="font-bold">{formatMoney(totals.refunded, scope.currency)}</p></div>
+        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetRemaining', 'Remaining')}</p><p className={`font-bold ${totals.remaining < 0 ? 'text-destructive' : ''}`}>{formatMoney(totals.remaining, scope.currency)}</p></div>
+        <div className="bg-card rounded-lg border border-border p-3"><p className="text-xs text-muted-foreground">{t('budgetCount', 'Expenses')}</p><p className="font-bold">{expenseCount}</p></div>
       </div>
 
       <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -201,14 +205,18 @@ export default function ReportsPanel({ budgets, expenses, refunds, categories, p
             </TableHeader>
             <TableBody>
               {byCategory.map((row) => (
-                <TableRow key={row.name}>
-                  <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.budget)}</TableCell>
-                  <TableCell className="text-right">{formatMoney(row.actual)}</TableCell>
+                <TableRow key={row.key}>
+                  <TableCell className="font-medium">{row.name || t('miscellaneous', 'Miscellaneous')}</TableCell>
+                  <TableCell className="text-right">{formatMoney(row.budget, scope.currency)}</TableCell>
+                  <TableCell className="text-right">{formatMoney(row.actual, scope.currency)}</TableCell>
                   <TableCell className={`text-right font-semibold ${row.variance < 0 ? 'text-destructive' : 'text-emerald-600'}`}>
-                    {formatMoney(row.variance)}
+                    {formatMoney(row.variance, scope.currency)}
                   </TableCell>
-                  <TableCell className="text-right">{row.usage}%</TableCell>
+                  <TableCell className="text-right">
+                    {row.usage.zeroBudget
+                      ? (row.usage.over ? t('budgetOverBudget', 'Over Budget') : t('budgetNotSet', 'N/A'))
+                      : `${row.usage.pct}%`}
+                  </TableCell>
                 </TableRow>
               ))}
               {byCategory.length === 0 && (

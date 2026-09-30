@@ -1429,6 +1429,7 @@ export type Database = {
       budget_categories: {
         Row: {
           active: boolean
+          allocated_amount: number
           created_at: string | null
           created_by: string | null
           description: string | null
@@ -1441,6 +1442,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          allocated_amount?: number
           created_at?: string | null
           created_by?: string | null
           description?: string | null
@@ -1453,6 +1455,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          allocated_amount?: number
           created_at?: string | null
           created_by?: string | null
           description?: string | null

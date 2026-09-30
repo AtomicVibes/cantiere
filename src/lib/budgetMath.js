@@ -38,74 +38,187 @@ export function formatMoney(amount, currency = DEFAULT_CURRENCY, locale) {
   }
 }
 
-// Net expense = amount - refunds (refunds never mutate the original row).
-export function netExpense(expense, refunds = []) {
+function refundedCents(expense, refunds = []) {
   const list = Array.isArray(refunds) ? refunds : [];
-  const refunded = list
+  return list
     .filter((r) => r && r.expense_id === expense?.id && r.status !== 'cancelled')
     .reduce((s, r) => s + toCents(r.amount), 0);
-  return fromCents(toCents(expense?.amount) - refunded);
+}
+
+// Net expense = amount - refunds (refunds never mutate the original row).
+export function netExpense(expense, refunds = []) {
+  return fromCents(toCents(expense?.amount) - refundedCents(expense, refunds));
 }
 
 export function refundedTotal(expense, refunds = []) {
-  const list = Array.isArray(refunds) ? refunds : [];
-  return fromCents(
-    list
-      .filter((r) => r && r.expense_id === expense?.id && r.status !== 'cancelled')
-      .reduce((s, r) => s + toCents(r.amount), 0)
-  );
+  return fromCents(refundedCents(expense, refunds));
 }
 
-const COUNTED_STATUSES = new Set(['approved', 'paid', 'partially_paid', 'overdue', 'refunded', 'partially_refunded']);
-
-// An expense counts toward spent unless it is planned/draft-like,
-// pending approval, cancelled or archived.
+// Counted rows: every non-archived, non-cancelled expense (planned and
+// pending/approved included per product decision; cancelled/archived never).
 export function isCountedExpense(expense) {
   if (!expense || expense.archived) return false;
-  if (expense.payment_status === 'cancelled') return false;
-  return COUNTED_STATUSES.has(expense.payment_status) || expense.payment_status === 'pending';
+  return expense.payment_status !== 'cancelled';
 }
 
+// Committed is a SUBSET of counted spend (approved/pending) shown for
+// visibility; it is never subtracted a second time in totals.
 export function isCommittedExpense(expense) {
   if (!expense || expense.archived) return false;
   return expense.payment_status === 'approved' || expense.payment_status === 'pending';
 }
 
-// Financial state for a scope (global budget, sub-budget or project):
-//   spent     = sum(net) of counted, non-committed expenses
-//   committed = sum(net) of approved/pending expenses
-//   refunded  = sum(refunds) on counted expenses
-//   allocated = sum(sub-budget totals)  [global scope only]
-//   available = total - allocated - committed - spent + refunded
-//   remaining = total - spent - committed + refunded (own scope)
-// No double counting: each expense contributes to exactly one of
-// spent/committed via its status.
-export function computeScopeTotals({ total = 0, allocated = 0, expenses = [], refunds = [], countCommittedSeparately = true }) {
-  let spent = 0;
-  let committed = 0;
-  let refunded = 0;
+// Financial state for a scope (global pool, budget or sub-budget):
+//   spent       = sum(amount) of counted rows — GROSS, never reduced by refunds
+//   committed   = subset of spent still approved/pending (informational)
+//   refunded    = sum(refunds) credited exactly once here
+//   remaining   = total + refunded - spent          (own scope)
+//   available   = total - allocated + refunded - spent (pool minus carve-outs)
+//   utilization = spent / total * 100, unclamped (shows >100 when over);
+//                 null when total = 0 so the UI can render N/A / Over Budget
+export function computeScopeTotals({ total = 0, allocated = 0, expenses = [], refunds = [] }) {
+  let spentC = 0;
+  let committedC = 0;
+  let refundedC = 0;
   for (const e of expenses || []) {
     if (!isCountedExpense(e)) continue;
-    const net = netExpense(e, refunds);
-    refunded += refundedTotal(e, refunds);
-    if (countCommittedSeparately && isCommittedExpense(e)) committed += net;
-    else spent += net;
+    const amountC = toCents(e?.amount);
+    spentC += amountC;
+    if (isCommittedExpense(e)) committedC += amountC;
+    refundedC += refundedCents(e, refunds);
   }
-  const t = Number(total) || 0;
-  const a = Number(allocated) || 0;
-  const available = t - a - committed - spent + refunded;
-  const remaining = t - committed - spent + refunded;
-  const utilization = t > 0 ? Math.min(100, Math.max(0, ((spent + committed) / t) * 100)) : 0;
+  const tC = toCents(total);
+  const aC = toCents(allocated);
+  const remaining = tC + refundedC - spentC;
+  const available = tC - aC + refundedC - spentC;
+  const utilization = tC > 0 ? Math.round((spentC / tC) * 10000) / 100 : null;
   return {
-    total: t,
-    allocated: a,
-    spent: round2(spent),
-    committed: round2(committed),
-    refunded: round2(refunded),
-    available: round2(available),
-    remaining: round2(remaining),
-    utilization: Math.round(utilization * 100) / 100,
+    total: fromCents(tC),
+    allocated: fromCents(aC),
+    spent: fromCents(spentC),
+    committed: fromCents(committedC),
+    refunded: fromCents(refundedC),
+    available: fromCents(available),
+    remaining: fromCents(remaining),
+    utilization,
   };
+}
+
+// Usage of a budget envelope. pct is null when budget is zero so callers
+// render "N/A" / "Over Budget" instead of a misleading 0%.
+export function usageInfo(budget, actual) {
+  const b = toCents(budget);
+  const a = toCents(actual);
+  if (b <= 0) return { pct: null, zeroBudget: true, over: a > 0 };
+  return { pct: Math.round((Number(a) / Number(b)) * 10000) / 100, zeroBudget: false, over: a > b };
+}
+
+// --- Budget scope resolution (single source for every consumer) ------------
+// All descendant budget ids of `budgetId` (depth-first, cycle-guarded).
+export function descendantBudgetIds(budgets, budgetId) {
+  if (!budgetId) return [];
+  const children = new Map();
+  for (const b of budgets || []) {
+    const p = b.parent_budget_id;
+    if (!children.has(p)) children.set(p, []);
+    children.get(p).push(b.id);
+  }
+  const out = [];
+  const seen = new Set([budgetId]);
+  const stack = [budgetId];
+  while (stack.length) {
+    const cur = stack.pop();
+    for (const id of children.get(cur) || []) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+      stack.push(id);
+    }
+  }
+  return out;
+}
+
+// Scope for a budget filter: budget + all descendants.
+// budgetId null/undefined = global pool (all non-archived global budgets).
+//   budgetIds  = Set of budget ids in scope (null = unrestricted/all)
+//   total      = scope root(s) total_amount
+//   allocated  = carve-outs of the root(s) (direct children only — nested
+//                children live inside their parent's total already)
+export function budgetScope(budgets, budgetId) {
+  const list = budgets || [];
+  if (!budgetId) {
+    const roots = list.filter((b) => !b.parent_budget_id && b.status !== 'archived');
+    const rootIds = new Set(roots.map((b) => b.id));
+    const total = roots.reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
+    const allocated = list
+      .filter((b) => b.parent_budget_id && rootIds.has(b.parent_budget_id))
+      .reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
+    return {
+      budgetIds: null,
+      total,
+      allocated,
+      currency: roots[0]?.currency || DEFAULT_CURRENCY,
+    };
+  }
+  const root = list.find((b) => b.id === budgetId);
+  const scopeIds = new Set([budgetId, ...descendantBudgetIds(list, budgetId)]);
+  const allocated = list
+    .filter((b) => b.parent_budget_id === budgetId)
+    .reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
+  return {
+    budgetIds: scopeIds,
+    total: Number(root?.total_amount) || 0,
+    allocated,
+    currency: root?.currency || DEFAULT_CURRENCY,
+  };
+}
+
+// Reports table rows: one row per top-level category, same counted predicate
+// as computeScopeTotals so sum(rows.actual) === totals.spent for any input.
+// Budget column = sum of category allocated_amount over the category subtree
+// (budget_categories is the allocation source; budgets never name-match).
+export function buildCategoryReportRows({ expenses = [], categories = [] }) {
+  const byId = new Map((categories || []).map((c) => [c.id, c]));
+  const rootOf = (id) => {
+    let cur = id;
+    let guard = 0;
+    while (cur && byId.get(cur)?.parent_category_id && guard < 10) {
+      cur = byId.get(cur).parent_category_id;
+      guard += 1;
+    }
+    return cur;
+  };
+  const allocByRoot = new Map();
+  for (const c of categories || []) {
+    const rootId = c.parent_category_id ? rootOf(c.id) : c.id;
+    allocByRoot.set(rootId, (allocByRoot.get(rootId) || 0) + toCents(c.allocated_amount));
+  }
+  const actualByRoot = new Map();
+  const nameByRoot = new Map();
+  for (const e of expenses || []) {
+    if (!isCountedExpense(e)) continue;
+    const rootId = e.category_id ? rootOf(e.category_id) : '';
+    actualByRoot.set(rootId, (actualByRoot.get(rootId) || 0) + toCents(e.amount));
+    if (!nameByRoot.has(rootId) && rootId) nameByRoot.set(rootId, byId.get(rootId)?.name || '');
+  }
+  const rows = [];
+  for (const rootId of new Set([...actualByRoot.keys(), ...allocByRoot.keys()])) {
+    const budget = fromCents(allocByRoot.get(rootId) || 0);
+    const actual = fromCents(actualByRoot.get(rootId) || 0);
+    // Skip pure-zero category rows (seeded categories with no envelope and
+    // no spend) so the table only carries meaningful lines.
+    if (budget === 0 && actual === 0) continue;
+    rows.push({
+      key: rootId || '__none__',
+      name: nameByRoot.get(rootId) || '',
+      budget,
+      actual,
+      variance: round2(budget - actual),
+      usage: usageInfo(budget, actual),
+    });
+  }
+  rows.sort((a, b) => a.name.localeCompare(b.name));
+  return rows;
 }
 
 export function round2(n) {
@@ -181,15 +294,29 @@ export function evaluateBudgetRule(rule, scopeTotals, now = new Date()) {
     return { triggered: false, reason: 'expired' };
   }
   const totals = scopeTotals || {};
-  const value =
-    rule.metric === 'spent'
-      ? Number(totals.spent) || 0
-      : rule.metric === 'remaining'
-        ? Number(totals.remaining) || 0
-        : Number(totals.utilization) || 0;
+  let value;
+  if (rule.metric === 'utilization') {
+    if (totals.utilization === null) {
+      // Zero-total scope: with spend it is over budget (infinite usage) —
+      // unless the scope simply has no budget attached (category/project
+      // rule scopes), where utilization stays undefined and never fires.
+      const hasBudget = totals.hasBudget !== false;
+      value = hasBudget && (Number(totals.spent) || 0) > 0 ? Number.POSITIVE_INFINITY : 0;
+    } else {
+      value = Number(totals.utilization) || 0;
+    }
+  } else if (rule.metric === 'spent') {
+    value = Number(totals.spent) || 0;
+  } else {
+    value = Number(totals.remaining) || 0;
+  }
   const threshold = Number(rule.threshold) || 0;
   const triggered = rule.operator === 'lte' ? value <= threshold : value >= threshold;
-  return { triggered, value: round2(value), reason: triggered ? 'threshold_met' : 'below_threshold' };
+  return {
+    triggered,
+    value: Number.isFinite(value) ? round2(value) : null,
+    reason: triggered ? 'threshold_met' : 'below_threshold',
+  };
 }
 
 // A rule may re-fire only when never fired or when its period elapsed.

@@ -12,6 +12,10 @@ import {
   netExpense,
   computeScopeTotals,
   variance,
+  usageInfo,
+  budgetScope,
+  descendantBudgetIds,
+  buildCategoryReportRows,
   recurrenceKey,
   dueRecurrenceRuns,
   evaluateBudgetRule,
@@ -43,33 +47,123 @@ describe('money math', () => {
     assert.equal(netExpense(expense, [{ expense_id: 'e1', amount: 100, status: 'cancelled' }]), 1000);
   });
 
-  it('totals never double-count: each expense lands in exactly one bucket', () => {
+  it('totals never double-count: gross spent with committed as a subset', () => {
     const expenses = [
       { id: 'a', amount: 100, payment_status: 'paid' },
       { id: 'b', amount: 200, payment_status: 'approved' },
       { id: 'c', amount: 300, payment_status: 'cancelled' },
       { id: 'd', amount: 400, payment_status: 'planned', archived: true },
+      { id: 'e', amount: 50, payment_status: 'planned' },
     ];
     const t = computeScopeTotals({ total: 1000, allocated: 100, expenses, refunds: [] });
-    assert.equal(t.spent, 100);
-    assert.equal(t.committed, 200);
-    assert.equal(t.available, 1000 - 100 - 200 - 100);
-    assert.equal(t.remaining, 1000 - 200 - 100);
-    assert.equal(t.utilization, 30);
+    assert.equal(t.spent, 350); // gross: paid + approved + planned counted
+    assert.equal(t.committed, 200); // subset of spent, never subtracted twice
+    assert.ok(t.committed <= t.spent);
+    assert.equal(t.remaining, 1000 - 350); // remaining = total + refunded - spent
+    assert.equal(t.available, 1000 - 100 - 350); // total - allocated - spent
+    assert.equal(t.utilization, 35);
   });
 
-  it('refunds reduce spent and raise remaining without double counting', () => {
+  it('refunds credit exactly once: gross spent, remaining = total + refunded - spent', () => {
     const expenses = [{ id: 'a', amount: 1000, payment_status: 'paid' }];
     const refunds = [{ expense_id: 'a', amount: 250, status: 'paid' }];
     const t = computeScopeTotals({ total: 1000, allocated: 0, expenses, refunds });
-    assert.equal(t.spent, 750);
+    assert.equal(t.spent, 1000); // gross, not net
     assert.equal(t.refunded, 250);
-    assert.equal(t.remaining, 500);
+    assert.equal(t.remaining, 250); // 1000 + 250 - 1000 (no double counting)
+    assert.equal(t.utilization, 100);
+    const full = computeScopeTotals({
+      total: 1000, allocated: 0, expenses,
+      refunds: [{ expense_id: 'a', amount: 1000, status: 'paid' }],
+    });
+    assert.equal(full.remaining, 1000);
+    assert.ok(full.remaining <= full.total);
+  });
+
+  it('utilization is unclamped and zero-total scopes never show 0%', () => {
+    const over = computeScopeTotals({ total: 100, expenses: [{ id: 'a', amount: 150, payment_status: 'paid' }] });
+    assert.equal(over.utilization, 150); // overruns stay visible
+    const zero = computeScopeTotals({ total: 0, expenses: [{ id: 'a', amount: 50, payment_status: 'paid' }] });
+    assert.equal(zero.utilization, null); // division by zero is flagged, not faked
+    assert.equal(zero.remaining, -50);
+    const empty = computeScopeTotals({ total: 0, expenses: [] });
+    assert.equal(empty.utilization, null);
+  });
+
+  it('usageInfo handles zero budgets without dividing by zero', () => {
+    assert.deepEqual(usageInfo(0, 0), { pct: null, zeroBudget: true, over: false });
+    assert.deepEqual(usageInfo(0, 45), { pct: null, zeroBudget: true, over: true });
+    assert.equal(usageInfo(100, 50).pct, 50);
+    assert.equal(usageInfo(100, 150).pct, 150);
+    assert.equal(usageInfo(100, 150).over, true);
   });
 
   it('variance shows expected vs actual', () => {
     assert.equal(variance(2000, 2450), 450);
     assert.equal(variance(2000, 1500), -500);
+  });
+});
+
+describe('budget scope resolution', () => {
+  const budgets = [
+    { id: 'g1', parent_budget_id: null, total_amount: 1000, status: 'active', currency: 'EUR' },
+    { id: 's1', parent_budget_id: 'g1', total_amount: 400, status: 'active', currency: 'EUR' },
+    { id: 's2', parent_budget_id: 's1', total_amount: 150, status: 'active', currency: 'EUR' },
+    { id: 'g2', parent_budget_id: null, total_amount: 500, status: 'archived', currency: 'EUR' },
+  ];
+
+  it('scope includes all descendants once; allocated = direct carve-outs', () => {
+    const scope = budgetScope(budgets, 'g1');
+    assert.deepEqual([...scope.budgetIds].sort(), ['g1', 's1', 's2']);
+    assert.equal(scope.total, 1000);
+    assert.equal(scope.allocated, 400); // s2 already lives inside s1
+    const child = budgetScope(budgets, 's1');
+    assert.deepEqual([...child.budgetIds].sort(), ['s1', 's2']);
+    assert.equal(child.allocated, 150);
+    assert.equal(child.total, 400);
+  });
+
+  it('global pool skips archived roots and never double counts depth', () => {
+    const pool = budgetScope(budgets, null);
+    assert.equal(pool.total, 1000); // archived g2 excluded
+    assert.equal(pool.allocated, 400); // only direct children of roots
+    assert.equal(pool.budgetIds, null); // unrestricted
+  });
+
+  it('descendantBudgetIds is cycle-safe', () => {
+    const cyclic = [{ id: 'a', parent_budget_id: 'b' }, { id: 'b', parent_budget_id: 'a' }];
+    assert.deepEqual(descendantBudgetIds(cyclic, 'a'), ['b']);
+    assert.deepEqual(descendantBudgetIds(cyclic, null), []);
+  });
+});
+
+describe('reports parity', () => {
+  it('sum(category rows actual) === card spent for the same rows', () => {
+    const categories = [
+      { id: 'c1', name: 'Vehicles', parent_category_id: null, allocated_amount: 500 },
+      { id: 'c2', name: 'Fuel', parent_category_id: 'c1', allocated_amount: 100 },
+      { id: 'c3', name: 'Office', parent_category_id: null, allocated_amount: 0 },
+    ];
+    const expenses = [
+      { id: 'e1', amount: 100, payment_status: 'paid', category_id: 'c2' },
+      { id: 'e2', amount: 45, payment_status: 'pending', category_id: 'c1' },
+      { id: 'e3', amount: 30, payment_status: 'planned', category_id: 'c3' },
+      { id: 'e4', amount: 999, payment_status: 'cancelled', category_id: 'c1' },
+      { id: 'e5', amount: 700, payment_status: 'paid', category_id: null },
+    ];
+    const rows = buildCategoryReportRows({ expenses, categories });
+    const totals = computeScopeTotals({ total: 0, expenses, refunds: [] });
+    const sumActual = Math.round(rows.reduce((s, r) => s + r.actual, 0) * 100);
+    assert.equal(sumActual, Math.round(totals.spent * 100)); // cards == table
+    const vehicles = rows.find((r) => r.key === 'c1');
+    assert.equal(vehicles.budget, 600); // subtree allocation 500 + 100
+    assert.equal(vehicles.actual, 145); // nested + own, cancelled excluded
+    assert.equal(vehicles.usage.pct, 24.17);
+    const none = rows.find((r) => r.key === '__none__');
+    assert.equal(none.actual, 700);
+    assert.equal(none.usage.zeroBudget, true); // no allocation → N/A / Over
+    assert.equal(none.usage.over, true);
+    assert.ok(!rows.some((r) => r.budget === 0 && r.actual === 0), 'empty rows skipped');
   });
 });
 
@@ -97,6 +191,17 @@ describe('structured rules', () => {
     assert.equal(evaluateBudgetRule(rule, { spent: 5000 }).triggered, false);
   });
 
+  it('zero-total utilization: over budget fires gte, budgetless scopes never', () => {
+    const rule = { enabled: true, metric: 'utilization', operator: 'gte', threshold: 80 };
+    const overZero = evaluateBudgetRule(rule, { utilization: null, spent: 50 });
+    assert.equal(overZero.triggered, true);
+    assert.equal(overZero.value, null); // infinity reported as null → UI "over budget"
+    assert.equal(evaluateBudgetRule(rule, { utilization: null, spent: 0 }).triggered, false);
+    assert.equal(evaluateBudgetRule(rule, { utilization: null, spent: 50, hasBudget: false }).triggered, false);
+    const lte = { ...rule, operator: 'lte', threshold: 50 };
+    assert.equal(evaluateBudgetRule(lte, { utilization: null, spent: 50 }).triggered, false);
+  });
+
   it('refire respects the period (once never refires)', () => {
     const now = new Date('2026-10-10T12:00:00');
     assert.equal(ruleMayRefire({ period: 'once', last_triggered_at: '2026-10-01T00:00:00' }, now), false);
@@ -121,6 +226,20 @@ describe('export rows', () => {
     const summary = buildBudgetSummaryRows([{ id: 'b1', name: 'Ops', total_amount: 1000 }], { b1: { allocated: 1, spent: 2, committed: 3, refunded: 4, available: 5, remaining: 6, utilization: 7 } });
     assert.equal(summary[0].name, 'Ops');
     assert.equal(summary[0].utilization_pct, 7);
+    const blankUtil = buildBudgetSummaryRows([{ id: 'b1', name: 'Ops' }], { b1: { utilization: null } });
+    assert.equal(blankUtil[0].utilization_pct, ''); // zero-total stays blank, not 0%
+    const namedParent = buildBudgetSummaryRows(
+      [{ id: 'b2', name: 'Sub', parent_budget_id: 'g1' }],
+      {},
+      { resolveParent: () => 'Global' }
+    );
+    assert.equal(namedParent[0].parent, 'Global'); // export carries parent names
+    const withSub = buildExpenseRows(
+      [{ id: 'e1', title: 'Fuel', amount: 100, payment_status: 'paid' }],
+      [],
+      { resolveSubBudget: () => 'Emergency' }
+    );
+    assert.equal(withSub[0].sub_budget, 'Emergency'); // sub-budget column populated
   });
 });
 
@@ -158,6 +277,20 @@ describe('migration safety', () => {
     for (const table of ['budgets:', 'budget_categories:', 'budget_expenses:', 'budget_recurring:', 'budget_refunds:', 'budget_rules:']) {
       assert.ok(types.includes(table), table);
     }
+  });
+});
+
+describe('category allocation migration', () => {
+  it('adds allocated_amount additively with decimal money only', () => {
+    const sql = codeOf(read('supabase/migrations/20261015120000_budget_category_allocation.sql'));
+    assert.ok(sql.includes('add column if not exists allocated_amount numeric(14,2)'), 'numeric column');
+    assert.ok(sql.includes('allocated_amount >= 0'), 'non-negative guard');
+    assert.ok(sql.includes('default 0'), 'defaults to zero');
+    assert.ok(!/double precision|float/i.test(sql), 'no float money');
+    assert.ok(!/drop table|truncate|delete from/i.test(sql), 'additive only');
+    const alters = sql.match(/alter table [a-z_.]+/g) || [];
+    assert.ok(alters.length > 0 && alters.every((a) => a.includes('budget_categories')), 'only budget_categories altered');
+    assert.ok(!/push_subscriptions|notifications|audit_logs|invoices/i.test(sql), 'no cross-system writes');
   });
 });
 

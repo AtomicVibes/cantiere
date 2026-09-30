@@ -14,7 +14,29 @@ import CategoryManager from '@/components/budget/CategoryManager';
 import RulesManager from '@/components/budget/RulesManager';
 import RefundManager from '@/components/budget/RefundManager';
 import ReportsPanel from '@/components/budget/ReportsPanel';
-import { dueRecurrenceRuns, recurrenceKey, addFrequency, toDateOnlyString, evaluateBudgetRule, ruleMayRefire, computeScopeTotals } from '@/lib/budgetMath';
+import { dueRecurrenceRuns, recurrenceKey, addFrequency, toDateOnlyString, evaluateBudgetRule, ruleMayRefire, computeScopeTotals, budgetScope, DEFAULT_CURRENCY } from '@/lib/budgetMath';
+
+// Page through a table so aggregates are never silently truncated by the
+// 1000-row request cap (order matters: newest-first for expenses/refunds).
+const FETCH_PAGE_SIZE = 1000;
+const FETCH_MAX_PAGES = 50;
+async function fetchAllBudgetRows(table, orderBy, ascending = false) {
+  const all = [];
+  for (let page = 0; page < FETCH_MAX_PAGES; page += 1) {
+    const from = page * FETCH_PAGE_SIZE;
+    const { data, error } = await supabase
+      .from(table)
+      .select('*')
+      .order(orderBy, { ascending })
+      .range(from, from + FETCH_PAGE_SIZE - 1);
+    if (error) throw error;
+    const rows = data ?? [];
+    all.push(...rows);
+    if (rows.length < FETCH_PAGE_SIZE) return all;
+  }
+  logAppError('Budget', new Error(`row cap reached while loading ${table}`), { operation: 'fetch-all', table });
+  return all;
+}
 
 // Budget Management sub-window (super_admin). Central data layer: all
 // budget tables are loaded here once and shared with the tab panels.
@@ -43,15 +65,7 @@ export default function BudgetSection() {
   });
   const expensesQuery = useQuery({
     queryKey: ['budget-expenses'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('budget_expenses')
-        .select('*')
-        .order('expense_date', { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () => fetchAllBudgetRows('budget_expenses', 'expense_date', false),
   });
   const recurringQuery = useQuery({
     queryKey: ['budget-recurring'],
@@ -63,15 +77,7 @@ export default function BudgetSection() {
   });
   const refundsQuery = useQuery({
     queryKey: ['budget-refunds'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('budget_refunds')
-        .select('*')
-        .order('refund_date', { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: async () => fetchAllBudgetRows('budget_refunds', 'refund_date', false),
   });
   const rulesQuery = useQuery({
     queryKey: ['budget-rules'],
@@ -164,7 +170,7 @@ export default function BudgetSection() {
             const { error } = await supabase.from('budget_expenses').insert({
               title: rec.title,
               amount: rec.amount,
-              currency: rec.currency || 'TND',
+              currency: rec.currency || DEFAULT_CURRENCY,
               expense_date: due,
               category_id: rec.category_id,
               budget_id: rec.budget_id,
@@ -214,7 +220,7 @@ export default function BudgetSection() {
           const result = evaluateBudgetRule(rule, totals);
           if (!result.triggered) continue;
           if (!ruleMayRefire(rule)) continue;
-          await notifyBudgetAlert(`Budget rule "${rule.name}" triggered (${result.value}).`);
+          await notifyBudgetAlert(`Budget rule "${rule.name}" triggered (${result.value ?? 'over budget'}).`);
           await supabase
             .from('budget_rules')
             .update({ last_triggered_at: new Date().toISOString(), last_value: result.value })
@@ -283,32 +289,37 @@ export default function BudgetSection() {
 }
 
 function scopeTotalsForRule(rule, { budgets, expenses, refunds }) {
+  // Budget scopes (sub_budget, legacy global+scope_id) resolve through the
+  // shared resolver: descendants included, same totals the tabs display.
+  const budgetScopeIds =
+    (rule.scope_type === 'sub_budget' || rule.scope_type === 'global') && rule.scope_id
+      ? budgetScope(budgets, rule.scope_id).budgetIds
+      : null;
   const inScope = (expenses || []).filter((e) => {
     if (!e || e.archived) return false;
     if (rule.scope_type === 'category' && rule.scope_id) {
       return e.category_id === rule.scope_id || e.subcategory_id === rule.scope_id;
     }
     if (rule.scope_type === 'project' && rule.scope_id) return e.project_id === rule.scope_id;
-    if (rule.scope_type === 'sub_budget' && rule.scope_id) return e.budget_id === rule.scope_id;
+    if (budgetScopeIds) return budgetScopeIds.has(e.budget_id);
     return true;
   });
   let total = 0;
   let allocated = 0;
-  if (rule.scope_type === 'global' && !rule.scope_id) {
-    const globals = (budgets || []).filter((b) => !b.parent_budget_id && b.status !== 'archived');
-    total = globals.reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
-    allocated = (budgets || [])
-      .filter((b) => b.parent_budget_id && b.status !== 'archived')
-      .reduce((s, b) => s + (Number(b.total_amount) || 0), 0);
-  } else if (rule.scope_type === 'sub_budget' && rule.scope_id) {
-    const b = (budgets || []).find((x) => x.id === rule.scope_id);
-    total = Number(b?.total_amount) || 0;
-  } else if (rule.scope_type === 'global' && rule.scope_id) {
-    const b = (budgets || []).find((x) => x.id === rule.scope_id);
-    total = Number(b?.total_amount) || 0;
-    allocated = (budgets || [])
-      .filter((x) => x.parent_budget_id === rule.scope_id)
-      .reduce((s, x) => s + (Number(x.total_amount) || 0), 0);
+  if (budgetScopeIds) {
+    const scope = budgetScope(budgets, rule.scope_id);
+    total = scope.total;
+    allocated = scope.allocated;
+  } else if (rule.scope_type === 'global') {
+    const scope = budgetScope(budgets, null);
+    total = scope.total;
+    allocated = scope.allocated;
   }
-  return computeScopeTotals({ total, allocated, expenses: inScope, refunds });
+  const isBudgetScoped = budgetScopeIds != null || rule.scope_type === 'global';
+  return {
+    ...computeScopeTotals({ total, allocated, expenses: inScope, refunds }),
+    // Category/project scopes carry no envelope: utilization stays
+    // undefined there instead of reading as over budget.
+    hasBudget: isBudgetScoped,
+  };
 }

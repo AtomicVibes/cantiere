@@ -17,10 +17,11 @@ import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from '@/components/ui/accordion';
 import { getBudgetCategoryIcon, DEFAULT_CATEGORY_ICON } from '@/lib/budgetCategoryIcons';
+import { formatMoney } from '@/lib/budgetMath';
 import { toast } from 'sonner';
 
 function emptyCategory(parentId = null) {
-  return { name: '', description: '', icon: DEFAULT_CATEGORY_ICON, parent_category_id: parentId, sort_order: '0' };
+  return { name: '', description: '', icon: DEFAULT_CATEGORY_ICON, parent_category_id: parentId, sort_order: '0', allocated_amount: '0' };
 }
 
 export default function CategoryManager({ categories, onChanged, onAudit }) {
@@ -50,6 +51,7 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
       icon: cat.icon || '',
       parent_category_id: cat.parent_category_id,
       sort_order: cat.sort_order ?? '0',
+      allocated_amount: cat.allocated_amount ?? '0',
     });
     setShowForm(true);
   }
@@ -60,6 +62,11 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
       toast.error(t('categoryNameRequired') || 'Please enter a category name.');
       return;
     }
+    const allocated = Number(form.allocated_amount);
+    if (!Number.isFinite(allocated) || allocated < 0) {
+      toast.error(t('budgetInvalidAmount', 'Please enter a valid budget name and amount.'));
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -68,6 +75,7 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
         icon: form.icon?.trim() || null,
         parent_category_id: form.parent_category_id || null,
         sort_order: Number(form.sort_order) || 0,
+        allocated_amount: allocated,
       };
       if (editing) {
         const { error } = await supabase.from('budget_categories').update(payload).eq('id', editing.id);
@@ -114,6 +122,9 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium truncate">{cat.name}</p>
           {cat.description && <p className="text-xs text-muted-foreground truncate">{cat.description}</p>}
+          {Number(cat.allocated_amount) > 0 && (
+            <p className="text-xs text-muted-foreground truncate">{t('budgetAllocated', 'Allocated')}: {formatMoney(cat.allocated_amount)}</p>
+          )}
         </div>
         {!cat.active && (
           <Badge variant="outline" className="text-[10px]">{t('archived', 'Archived')}</Badge>
@@ -202,7 +213,7 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
             <div><Label>{t('categoryName', 'Name')} *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={120} /></div>
             <div><Label>{t('description', 'Description')}</Label><Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} maxLength={300} /></div>
             <CategoryIconPicker id="category-icon" value={form.icon} onChange={(v) => setForm({ ...form, icon: v })} />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label>{t('categoryParent', 'Parent category')}</Label>
                 <Select value={form.parent_category_id || 'none'} onValueChange={(v) => setForm({ ...form, parent_category_id: v === 'none' ? null : v })}>
@@ -216,6 +227,10 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
               <div>
                 <Label>{t('categoryOrder', 'Order')}</Label>
                 <Input type="number" step="1" value={form.sort_order} onChange={(e) => setForm({ ...form, sort_order: e.target.value })} />
+              </div>
+              <div>
+                <Label>{t('budgetAllocated', 'Allocated')}</Label>
+                <Input type="number" min="0" step="0.01" value={form.allocated_amount} onChange={(e) => setForm({ ...form, allocated_amount: e.target.value })} />
               </div>
             </div>
             <DialogFooter>
