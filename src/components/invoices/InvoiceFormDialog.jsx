@@ -22,6 +22,9 @@ import {
   validateGoogleInvoiceLink, saveInvoiceItems, removeInvoiceItems, upsertInvoiceRecord,
 } from '@/services/invoiceService';
 import { openInvoicePdf } from '@/services/invoicePdf';
+import { logAppError } from '@/lib/userErrors';
+import VisibilitySelect from '@/components/documents/VisibilitySelect';
+import AudiencePicker from '@/components/documents/AudiencePicker';
 import { Plus, Trash2, Paperclip, Link2, Loader2, FileText, Eye, X, ExternalLink } from 'lucide-react';
 
 const NATURA_CODES = ['N1', 'N2.1', 'N2.2', 'N3', 'N4', 'N5', 'N6'];
@@ -35,7 +38,7 @@ const emptySeller = () => ({
 const emptyForm = () => ({
   invoice_number: '', invoice_date: '', due_date: '', client_id: '', project_id: '',
   category: 'miscellaneous', payment_status: 'draft', payment_terms: '', payment_method: '',
-  payment_reference: '', notes: '', stamp_duty: '',
+  payment_reference: '', notes: '', stamp_duty: '', visibility: 'private', audienceIds: [],
 });
 
 const emptyItem = () => ({
@@ -65,6 +68,7 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
   const [pending, setPending] = useState([]);
   const [seller, setSeller] = useState(emptySeller());
   const [googleUrl, setGoogleUrl] = useState('');
+  const [audienceMembers, setAudienceMembers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const fileInputRef = useRef(null);
@@ -124,6 +128,18 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
       setGoogleUrl('');
       setSeller(s => mergeProfiles({ ...emptySeller(), country: 'IT' }, s));
     }
+    // Same audience source as the Create Project form.
+    supabase
+      .from('profiles')
+      .select('id, full_name, email, job_title, department, avatar_url')
+      .order('full_name')
+      .then(({ data, error }) => {
+        if (error) {
+          logAppError('InvoiceForm', error, { operation: 'load-audience-members' });
+          return;
+        }
+        setAudienceMembers(data ?? []);
+      });
   }, [open, invoice?.id]);
 
   useEffect(() => {
@@ -142,7 +158,22 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
       payment_reference: detail.payment_reference || '',
       notes: detail.notes || '',
       stamp_duty: detail.stamp_duty ?? '',
+      visibility: detail.visibility || 'private',
+      audienceIds: [],
     });
+    // Preserve the existing audience so saving without changes never
+    // clears it; loaded under audience RLS (admins manage audience).
+    supabase
+      .from('invoice_audience')
+      .select('user_id')
+      .eq('invoice_id', detail.id)
+      .then(({ data, error }) => {
+        if (error) {
+          logAppError('InvoiceForm', error, { operation: 'load-audience' });
+          return;
+        }
+        setForm(prev => ({ ...prev, audienceIds: (data ?? []).map(r => r.user_id) }));
+      });
     setItems((detail.items && detail.items.length ? detail.items : [emptyItem()]).map(i => ({
       id: i.id,
       description: i.description || '',
@@ -229,6 +260,10 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
       toast.error(t('invoiceNumberRequired'));
       return;
     }
+    if (form.visibility === 'selected' && form.audienceIds.length === 0) {
+      toast.error(t('selectAudienceRequired'));
+      return;
+    }
     setSaving(true);
     try {
       const customerSnapshot = await buildCustomerSnapshot();
@@ -263,6 +298,7 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
         payment_method: form.payment_method || null,
         payment_reference: form.payment_reference || null,
         notes: form.notes || null,
+        visibility: form.visibility || 'private',
         seller_snapshot: sellerSnapshot,
         customer_snapshot: customerSnapshot,
       };
@@ -290,11 +326,34 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
         }
       }
 
+      // Sync the selected audience (replace set; clearing when the
+      // visibility is no longer 'selected'). Isolated from the save above.
+      try {
+        const { error: clearError } = await supabase
+          .from('invoice_audience')
+          .delete()
+          .eq('invoice_id', invoiceId);
+        if (clearError) throw clearError;
+        if (form.visibility === 'selected' && form.audienceIds.length > 0) {
+          const { error: insertError } = await supabase
+            .from('invoice_audience')
+            .insert(form.audienceIds.map(user_id => ({ invoice_id: invoiceId, user_id })));
+          if (insertError) throw insertError;
+        }
+      } catch (audError) {
+        logAppError('InvoiceForm', audError, { operation: 'save-audience', invoiceId });
+        toast.error(t('invoiceAudienceSaveError'));
+      }
+
       toast.success(invoice?.id ? t('invoiceSaved') : t('invoiceCreated'));
       logAction(invoice?.id ? 'INVOICE_UPDATED' : 'INVOICE_CREATED', {
         entityType: 'invoice',
         entityId: invoiceId || null,
-        metadata: { total: totalsToSave.total, client_name: customerSnapshot?.display_name || null },
+        metadata: {
+          total: totalsToSave.total,
+          client_name: customerSnapshot?.display_name || null,
+          visibility: form.visibility || 'private',
+        },
       });
       onOpenChange(false);
       onSaved?.(saved);
@@ -625,6 +684,27 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
               </ul>
             )}
           </div>
+
+          <Separator />
+
+          {/* Visibility — same selector/model as the Create Project form */}
+          <VisibilitySelect
+            id="invoice-visibility"
+            value={form.visibility}
+            onValueChange={(v) => setForm(prev => ({ ...prev, visibility: v, audienceIds: v === 'selected' ? prev.audienceIds : [] }))}
+          />
+          {form.visibility === 'selected' && (
+            <AudiencePicker
+              idPrefix="invoice-audience"
+              members={audienceMembers}
+              selectedIds={form.audienceIds}
+              titleKey="invoiceAudienceTitle"
+              titleFallback="Who can see the invoice?"
+              helpKey="invoiceAudienceHelp"
+              helpFallback="Only the selected people can view this invoice."
+              onToggle={(id) => setForm(prev => ({ ...prev, audienceIds: prev.audienceIds.includes(id) ? prev.audienceIds.filter(memberId => memberId !== id) : [...prev.audienceIds, id] }))}
+            />
+          )}
         </div>
 
         <DialogFooter className="gap-2">

@@ -2057,6 +2057,35 @@ export type Database = {
         }
         Relationships: []
       }
+      invoice_audience: {
+        Row: {
+          created_at: string
+          id: string
+          invoice_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          invoice_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_audience_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           amount: number | null
@@ -2064,6 +2093,7 @@ export type Database = {
           created_at: string | null
           id: string
           status: string | null
+          visibility: string | null
         }
         Insert: {
           amount?: number | null
@@ -2071,6 +2101,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           status?: string | null
+          visibility?: string | null
         }
         Update: {
           amount?: number | null
@@ -2078,6 +2109,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           status?: string | null
+          visibility?: string | null
         }
         Relationships: []
       }
