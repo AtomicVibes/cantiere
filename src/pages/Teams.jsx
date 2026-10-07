@@ -17,7 +17,7 @@ import {
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, Users, LayoutGrid, List, Activity, Eye, EyeOff, Copy, Check } from 'lucide-react';
+import { Plus, Search, Users, LayoutGrid, List, Activity, Eye, EyeOff, Copy, Check, RefreshCw } from 'lucide-react';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { useTeamFormFields } from '@/hooks/useFormSchema';
@@ -66,13 +66,18 @@ export default function Teams() {
   const openAddMember = () => {
     setForm(emptyMember);
     setFriendlyError('');
-    setShowPassword(false);
-    // Never overwrite a password the admin already typed by hand.
-    if (!passwordEdited || !password) {
-      setPassword(generatePassword());
-      setPasswordEdited(false);
-    }
+    // A fresh, visible, generated password every time the form opens.
+    setPassword(generatePassword());
+    setPasswordEdited(false);
+    setShowPassword(true);
     setShowForm(true);
+  };
+
+  // Regenerate only rewrites the field: never submits, never touches the form.
+  const handleRegeneratePassword = () => {
+    setPassword(generatePassword());
+    setPasswordEdited(false);
+    setShowPassword(true);
   };
 
   const { members, isLoading } = useTeamMembers({ userRole: role, isSuperAdmin });
@@ -377,24 +382,36 @@ export default function Teams() {
             {inviteMode !== 'invite' && (
               <div>
                 <Label htmlFor="member-password">{t('password')}</Label>
-                <div className="relative">
-                  <Input
-                    id="member-password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => { setPassword(e.target.value); setPasswordEdited(true); }}
-                    autoComplete="new-password"
-                    className="pr-10"
-                  />
-                  <button
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="member-password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => { setPassword(e.target.value); setPasswordEdited(true); }}
+                      autoComplete="new-password"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <Button
                     type="button"
-                    onClick={() => setShowPassword(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    aria-pressed={showPassword}
+                    variant="outline"
+                    size="sm"
+                    className="h-10 shrink-0 gap-1.5"
+                    onClick={handleRegeneratePassword}
                   >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    {t('regeneratePassword')}
+                  </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
                   {t('generatedPasswordHint', 'A secure password was generated. Keep it or replace it with your own.')}

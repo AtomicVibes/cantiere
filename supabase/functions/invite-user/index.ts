@@ -111,6 +111,47 @@ function isDuplicateAuthError(message) {
   );
 }
 
+// GoTrue collapses every Postgres failure during user creation into
+// "Database error creating new user", so a generic 400 is undiagnosable.
+// On failure we collect what we CAN see server-side and return it with the
+// error (never a password): availability, the resolved role, and any column
+// public.profiles is missing that handle_new_user writes.
+const HANDLE_NEW_USER_COLUMNS = ['id', 'email', 'username', 'role_id', 'full_name', 'phone', 'job_title', 'department', 'created_at'];
+
+async function creationDiagnostics(email, username, roleId) {
+  const diagnostics: Record<string, unknown> = {};
+  try {
+    diagnostics.availability = await identityAvailability(email, username);
+  } catch (err) {
+    diagnostics.availability_error = String(err?.message ?? err);
+  }
+  diagnostics.role = { id: roleId, name: await roleName(roleId) };
+  try {
+    const res = await fetch(`${supabaseUrl}/rest/v1/`, {
+      headers: {
+        apikey: supabaseServiceRoleKey,
+        Authorization: `Bearer ${supabaseServiceRoleKey}`,
+        Accept: 'application/openapi+json',
+      },
+    });
+    if (res.ok) {
+      const doc = await res.json();
+      const props = doc?.components?.schemas?.profiles?.properties;
+      if (props) {
+        const actual: string[] = Object.keys(props);
+        diagnostics.profiles_missing_columns = HANDLE_NEW_USER_COLUMNS.filter((c) => !actual.includes(c));
+      } else {
+        diagnostics.profiles_schema = 'not exposed in OpenAPI document';
+      }
+    } else {
+      diagnostics.profiles_schema_status = res.status;
+    }
+  } catch (err) {
+    diagnostics.profiles_schema_error = String(err?.message ?? err);
+  }
+  return diagnostics;
+}
+
 // After a failed create, re-check which identity collided so the 409 carries
 // the exact required message (GoTrue usually hides the underlying reason).
 async function duplicateResponse(email, username, fallbackMessage) {
@@ -226,12 +267,22 @@ serve(async (req) => {
       });
 
       if (createError) {
-        console.error('DEBUG - Admin API Error:', createError.status ?? '', createError.message ?? '');
+        console.error('[invite-user] createUser failed:', {
+          status: createError.status ?? null,
+          code: (createError as { code?: string }).code ?? null,
+          message: createError.message ?? null,
+        });
         const duplicate = await duplicateResponse(String(email).trim(), cleanUsername, isDuplicateAuthError(createError.message)
           ? { error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }
           : null);
         if (duplicate) return duplicate;
-        return respond({ error: 'Failed to create user.', detail: createError.message }, 400);
+        const diagnostics = await creationDiagnostics(String(email).trim(), cleanUsername, roleId);
+        console.error('[invite-user] creation diagnostics:', diagnostics);
+        return respond({
+          error: `Failed to create user. ${createError.message}`,
+          detail: createError.message,
+          diagnostics,
+        }, 400);
       }
 
       if (createData?.user) {
