@@ -69,6 +69,7 @@ describe('generated passwords', () => {
 
 describe('server-side guarantees', () => {
   const migration = read('supabase/migrations/20261017120000_account_uniqueness.sql');
+  const grants = read('supabase/migrations/20261017130000_account_availability_grants.sql');
   const inviteUser = read('supabase/functions/invite-user/index.ts');
   const createClient = read('supabase/functions/create-client/index.ts');
   const inviteClient = read('supabase/functions/invite-client/index.ts');
@@ -85,6 +86,10 @@ describe('server-side guarantees', () => {
     assert.ok(migration.includes('account_identity_available'));
     assert.ok(migration.includes('security definer'));
     assert.ok(migration.includes('revoke execute on function public.account_identity_available'));
+    // EXECUTE defaults to PUBLIC in Postgres — anon must be revoked too,
+    // otherwise unauthenticated callers can enumerate identities.
+    assert.ok(grants.includes('from public, anon'), 'anon/public execute must be revoked');
+    assert.ok(grants.includes('to authenticated') && grants.includes('to service_role'));
     // Actionable pre-flight instead of a raw 23505.
     assert.ok(migration.includes('Cannot enable account uniqueness: duplicate identities exist.'));
     assert.ok(migration.includes('Cleanup query'));
