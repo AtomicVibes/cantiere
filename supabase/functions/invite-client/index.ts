@@ -8,6 +8,10 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 const CLIENT_ROLE_ID = "f3e7c0d7-d41f-486f-89fd-732d1c9cc200";
 
+const EMAIL_EXISTS_MESSAGE = 'An account already exists with this email address.';
+const USERNAME_TAKEN_MESSAGE = 'This username is already taken. Please choose another username.';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -55,6 +59,10 @@ serve(async (req) => {
       return respond({ error: 'Email address is required.', detail: 'Missing email field' }, 400);
     }
 
+    if (!EMAIL_REGEX.test(String(email).trim())) {
+      return respond({ error: 'Please enter a valid email address.', detail: 'Invalid email format' }, 400);
+    }
+
     const userMetadata = {
       full_name: full_name || '',
       phone: phone || '',
@@ -91,10 +99,21 @@ serve(async (req) => {
       );
     }
 
-    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers().catch(() => ({ data: null }));
-    const existing = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      return respond({ error: 'This email has already been invited or registered.', detail: `Email ${email} already exists in auth.users` }, 400);
+    // Case-insensitive duplicate pre-check — never adopt an existing user.
+    const cleanEmail = String(email).trim();
+    const { data: availability, error: availabilityError } = await supabaseAdmin.rpc('account_identity_available', {
+      p_email: cleanEmail,
+      p_username: null,
+      p_exclude_id: null,
+    });
+    if (availabilityError) {
+      console.error('[invite-client] identity availability check failed:', availabilityError.message);
+    }
+    if (availability && availability.email_available === false) {
+      return respond({ error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }, 409);
+    }
+    if (availability && availability.username_available === false) {
+      return respond({ error: USERNAME_TAKEN_MESSAGE, detail: 'duplicate_username' }, 409);
     }
 
     const isDirect = mode !== 'invite';
@@ -107,7 +126,17 @@ serve(async (req) => {
       });
 
       if (createError) {
-        console.error('DEBUG - Admin API Error:', JSON.stringify(createError, null, 2));
+        const lower = String(createError.message || '').toLowerCase();
+        if (
+          lower.includes('already registered') ||
+          lower.includes('already exists') ||
+          lower.includes('user_already_exists') ||
+          lower.includes('duplicate') ||
+          lower.includes('23505')
+        ) {
+          return respond({ error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }, 409);
+        }
+        console.error('DEBUG - Admin API Error:', createError.status ?? '', createError.message ?? '');
         return respond({ error: 'Failed to create user.', detail: createError.message }, 400);
       }
 
@@ -139,7 +168,17 @@ serve(async (req) => {
     );
 
     if (inviteError) {
-      console.error('DEBUG - Admin API Error:', JSON.stringify(inviteError, null, 2));
+      const lower = String(inviteError.message || '').toLowerCase();
+      if (
+        lower.includes('already registered') ||
+        lower.includes('already exists') ||
+        lower.includes('user_already_exists') ||
+        lower.includes('duplicate') ||
+        lower.includes('23505')
+      ) {
+        return respond({ error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }, 409);
+      }
+      console.error('DEBUG - Admin API Error:', inviteError.status ?? '', inviteError.message ?? '');
       return respond({ error: 'Invitation failed', detail: inviteError.message }, 400);
     }
 

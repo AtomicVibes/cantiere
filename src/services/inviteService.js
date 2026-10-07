@@ -22,15 +22,17 @@ async function callFunction(url, payload) {
     const text = await res.text();
     let detail;
     try { detail = JSON.parse(text); } catch { detail = text; }
-    console.error(`[${url.split('/').pop()}] ${res.status}`, { payload, response: detail });
+    // Never log secrets: drop the password before tracing the failure.
+    const { password: _password, ...safePayload } = payload ?? {};
+    console.error(`[${url.split('/').pop()}] ${res.status}`, { payload: safePayload, response: detail });
     throw new Error(detail?.message || detail?.error || `Request failed (${res.status})`);
   }
 
   return res.json();
 }
 
-export async function inviteUserByEmail({ email, role_id, full_name, phone, job_title, department, mode }) {
-  return callFunction(INVITE_USER_URL, { email, role_id, full_name, phone, job_title, department, mode });
+export async function inviteUserByEmail({ email, username, password, full_name, phone, job_title, department, mode, role_id = null }) {
+  return callFunction(INVITE_USER_URL, { email, username, password, role_id, full_name, phone, job_title, department, mode });
 }
 
 export async function createClient({ email, password, full_name, phone }) {

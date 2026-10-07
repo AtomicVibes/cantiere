@@ -12,6 +12,21 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Exact copy required by the account-creation spec (409 bodies).
+const EMAIL_EXISTS_MESSAGE = 'An account already exists with this email address.';
+const USERNAME_TAKEN_MESSAGE = 'This username is already taken. Please choose another username.';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_REGEX = /^[a-z0-9_.-]{3,30}$/;
+
+// The application's canonical "User" role. EditMemberDialog labels
+// roles.name = 'manager' as "User"; the other names are tolerated so a
+// differently-seeded database still resolves to a non-privileged default.
+const DEFAULT_ROLE_PREFERENCE = ['manager', 'user', 'member'];
+// Never assignable through this endpoint: elevation stays exclusive to the
+// existing Edit Member flow (profiles update guarded by RLS + rank rules).
+const ELEVATED_ROLES = ['super_admin', 'admin'];
+
 function respond(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -35,6 +50,80 @@ async function roleName(roleId) {
   return data?.name ?? null;
 }
 
+async function listRoles() {
+  const { data, error } = await supabaseAdmin.from('roles').select('id, name');
+  if (error) {
+    console.error('[invite-user] roles lookup failed:', error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+// Canonical default role for every new member created here.
+async function resolveDefaultUserRoleId() {
+  const roles = await listRoles();
+  for (const name of DEFAULT_ROLE_PREFERENCE) {
+    const hit = roles.find((r) => String(r.name || '').toLowerCase() === name);
+    if (hit) return hit.id;
+  }
+  return null;
+}
+
+// A client-supplied role id is honored only when it exists AND is not
+// elevated; anything missing/malformed/elevated falls back to the default
+// User role. Add Member never sends a role at all.
+async function resolveRoleId(requestedRoleId) {
+  if (!requestedRoleId) return resolveDefaultUserRoleId();
+  const roles = await listRoles();
+  const requested = roles.find((r) => r.id === requestedRoleId);
+  if (!requested || ELEVATED_ROLES.includes(String(requested.name || ''))) {
+    return resolveDefaultUserRoleId();
+  }
+  return requested.id;
+}
+
+// Case-insensitive availability probe (RPC from 20261017120000).
+// Fails OPEN: the unique indexes + auth error mapping remain authoritative,
+// so a missing migration degrades the message but never the guarantee.
+async function identityAvailability(email, username) {
+  const { data, error } = await supabaseAdmin.rpc('account_identity_available', {
+    p_email: email ?? null,
+    p_username: username ?? null,
+    p_exclude_id: null,
+  });
+  if (error) {
+    console.error('[invite-user] identity availability check failed:', error.message);
+    return { email_available: true, username_available: true };
+  }
+  return data ?? { email_available: true, username_available: true };
+}
+
+function isDuplicateAuthError(message) {
+  const m = String(message || '').toLowerCase();
+  return (
+    m.includes('already registered') ||
+    m.includes('already exists') ||
+    m.includes('already been registered') ||
+    m.includes('user_already_exists') ||
+    m.includes('duplicate key') ||
+    m.includes('duplicate') ||
+    m.includes('23505')
+  );
+}
+
+// After a failed create, re-check which identity collided so the 409 carries
+// the exact required message (GoTrue usually hides the underlying reason).
+async function duplicateResponse(email, username, fallbackMessage) {
+  const availability = await identityAvailability(email, username);
+  if (availability.email_available === false) {
+    return respond({ error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }, 409);
+  }
+  if (availability.username_available === false) {
+    return respond({ error: USERNAME_TAKEN_MESSAGE, detail: 'duplicate_username' }, 409);
+  }
+  return fallbackMessage ? respond(fallbackMessage, 409) : null;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -51,24 +140,51 @@ serve(async (req) => {
     } catch {
       return respond({ error: 'Invalid request body.', detail: 'Failed to parse JSON' }, 400);
     }
-    console.log('invite-user body:', JSON.stringify(body));
+    // Never log the body: it can contain a password.
+    console.log('invite-user fields:', Object.keys(body ?? {}).join(','));
 
-    const { email, role_id, full_name, phone, job_title, department, mode } = body;
+    const { email, username, password, role_id, full_name, phone, job_title, department, mode } = body;
 
     if (!email) {
       return respond({ error: 'Email address is required.', detail: 'Missing email field' }, 400);
     }
 
-    if (!role_id) {
-      return respond({ error: 'Please select a role for the new user.', detail: 'Missing role_id field' }, 400);
+    if (!EMAIL_REGEX.test(String(email).trim())) {
+      return respond({ error: 'Please enter a valid email address.', detail: 'Invalid email format' }, 400);
     }
+
+    const cleanUsername = typeof username === 'string' && username.trim() ? username.trim() : null;
+    if (cleanUsername && !USERNAME_REGEX.test(cleanUsername.toLowerCase())) {
+      return respond({ error: 'Username must be 3-30 characters using only a-z, 0-9, ".", "_" or "-".', detail: 'Invalid username format' }, 400);
+    }
+
+    const isDirect = mode !== 'invite';
+    if (isDirect && !password) {
+      return respond({ error: 'Password is required to create the account.', detail: 'Missing password field' }, 400);
+    }
+
+    // Server-side uniqueness pre-check (case-insensitive).
+    const availability = await identityAvailability(email, cleanUsername);
+    if (availability.email_available === false) {
+      return respond({ error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }, 409);
+    }
+    if (availability.username_available === false) {
+      return respond({ error: USERNAME_TAKEN_MESSAGE, detail: 'duplicate_username' }, 409);
+    }
+
+    const roleId = await resolveRoleId(role_id);
+    if (!roleId) {
+      return respond({ error: 'Unable to resolve the default User role.', detail: 'No matching role row found' }, 500);
+    }
+    const resolvedRoleName = await roleName(roleId);
 
     const userMetadata = {
       full_name: full_name || '',
       phone: phone || '',
       job_title: job_title || '',
       department: department || '',
-      role_id,
+      role_id: roleId,
+      ...(cleanUsername ? { username: cleanUsername } : {}),
     };
 
     const authHeader = req.headers.get('Authorization');
@@ -101,72 +217,20 @@ serve(async (req) => {
       );
     }
 
-    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers().catch(() => ({ data: null }));
-    const existing = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        existing.id,
-        { user_metadata: userMetadata }
-      );
-      if (updateError) {
-        return respond({ error: 'Failed to update existing user.', detail: updateError.message }, 400);
-      }
-
-      const { data: existingProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('id, role_id')
-        .eq('id', existing.id)
-        .maybeSingle();
-
-      const { error: upsertError } = await supabaseAdmin
-        .from('profiles')
-        .upsert({
-          id: existing.id,
-          email: existing.email,
-          role_id,
-          full_name: full_name || existing.user_metadata?.full_name || '',
-          phone: phone || existing.user_metadata?.phone || '',
-          job_title: job_title || existing.user_metadata?.job_title || '',
-          department: department || existing.user_metadata?.department || '',
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
-
-      if (upsertError) {
-        return respond({ error: 'Failed to update profile.', detail: upsertError.message }, 400);
-      }
-
-      if (existingProfile && existingProfile.role_id !== role_id) {
-        await audit(user.id, {
-          p_action_type: 'ROLE_UPDATE',
-          p_message: 'User role updated by invitation',
-          p_entity_type: 'profile',
-          p_entity_id: existing.id,
-          p_details: {
-            profile_id: existing.id,
-            from_role_id: existingProfile.role_id,
-            to_role_id: role_id,
-            from_role: await roleName(existingProfile.role_id),
-            to_role: await roleName(role_id),
-          },
-          p_old_values: { role_id: existingProfile.role_id },
-          p_new_values: { role_id },
-        });
-      }
-
-      return respond({ user: existing });
-    }
-
-    const isDirect = mode !== 'invite';
-
     if (isDirect) {
       const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
+        email: String(email).trim(),
+        password,
         email_confirm: true,
         user_metadata: userMetadata,
       });
 
       if (createError) {
-        console.error('DEBUG - Admin API Error:', JSON.stringify(createError, null, 2));
+        console.error('DEBUG - Admin API Error:', createError.status ?? '', createError.message ?? '');
+        const duplicate = await duplicateResponse(String(email).trim(), cleanUsername, isDuplicateAuthError(createError.message)
+          ? { error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }
+          : null);
+        if (duplicate) return duplicate;
         return respond({ error: 'Failed to create user.', detail: createError.message }, 400);
       }
 
@@ -179,10 +243,11 @@ serve(async (req) => {
           p_details: {
             profile_id: createData.user.id,
             email: email,
-            role_id,
-            role: await roleName(role_id),
+            username: cleanUsername,
+            role_id: roleId,
+            role: resolvedRoleName,
           },
-          p_new_values: { role_id, email },
+          p_new_values: { role_id: roleId, email, username: cleanUsername },
         });
       }
 
@@ -190,7 +255,7 @@ serve(async (req) => {
     }
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      email,
+      String(email).trim(),
       {
         data: userMetadata,
         redirectTo: `${supabaseUrl}/auth/v1/callback`,
@@ -198,7 +263,11 @@ serve(async (req) => {
     );
 
     if (inviteError) {
-      console.error('DEBUG - Admin API Error:', JSON.stringify(inviteError, null, 2));
+      console.error('DEBUG - Admin API Error:', inviteError.status ?? '', inviteError.message ?? '');
+      const duplicate = await duplicateResponse(String(email).trim(), cleanUsername, isDuplicateAuthError(inviteError.message)
+        ? { error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }
+        : null);
+      if (duplicate) return duplicate;
       return respond({ error: 'Invitation failed', detail: inviteError.message }, 400);
     }
 
@@ -211,10 +280,11 @@ serve(async (req) => {
         p_details: {
           profile_id: inviteData.user.id,
           email: email,
-          role_id,
-          role: await roleName(role_id),
+          username: cleanUsername,
+          role_id: roleId,
+          role: resolvedRoleName,
         },
-        p_new_values: { role_id, email },
+        p_new_values: { role_id: roleId, email, username: cleanUsername },
       });
     }
 

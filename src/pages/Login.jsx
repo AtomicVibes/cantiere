@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { signInWithEmail, signInWithGoogle } from "@/services/authService";
+import { EMAIL_EXISTS_MESSAGE } from "@/services/accountService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,7 +22,7 @@ export default function Login() {
 
   useEffect(() => {
     if (location.state?.message === "email-exists") {
-      toast.info("This email is already registered. Please log in or update your profile.");
+      toast.info(EMAIL_EXISTS_MESSAGE);
     } else if (location.search?.includes("message=check-email")) {
       toast.success("Check your email for the confirmation link.");
     }

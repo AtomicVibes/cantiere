@@ -2195,6 +2195,7 @@ export type Database = {
           role: string | null
           role_id: string | null
           status: string | null
+          username: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -2211,6 +2212,7 @@ export type Database = {
           role?: string | null
           role_id?: string | null
           status?: string | null
+          username?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -2227,6 +2229,7 @@ export type Database = {
           role?: string | null
           role_id?: string | null
           status?: string | null
+          username?: string | null
         }
         Relationships: [
           {
@@ -2623,6 +2626,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      account_identity_available: {
+        Args: {
+          p_email?: string
+          p_username?: string
+          p_exclude_id?: string
+        }
+        Returns: Json
+      }
       auth_user_is_super_admin: { Args: never; Returns: boolean }
       can_read_document: {
         Args: { p_document_id: string; p_user_id?: string }

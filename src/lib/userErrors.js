@@ -75,6 +75,8 @@ export function getUserFriendlyMessage(error, t, fallbackKey = 'errors.generic')
     'errors.permissionDenied': "You don't have permission to perform this action.",
     'errors.network': 'Unable to connect to the server. Please check your connection and try again.',
     'errors.notFound': 'The requested item could not be found.',
+    'errors.emailExists': 'An account already exists with this email address.',
+    'errors.usernameTaken': 'This username is already taken. Please choose another username.',
   };
   const pick = (key) => translate(key, fallbacks[key] ?? fallbacks['errors.generic']);
 
@@ -86,6 +88,19 @@ export function getUserFriendlyMessage(error, t, fallbackKey = 'errors.generic')
 
   const message = String(error?.message || '').toLowerCase();
   const code = String(error?.code || '');
+  // Unique violations (23505) and duplicate rejections never fall through to
+  // errors.generic: show the exact identity message instead.
+  if (
+    code === '23505' ||
+    message.includes('duplicate key') ||
+    message.includes('duplicate') ||
+    message.includes('already exists') ||
+    message.includes('already registered') ||
+    message.includes('already taken') ||
+    message.includes('user_already_exists')
+  ) {
+    return pick(message.includes('username') ? 'errors.usernameTaken' : 'errors.emailExists');
+  }
   if (code === '23514' || message.includes('violates check constraint')) return pick(fallbackKey);
   if (code === '23503' || message.includes('violates foreign key constraint')) return pick(fallbackKey);
   if (

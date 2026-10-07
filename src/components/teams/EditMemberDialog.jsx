@@ -18,6 +18,8 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { useTeamFormFields } from '@/hooks/useFormSchema';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
+import { checkAccountIdentity, isDuplicateError, USERNAME_TAKEN_MESSAGE } from '@/services/accountService';
+import { isValidUsername, normalizeUsername } from '@/lib/validation';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { ChevronsUpDown, X } from 'lucide-react';
 
@@ -37,7 +39,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
   const canEdit = PERMISSIONS.canEditTeamMember.includes(currentUserRole);
 
   const [form, setForm] = useState({
-    full_name: '', phone: '', job_title: '', department: '', status: 'active', role_id: '',
+    full_name: '', username: '', phone: '', job_title: '', department: '', status: 'active', role_id: '',
   });
   const [selectedProjects, setSelectedProjects] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -69,6 +71,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
     if (member) {
       setForm({
         full_name: member.full_name || '',
+        username: member.username || '',
         phone: member.phone || '',
         job_title: member.job_title || '',
         department: member.department || '',
@@ -107,8 +110,32 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
     setSaving(true);
 
     try {
+      const trimmedUsername = normalizeUsername(form.username);
+      if (!trimmedUsername) {
+        toast.error(`${t('username')} ${t('isRequired')}`);
+        setSaving(false);
+        return;
+      }
+      if (!isValidUsername(trimmedUsername)) {
+        toast.error(t('invalidUsername'));
+        setSaving(false);
+        return;
+      }
+
+      // Exclude the current member so their own username never reads as a duplicate.
+      const { usernameAvailable } = await checkAccountIdentity({
+        username: trimmedUsername,
+        excludeId: member.id,
+      });
+      if (!usernameAvailable) {
+        toast.error(USERNAME_TAKEN_MESSAGE);
+        setSaving(false);
+        return;
+      }
+
       await updateMember(member.id, {
         full_name: form.full_name,
+        username: trimmedUsername,
         phone: form.phone,
         job_title: form.job_title,
         department: form.department,
@@ -141,7 +168,9 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
       toast.success('Member updated');
       onOpenChange(false);
     } catch (err) {
-      if (!handleMutationError(err, t, toast)) {
+      if (isDuplicateError(err)) {
+        toast.error(USERNAME_TAKEN_MESSAGE);
+      } else if (!handleMutationError(err, t, toast)) {
         toast.error(err.message);
       }
     } finally {
@@ -275,7 +304,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               {t('cancel')}
             </Button>
-            <Button type="submit" disabled={saving || !form.full_name}>
+            <Button type="submit" disabled={saving || !form.full_name || !form.username}>
               {saving ? t('saving') : t('save')}
             </Button>
           </DialogFooter>

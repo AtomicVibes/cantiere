@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signUpWithEmail, signInWithGoogle } from "@/services/authService";
+import { isValidEmail, normalizeEmail } from "@/lib/validation";
+import { EMAIL_EXISTS_MESSAGE } from "@/services/accountService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,18 +23,26 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isValidEmail(email)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
     if (password !== confirmPassword) {
       toast.error("Passwords do not match.");
       return;
     }
     setLoading(true);
-    const { data, error } = await signUpWithEmail(email, password, {
+    const { data, error } = await signUpWithEmail(normalizeEmail(email), password, {
       full_name: fullName,
     });
     setLoading(false);
     if (error) {
-      if (error.message?.toLowerCase().includes("already exists") || error.code === "user_already_exists") {
-        navigate("/login", { state: { email, message: "email-exists" } });
+      if (
+        error.message?.toLowerCase().includes("already exists") ||
+        error.message?.toLowerCase().includes("already registered") ||
+        error.code === "user_already_exists"
+      ) {
+        toast.error(EMAIL_EXISTS_MESSAGE);
       } else {
         toast.error(error.message || "Failed to create account.");
       }

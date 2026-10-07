@@ -24,7 +24,8 @@ export function useTeamFormFields() {
   return useMemo(() => ({
     fields: [
       { key: 'full_name', label: t('fullName'), type: 'text', required: true },
-      { key: 'email', label: t('email'), type: 'email', required: false },
+      { key: 'username', label: t('username'), type: 'text', required: true },
+      { key: 'email', label: t('email'), type: 'email', required: true },
       { key: 'phone', label: t('phone'), type: 'text', required: false },
       { key: 'job_title', label: t('jobTitle'), type: 'select', required: false },
       { key: 'department', label: t('department'), type: 'text', required: false },

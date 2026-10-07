@@ -8,6 +8,10 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
 
 const CLIENT_ROLE_ID = "f3e7c0d7-d41f-486f-89fd-732d1c9cc200";
 
+const EMAIL_EXISTS_MESSAGE = 'An account already exists with this email address.';
+const USERNAME_TAKEN_MESSAGE = 'This username is already taken. Please choose another username.';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const ALLOWED_ORIGINS = [
   "http://localhost:5173",
   "https://hrtncnmmykzckemykesu.supabase.co/auth/v1/callback",
@@ -71,6 +75,10 @@ serve(async (req: { headers: { get: (arg0: string) => string; }; method: string;
       return respond({ error: 'Email address is required.' }, 400, origin);
     }
 
+    if (!EMAIL_REGEX.test(String(email).trim())) {
+      return respond({ error: 'Please enter a valid email address.', detail: 'Invalid email format' }, 400, origin);
+    }
+
     if (!password) {
       return respond({ error: 'Password is required.' }, 400, origin);
     }
@@ -105,76 +113,26 @@ serve(async (req: { headers: { get: (arg0: string) => string; }; method: string;
       );
     }
 
-    const { data: usersData } = await supabaseAdmin.auth.admin.listUsers().catch(() => ({ data: null }));
-    const existing = usersData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-        existing.id,
-        { user_metadata: { full_name: full_name || '', phone: phone || '', role_id: CLIENT_ROLE_ID } }
-      );
-      if (updateError) {
-        return respond({ error: 'Failed to update existing user.', detail: updateError.message }, 400, origin);
-      }
-
-      const { data: existingProfile, error: existingProfileError } = await supabaseAdmin
-        .from('profiles')
-        .select('id, role_id')
-        .eq('id', existing.id)
-        .maybeSingle();
-
-      const { error: upsertError } = await supabaseAdmin
-        .from('profiles')
-        .upsert({
-          id: existing.id,
-          email: existing.email,
-          full_name: full_name || existing.user_metadata?.full_name || '',
-          phone: phone || existing.user_metadata?.phone || '',
-          role_id: CLIENT_ROLE_ID,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
-
-      if (upsertError) {
-        return respond({ error: 'Failed to update profile.', detail: upsertError.message }, 400, origin);
-      }
-
-      await audit(user.id, {
-        p_action_type: 'CLIENT_CREATE',
-        p_message: 'Client account created for existing user',
-        p_entity_type: 'profile',
-        p_entity_id: existing.id,
-        p_details: {
-          email: existing.email,
-          profile_id: existing.id,
-          role_id: CLIENT_ROLE_ID,
-          role: 'client',
-        },
-        p_new_values: { role_id: CLIENT_ROLE_ID, email: existing.email },
-      });
-
-      if (existingProfileError || (existingProfile && existingProfile.role_id !== CLIENT_ROLE_ID)) {
-        const fromRoleId = existingProfileError ? null : existingProfile?.role_id ?? null;
-        await audit(user.id, {
-          p_action_type: 'ROLE_UPDATE',
-          p_message: 'User role updated to client',
-          p_entity_type: 'profile',
-          p_entity_id: existing.id,
-          p_details: {
-            profile_id: existing.id,
-            from_role_id: fromRoleId,
-            to_role_id: CLIENT_ROLE_ID,
-            from_role: await roleName(fromRoleId),
-            to_role: 'client',
-          },
-          p_old_values: fromRoleId ? { role_id: fromRoleId } : null,
-          p_new_values: { role_id: CLIENT_ROLE_ID },
-        });
-      }
-
-      return respond({ user: existing }, 200, origin);
+    // Case-insensitive duplicate pre-check. Never adopt an existing Auth user:
+    // a duplicate email is rejected with 409 and the exact required message.
+    const cleanEmail = String(email).trim();
+    const { data: availability, error: availabilityError } = await supabaseAdmin.rpc('account_identity_available', {
+      p_email: cleanEmail,
+      p_username: null,
+      p_exclude_id: null,
+    });
+    if (availabilityError) {
+      console.error('[create-client] identity availability check failed:', availabilityError.message);
+    }
+    if (availability && availability.email_available === false) {
+      return respond({ error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }, 409, origin);
+    }
+    if (availability && availability.username_available === false) {
+      return respond({ error: USERNAME_TAKEN_MESSAGE, detail: 'duplicate_username' }, 409, origin);
     }
 
     const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-      email,
+      email: cleanEmail,
       password,
       email_confirm: true,
       user_metadata: {
@@ -185,6 +143,17 @@ serve(async (req: { headers: { get: (arg0: string) => string; }; method: string;
     });
 
     if (createError) {
+      const message = String(createError.message || '');
+      const lower = message.toLowerCase();
+      const looksDuplicate =
+        lower.includes('already registered') ||
+        lower.includes('already exists') ||
+        lower.includes('user_already_exists') ||
+        lower.includes('duplicate') ||
+        lower.includes('23505');
+      if (looksDuplicate) {
+        return respond({ error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }, 409, origin);
+      }
       return respond({ error: 'Failed to create user.', detail: createError.message }, 400, origin);
     }
 

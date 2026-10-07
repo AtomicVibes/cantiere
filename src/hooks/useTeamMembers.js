@@ -18,6 +18,7 @@ function formatMember(p) {
     id: p.id,
     full_name: p.full_name || '',
     email: p.email || '',
+    username: p.username || '',
     phone: p.phone || '',
     job_title: p.job_title || '',
     department: p.department || '',
@@ -48,7 +49,7 @@ export function useTeamMembers({ userRole, isSuperAdmin }) {
       if (isSuperAdmin) {
         const { data, error } = await supabase
           .from('profiles')
-          .select('id, email, full_name, phone, job_title, department, role_id')
+          .select('id, email, username, full_name, phone, job_title, department, role_id')
           .order('created_at', { ascending: false });
         if (error) throw error;
         return (data ?? []).map(formatMember);
@@ -56,7 +57,7 @@ export function useTeamMembers({ userRole, isSuperAdmin }) {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, email, full_name, phone, job_title, department, role_id, roles!inner(name)')
+        .select('id, email, username, full_name, phone, job_title, department, role_id, roles!inner(name)')
         .neq('roles.name', 'super_admin')
         .order('created_at', { ascending: false });
       if (error) throw error;

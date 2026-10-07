@@ -23,6 +23,8 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { createClient, deleteUser } from '@/services/inviteService';
+import { checkAccountIdentity, isDuplicateError, EMAIL_EXISTS_MESSAGE } from '@/services/accountService';
+import { isValidEmail, normalizeEmail } from '@/lib/validation';
 
 const emptyForm = { full_name: '', company_name: '', email: '', password: '', phone: '', address: '', vat_number: '', notes: '', business_activity: '', website: '' };
 
@@ -233,6 +235,7 @@ queryClient.invalidateQueries({ queryKey: ['clients'] });
     }
     setSaving(true);
     setFriendlyError('');
+    let createdProfileId = null;
 
     try {
       const clientDetails = {
@@ -258,22 +261,35 @@ queryClient.invalidateQueries({ queryKey: ['clients'] });
         if (clientError) throw clientError;
       } else {
         if (!form.email) {
-          setFriendlyError('Email is required');
+          setFriendlyError(`${t('email')} ${t('isRequired')}`);
+          setSaving(false);
+          return;
+        }
+        if (!isValidEmail(form.email)) {
+          setFriendlyError(t('invalidEmail'));
+          setSaving(false);
+          return;
+        }
+        const { emailAvailable } = await checkAccountIdentity({ email: form.email });
+        if (!emailAvailable) {
+          setFriendlyError(EMAIL_EXISTS_MESSAGE);
           setSaving(false);
           return;
         }
         const created = await createClient({
-          email: form.email,
+          email: normalizeEmail(form.email),
           password: form.password,
           full_name: form.full_name,
           phone: form.phone,
         });
         const profileId = created?.user?.id;
+        createdProfileId = profileId || null;
         const { error: clientError } = await supabase
           .from('clients')
           .update(clientDetails)
           .eq('profile_id', profileId);
         if (clientError) throw clientError;
+        createdProfileId = null;
         toast.success(`Client created (${form.email})`);
       }
 
@@ -284,7 +300,15 @@ queryClient.invalidateQueries({ queryKey: ['clients'] });
       setEditClient(null);
       setForm(emptyForm);
     } catch (err) {
-      setFriendlyError(err.message);
+      // Roll back a half-created account so no orphaned Auth user is left.
+      if (createdProfileId) {
+        try { await deleteUser(createdProfileId); } catch { /* best-effort */ }
+      }
+      if (isDuplicateError(err)) {
+        setFriendlyError(EMAIL_EXISTS_MESSAGE);
+      } else {
+        setFriendlyError(err.message);
+      }
     } finally {
       setSaving(false);
     }
