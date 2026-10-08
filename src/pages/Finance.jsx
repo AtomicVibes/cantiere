@@ -8,6 +8,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import StatusBadge from '@/components/shared/StatusBadge';
 import StatCard from '@/components/dashboard/StatCard';
 import InvoiceFormDialog from '@/components/invoices/InvoiceFormDialog';
+import SageSyncBadge from '@/components/invoices/SageSyncBadge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -308,7 +309,10 @@ export default function Finance() {
                         <Checkbox checked={selectedIds.has(inv.id)} onCheckedChange={() => toggleSelect(inv.id)} />
                       </TableCell>
                     )}
-                    <TableCell className="font-medium">{inv.invoice_number}</TableCell>
+                    <TableCell className="font-medium">
+                      <div>{inv.invoice_number}</div>
+                      <SageSyncBadge status={inv.sage_sync_status} error={inv.sage_sync_error} className="mt-1" />
+                    </TableCell>
                     <TableCell className="hidden md:table-cell">{clientMap[inv.client_id] || '-'}</TableCell>
                     <TableCell className="hidden lg:table-cell capitalize">{inv.category?.replace(/_/g, ' ')}</TableCell>
                     <TableCell className="font-semibold">€{(inv.total || 0).toLocaleString()}</TableCell>

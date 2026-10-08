@@ -12,6 +12,7 @@ import { logAction } from '@/lib/activityTracking';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import SageSyncBadge from '@/components/invoices/SageSyncBadge';
 import { useDirection } from '@/i18n/LanguageProvider';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useAuth } from '@/lib/AuthContext';
@@ -617,6 +618,34 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
               <div><Label>{t('stampDuty')}</Label><Input type="number" min="0" step="0.01" value={form.stamp_duty} onChange={e => setForm({ ...form, stamp_duty: e.target.value })} placeholder="0,00" /></div>
               <div className="sm:col-span-2" />
             </div>
+
+            {invoice?.id && (
+              <div className="rounded-lg border border-border p-3 text-sm space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-xs">{t('sageSyncStatus')}</span>
+                  <SageSyncBadge
+                    status={invoice.sage_sync_status}
+                    error={invoice.sage_sync_error}
+                  />
+                  {!invoice.sage_sync_status && (
+                    <span className="text-xs text-muted-foreground">{t('sageSyncNotSynced')}</span>
+                  )}
+                </div>
+                {(invoice.sage_id || invoice.external_id) && (
+                  <p className="text-xs text-muted-foreground break-all">
+                    {t('sageExternalId')}: {invoice.sage_id || invoice.external_id}
+                  </p>
+                )}
+                {invoice.sage_last_synced_at && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('sageLastSyncedAt')}: {new Date(invoice.sage_last_synced_at).toLocaleString()}
+                  </p>
+                )}
+                {invoice.sage_sync_error && (
+                  <p className="text-xs text-destructive break-words">{invoice.sage_sync_error}</p>
+                )}
+              </div>
+            )}
           </div>
 
           <Separator />

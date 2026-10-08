@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
 import { supabase } from '@/services/supabase';
 import { subscribeUserToPush } from '@/hooks/usePushNotification';
 import {
@@ -28,10 +29,13 @@ import TopBar from '@/components/layout/TopBar';
 import Logo from '@/components/Logo';
 import { APP_NAME, APP_VERSION_LABEL } from '@/lib/appInfo';
 import { getUserFriendlyMessage, logAppError } from '@/lib/userErrors';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import IntegrationsPanel from '@/components/settings/IntegrationsPanel';
 
 export default function Settings() {
   const { user } = useAuth();
   const { role } = useUserRole();
+  const { isSuperAdmin, loading: superAdminLoading } = useIsSuperAdmin();
   const { t, i18n } = useTranslation();
   const [profile, setProfile] = useState({
     phone: '',
@@ -295,200 +299,222 @@ export default function Settings() {
     <div>
       <TopBar title={t('settings')} />
       <div className="p-6 max-w-3xl">
-        <div className="space-y-6">
-          <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold flex items-center gap-2">
-              <User className="w-4 h-4 text-muted-foreground" aria-hidden />
-              {t('profileInformation')}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>{t('fullName')}</Label>
-                <Input value={user?.user_metadata?.full_name || ''} disabled className="bg-muted" />
-              </div>
-              <div>
-                <Label>{t('email')}</Label>
-                <Input value={user?.email || ''} disabled className="bg-muted" />
-              </div>
-              <div>
-                <Label>{t('phone')}</Label>
-                <Input value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} />
-              </div>
-              <div>
-                <Label>{t('department')}</Label>
-                <Input value={profile.department} onChange={e => setProfile({...profile, department: e.target.value})} />
-              </div>
-              <div>
-                <Label>{t('role')}</Label>
-                <Input value={role ? role.replace(/_/g, ' ') : 'User'} disabled className="bg-muted capitalize" />
-              </div>
-            </div>
-          </div>
+        <Tabs defaultValue="profile" className="w-full">
+          <TabsList aria-label={t('settings', 'Settings')} className="flex-wrap h-auto">
+            <TabsTrigger value="profile">{t('profileInformation')}</TabsTrigger>
+            <TabsTrigger value="appearance">{t('appearance')}</TabsTrigger>
+            <TabsTrigger value="notifications">{t('notificationPreferences')}</TabsTrigger>
+            {isSuperAdmin && <TabsTrigger value="integrations">{t('integrations')}</TabsTrigger>}
+            <TabsTrigger value="about">{t('aboutTitle', 'About')}</TabsTrigger>
+          </TabsList>
 
-          <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold flex items-center gap-2">
-              <Palette className="w-4 h-4 text-muted-foreground" aria-hidden />
-              {t('appearance')}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>{t('theme')}</Label>
-                <Select value={preferences.theme} onValueChange={handleThemeChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">
-                      <span className="flex items-center gap-2">
-                        <Sun className="w-4 h-4 text-muted-foreground" aria-hidden />{t('light')}
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="dark">
-                      <span className="flex items-center gap-2">
-                        <Moon className="w-4 h-4 text-muted-foreground" aria-hidden />{t('dark')}
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="system">
-                      <span className="flex items-center gap-2">
-                        <Monitor className="w-4 h-4 text-muted-foreground" aria-hidden />{t('system')}
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label className="flex items-center gap-2">
-                  <Languages className="w-4 h-4 text-muted-foreground" aria-hidden />{t('language')}
-                </Label>
-                <Select value={preferences.language} onValueChange={handleLanguageChange}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en">{t('english')}</SelectItem>
-                    <SelectItem value="fr">{t('french')}</SelectItem>
-                    <SelectItem value="it">{t('italian')}</SelectItem>
-                  </SelectContent>
-                </Select>
+          <TabsContent value="profile" className="space-y-6 mt-6">
+            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+              <h3 className="font-heading font-semibold flex items-center gap-2">
+                <User className="w-4 h-4 text-muted-foreground" aria-hidden />
+                {t('profileInformation')}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('fullName')}</Label>
+                  <Input value={user?.user_metadata?.full_name || ''} disabled className="bg-muted" />
+                </div>
+                <div>
+                  <Label>{t('email')}</Label>
+                  <Input value={user?.email || ''} disabled className="bg-muted" />
+                </div>
+                <div>
+                  <Label>{t('phone')}</Label>
+                  <Input value={profile.phone} onChange={e => setProfile({...profile, phone: e.target.value})} />
+                </div>
+                <div>
+                  <Label>{t('department')}</Label>
+                  <Input value={profile.department} onChange={e => setProfile({...profile, department: e.target.value})} />
+                </div>
+                <div>
+                  <Label>{t('role')}</Label>
+                  <Input value={role ? role.replace(/_/g, ' ') : 'User'} disabled className="bg-muted capitalize" />
+                </div>
               </div>
             </div>
-          </div>
+          </TabsContent>
 
-          <div className="bg-card rounded-xl border border-border p-6 space-y-4">
-            <h3 className="font-heading font-semibold flex items-center gap-2">
-              <Bell className="w-4 h-4 text-muted-foreground" aria-hidden />
-              {t('notificationPreferences')}
-            </h3>
-            <div className="flex items-center justify-between gap-4 py-2">
-              <div className="flex items-start gap-3 min-w-0">
-                <Bell className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
-                <div className="min-w-0">
-                  <p className="font-medium">{t('emailNotifications')}</p>
-                  <p className="text-sm text-muted-foreground">{t('emailNotificationsDesc')}</p>
+          <TabsContent value="appearance" className="space-y-6 mt-6">
+            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+              <h3 className="font-heading font-semibold flex items-center gap-2">
+                <Palette className="w-4 h-4 text-muted-foreground" aria-hidden />
+                {t('appearance')}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('theme')}</Label>
+                  <Select value={preferences.theme} onValueChange={handleThemeChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">
+                        <span className="flex items-center gap-2">
+                          <Sun className="w-4 h-4 text-muted-foreground" aria-hidden />{t('light')}
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="dark">
+                        <span className="flex items-center gap-2">
+                          <Moon className="w-4 h-4 text-muted-foreground" aria-hidden />{t('dark')}
+                        </span>
+                      </SelectItem>
+                      <SelectItem value="system">
+                        <span className="flex items-center gap-2">
+                          <Monitor className="w-4 h-4 text-muted-foreground" aria-hidden />{t('system')}
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="flex items-center gap-2">
+                    <Languages className="w-4 h-4 text-muted-foreground" aria-hidden />{t('language')}
+                  </Label>
+                  <Select value={preferences.language} onValueChange={handleLanguageChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">{t('english')}</SelectItem>
+                      <SelectItem value="fr">{t('french')}</SelectItem>
+                      <SelectItem value="it">{t('italian')}</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <Switch
-                checked={preferences.email_notifications}
-                onCheckedChange={v => setPreferences({...preferences, email_notifications: v})}
-                aria-label={t('emailNotifications')}
-              />
             </div>
-            <div className="flex items-center justify-between gap-4 py-2">
-              <div className="flex items-start gap-3 min-w-0">
-                <MessageSquare className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
-                <div className="min-w-0">
-                  <p className="font-medium" id="sms-notifications-label">{t('smsNotifications', 'SMS Notifications')}</p>
-                  <p className="text-sm text-muted-foreground" id="sms-notifications-desc">{t('smsNotificationsDesc', 'Receive supported notifications by SMS.')}</p>
+          </TabsContent>
+
+          <TabsContent value="notifications" className="space-y-6 mt-6">
+            <div className="bg-card rounded-xl border border-border p-6 space-y-4">
+              <h3 className="font-heading font-semibold flex items-center gap-2">
+                <Bell className="w-4 h-4 text-muted-foreground" aria-hidden />
+                {t('notificationPreferences')}
+              </h3>
+              <div className="flex items-center justify-between gap-4 py-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  <Bell className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="font-medium">{t('emailNotifications')}</p>
+                    <p className="text-sm text-muted-foreground">{t('emailNotificationsDesc')}</p>
+                  </div>
                 </div>
+                <Switch
+                  checked={preferences.email_notifications}
+                  onCheckedChange={v => setPreferences({...preferences, email_notifications: v})}
+                  aria-label={t('emailNotifications')}
+                />
               </div>
-              <Switch
-                checked={smsEnabled}
-                disabled={smsSaving || !smsLoaded}
-                onCheckedChange={handleSmsToggle}
-                aria-labelledby="sms-notifications-label"
-                aria-describedby="sms-notifications-desc"
-              />
-            </div>
-            <span className="sr-only" role="status" aria-live="polite">
-              {smsSaving ? t('saving') : ''}
-            </span>
-            <div className="flex items-center justify-between gap-4 py-2">
-              <div className="flex items-start gap-3 min-w-0">
-                <Smartphone className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
-                <div className="min-w-0">
-                  <p className="font-medium" id="push-pref-label">{t('pushPreference', 'Push delivery')}</p>
-                  <p className="text-sm text-muted-foreground" id="push-pref-desc">{t('pushPreferenceDesc', 'Allow Geometra to send you browser push notifications.')}</p>
+              <div className="flex items-center justify-between gap-4 py-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  <MessageSquare className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="font-medium" id="sms-notifications-label">{t('smsNotifications', 'SMS Notifications')}</p>
+                    <p className="text-sm text-muted-foreground" id="sms-notifications-desc">{t('smsNotificationsDesc', 'Receive supported notifications by SMS.')}</p>
+                  </div>
                 </div>
+                <Switch
+                  checked={smsEnabled}
+                  disabled={smsSaving || !smsLoaded}
+                  onCheckedChange={handleSmsToggle}
+                  aria-labelledby="sms-notifications-label"
+                  aria-describedby="sms-notifications-desc"
+                />
               </div>
-              <Switch
-                checked={pushPrefEnabled}
-                disabled={pushPrefSaving || !smsLoaded}
-                onCheckedChange={handlePushPrefToggle}
-                aria-labelledby="push-pref-label"
-                aria-describedby="push-pref-desc"
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4 py-2">
-              <div className="min-w-0">
-                <p className="font-medium">{t('pushNotifications', 'Push Notifications')}</p>
-                <p className="text-sm text-muted-foreground">{t('pushNotificationsDesc', 'Receive alerts via browser push.')}</p>
-                <p className="text-xs text-muted-foreground mt-1" role="status">
-                  {t(pushStatusKey, pushStatusKey)}
-                </p>
-                {pushBlocked && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t('pushBlockedHelp', 'Notifications are blocked by your browser. Allow them in your browser site settings, then try again.')}
+              <span className="sr-only" role="status" aria-live="polite">
+                {smsSaving ? t('saving') : ''}
+              </span>
+              <div className="flex items-center justify-between gap-4 py-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  <Smartphone className="w-4 h-4 mt-1 text-muted-foreground shrink-0" aria-hidden />
+                  <div className="min-w-0">
+                    <p className="font-medium" id="push-pref-label">{t('pushPreference', 'Push delivery')}</p>
+                    <p className="text-sm text-muted-foreground" id="push-pref-desc">{t('pushPreferenceDesc', 'Allow Geometra to send you browser push notifications.')}</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={pushPrefEnabled}
+                  disabled={pushPrefSaving || !smsLoaded}
+                  onCheckedChange={handlePushPrefToggle}
+                  aria-labelledby="push-pref-label"
+                  aria-describedby="push-pref-desc"
+                />
+              </div>
+              <div className="flex items-center justify-between gap-4 py-2">
+                <div className="min-w-0">
+                  <p className="font-medium">{t('pushNotifications', 'Push Notifications')}</p>
+                  <p className="text-sm text-muted-foreground">{t('pushNotificationsDesc', 'Receive alerts via browser push.')}</p>
+                  <p className="text-xs text-muted-foreground mt-1" role="status">
+                    {t(pushStatusKey, pushStatusKey)}
                   </p>
-                )}
+                  {pushBlocked && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {t('pushBlockedHelp', 'Notifications are blocked by your browser. Allow them in your browser site settings, then try again.')}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant={pushWorking ? 'outline' : 'default'}
+                  onClick={handleEnablePush}
+                  disabled={pushState.loading || pushWorking || !pushSupported || pushBlocked}
+                  aria-live="polite"
+                >
+                  {pushState.loading
+                    ? t('pushEnabling', 'Enabling…')
+                    : pushWorking
+                      ? t('pushEnabledCta', 'Enabled')
+                      : t('pushEnableCta', 'Enable')}
+                </Button>
               </div>
-              <Button
-                size="sm"
-                variant={pushWorking ? 'outline' : 'default'}
-                onClick={handleEnablePush}
-                disabled={pushState.loading || pushWorking || !pushSupported || pushBlocked}
-                aria-live="polite"
-              >
-                {pushState.loading
-                  ? t('pushEnabling', 'Enabling…')
-                  : pushWorking
-                    ? t('pushEnabledCta', 'Enabled')
-                    : t('pushEnableCta', 'Enable')}
-              </Button>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2">
-              <div>
-                <p className="font-medium">{t('notificationRetention')}</p>
-                <p className="text-sm text-muted-foreground">{t('notificationRetentionDesc')}</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2">
+                <div>
+                  <p className="font-medium">{t('notificationRetention')}</p>
+                  <p className="text-sm text-muted-foreground">{t('notificationRetentionDesc')}</p>
+                </div>
+                <Select value={String(retention)} onValueChange={(v) => setRetention(Number(v))}>
+                  <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">{t('retention24h')}</SelectItem>
+                    <SelectItem value="7">{t('retention1week')}</SelectItem>
+                    <SelectItem value="30">{t('retention1month')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={String(retention)} onValueChange={(v) => setRetention(Number(v))}>
-                <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">{t('retention24h')}</SelectItem>
-                  <SelectItem value="7">{t('retention1week')}</SelectItem>
-                  <SelectItem value="30">{t('retention1month')}</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
-          </div>
+          </TabsContent>
 
-          <div className="bg-card rounded-xl border border-border p-6 space-y-3">
-            <h3 className="font-heading font-semibold flex items-center gap-2">
-              <Info className="w-4 h-4 text-muted-foreground" aria-hidden />
-              {t('aboutTitle', `About ${APP_NAME}`)}
-            </h3>
-            <div className="flex items-center gap-3">
-              <Logo size={36} className="text-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="font-semibold">
-                  {APP_NAME} {APP_VERSION_LABEL} — {t('aboutBetaBadge', 'Beta')}
-                </p>
-                <p>
-                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
-                    {t('aboutBetaTag', 'Beta / Experimental')}
-                  </span>
-                </p>
+          {isSuperAdmin && (
+            <TabsContent value="integrations" className="space-y-6 mt-6">
+              <IntegrationsPanel />
+            </TabsContent>
+          )}
+
+          <TabsContent value="about" className="space-y-6 mt-6">
+            <div className="bg-card rounded-xl border border-border p-6 space-y-3">
+              <h3 className="font-heading font-semibold flex items-center gap-2">
+                <Info className="w-4 h-4 text-muted-foreground" aria-hidden />
+                {t('aboutTitle', `About ${APP_NAME}`)}
+              </h3>
+              <div className="flex items-center gap-3">
+                <Logo size={36} className="text-primary shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-semibold">
+                    {APP_NAME} {APP_VERSION_LABEL} — {t('aboutBetaBadge', 'Beta')}
+                  </p>
+                  <p>
+                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-muted text-muted-foreground uppercase tracking-wider">
+                      {t('aboutBetaTag', 'Beta / Experimental')}
+                    </span>
+                  </p>
+                </div>
               </div>
+              <p className="text-sm text-muted-foreground">{t('aboutP1')}</p>
+              <p className="text-sm text-muted-foreground">{t('aboutP2')}</p>
             </div>
-            <p className="text-sm text-muted-foreground">{t('aboutP1')}</p>
-            <p className="text-sm text-muted-foreground">{t('aboutP2')}</p>
-          </div>
-        </div>
+          </TabsContent>
+        </Tabs>
 
         <div className="mt-6">
           <Button onClick={handleSave} disabled={saving}>

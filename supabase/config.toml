@@ -20,6 +20,11 @@ policy = "per_worker"
 "create-client" = {}
 "create-project-request" = {}
 "review-project-request" = {}
+# The Sage integration authenticates its own callers with a user JWT
+# (Super Admin only) and is called from the browser, so the gateway level
+# JWT verification stays enabled.
+"sage-connection" = {}
+"sage-sync" = {}
 # send-push authenticates its own callers (internal x-push-token from the DB
 # trigger, or a valid user JWT where receiver is forced to the caller). The
 # platform-level JWT check must be disabled, otherwise the DB trigger's
