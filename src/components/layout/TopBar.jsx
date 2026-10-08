@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/services/supabase';
 import { useTranslation } from 'react-i18next';
 import NotificationBell from '@/components/NotificationBell';
 import { getInitials } from '@/lib/avatar';
+import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 
 export default function TopBar({ title }) {
   const { t } = useTranslation();
   const { user } = useAuth();
   const [profileName, setProfileName] = useState(null);
+  const { active: devModeActive } = useDeveloperMode();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -47,6 +50,17 @@ export default function TopBar({ title }) {
             className="pl-9 w-64 h-9 bg-secondary border-0"
           />
         </div>
+
+        {devModeActive && (
+          <Badge
+            variant="outline"
+            className="gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400"
+            title={t('devModeIndicatorDesc')}
+          >
+            <Zap className="w-3 h-3" aria-hidden />
+            {t('devModeIndicator')}
+          </Badge>
+        )}
 
         <NotificationBell />
 

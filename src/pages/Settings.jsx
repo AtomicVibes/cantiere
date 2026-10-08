@@ -31,6 +31,7 @@ import { APP_NAME, APP_VERSION_LABEL } from '@/lib/appInfo';
 import { getUserFriendlyMessage, logAppError } from '@/lib/userErrors';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import IntegrationsPanel from '@/components/settings/IntegrationsPanel';
+import DeveloperModePanel from '@/components/settings/DeveloperModePanel';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -305,6 +306,7 @@ export default function Settings() {
             <TabsTrigger value="appearance">{t('appearance')}</TabsTrigger>
             <TabsTrigger value="notifications">{t('notificationPreferences')}</TabsTrigger>
             {isSuperAdmin && <TabsTrigger value="integrations">{t('integrations')}</TabsTrigger>}
+            {isSuperAdmin && <TabsTrigger value="developer">{t('developerMode')}</TabsTrigger>}
             <TabsTrigger value="about">{t('aboutTitle', 'About')}</TabsTrigger>
           </TabsList>
 
@@ -488,6 +490,12 @@ export default function Settings() {
           {isSuperAdmin && (
             <TabsContent value="integrations" className="space-y-6 mt-6">
               <IntegrationsPanel />
+            </TabsContent>
+          )}
+
+          {isSuperAdmin && (
+            <TabsContent value="developer" className="space-y-6 mt-6">
+              <DeveloperModePanel />
             </TabsContent>
           )}
 
