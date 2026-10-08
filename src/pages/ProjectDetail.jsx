@@ -23,7 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Pencil, Calendar, MapPin, DollarSign,
-  Plus, Loader2, Archive, ArchiveRestore, Trash2, Upload, X, TrendingUp, Send, User as UserIcon, FileText
+  Plus, Loader2, Archive, ArchiveRestore, Trash2, TrendingUp, Send, User as UserIcon, FileText
 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { getEntity, createEntity, updateEntity } from '@/services/dataService';
@@ -31,7 +31,7 @@ import { getEffectiveProgress, isManualProgressMode, computeAutoProgress, getPri
 import { logAppError } from '@/lib/userErrors';
 import { logAction } from '@/lib/activityTracking';
 import { VisibilityBadge } from '@/components/documents/VisibilitySelect';
-import { uploadDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
+import { uploadDocumentFile, validateDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
 import { useAuth } from '@/lib/AuthContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useIsSuperAdmin } from '@/hooks/useIsSuperAdmin';
@@ -43,6 +43,7 @@ import { handleMutationError } from '@/lib/rbac';
 import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
 import ProjectAssignmentDropdown from '@/components/projects/ProjectAssignmentDropdown';
 import DocumentPreview from '@/components/shared/DocumentPreview';
+import { DocumentDropZone } from '@/components/shared/DocumentDropZone';
 
 export default function ProjectDetail() {
   const { t } = useTranslation();
@@ -59,6 +60,7 @@ export default function ProjectDetail() {
   const [newEntry, setNewEntry] = useState({ title: '', description: '', date: '' });
   const [addingEntry, setAddingEntry] = useState(false);
   const [entryFile, setEntryFile] = useState(null);
+  const [entryFileError, setEntryFileError] = useState(null);
   const [entryUploading, setEntryUploading] = useState(false);
   const [entryVisibility, setEntryVisibility] = useState('private');
   const [entryAudience, setEntryAudience] = useState([]);
@@ -70,6 +72,21 @@ export default function ProjectDetail() {
   const [pendingManagerId, setPendingManagerId] = useState(null);
   const [managerTouched, setManagerTouched] = useState(false);
   const [managerSaving, setManagerSaving] = useState(false);
+
+  // Visual pre-check only: uploadDocumentFile still validates on submit.
+  const pickEntryFile = useCallback((nextFile) => {
+    setEntryFile(nextFile);
+    if (!nextFile) {
+      setEntryFileError(null);
+      return;
+    }
+    try {
+      validateDocumentFile(nextFile);
+      setEntryFileError(null);
+    } catch (err) {
+      setEntryFileError(err.message);
+    }
+  }, []);
 
   React.useEffect(() => {
     setPendingManagerId(null);
@@ -709,25 +726,19 @@ export default function ProjectDetail() {
           {addingEntry && (
             <div className="bg-card rounded-xl border border-border p-4 space-y-3 mb-4">
               <Input placeholder={t('entryTitle')} value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
-              <Textarea placeholder="Description" value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
+              <Textarea placeholder={t('description')} value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
               <DatePicker value={newEntry.date} onChange={v => setNewEntry({...newEntry, date: v})} />
-              <div className="flex items-center gap-2">
-                <label className="flex-1 cursor-pointer flex items-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground hover:border-primary/60 hover:bg-muted/50 transition-colors">
-                  <Upload className="w-4 h-4" />
-                  <span className="truncate">{entryFile ? entryFile.name : t('attachDocument')}</span>
-                  <input
-                    type="file"
-                    accept={DOCUMENT_FILE_ACCEPT}
-                    className="hidden"
-                    onChange={e => setEntryFile(e.target.files?.[0] || null)}
-                  />
-                </label>
-                {entryFile && (
-                  <Button size="sm" variant="ghost" onClick={() => setEntryFile(null)} title={t('removeFile')}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
+              <DocumentDropZone
+                file={entryFile}
+                fileError={entryFileError}
+                uploading={entryUploading}
+                accept={DOCUMENT_FILE_ACCEPT}
+                onFileSelect={pickEntryFile}
+                onFileRemove={() => { setEntryFile(null); setEntryFileError(null); }}
+                id="entry-file-input"
+                aria-label={t('attachDocument')}
+              />
+              {entryFileError ? <p className="text-xs text-destructive" role="alert">{t('invalidFile')}</p> : null}
               {entryFile && (
                 <div className="space-y-2">
                   <div>
@@ -749,7 +760,7 @@ export default function ProjectDetail() {
               )}
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title || entryUploading}>
-                  {entryUploading && <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />}
+                  {entryUploading && <Loader2 className="w-3.5 h-3.5 me-1 animate-spin" />}
                   {t('save')}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); setEntryAudience([]); setEntryVisibility('private'); }}>{t('cancel')}</Button>

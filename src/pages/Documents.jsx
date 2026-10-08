@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -30,10 +30,11 @@ import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { supabase } from '@/services/supabase';
 import DocumentPreview from '@/components/shared/DocumentPreview';
+import { DocumentDropZone } from '@/components/shared/DocumentDropZone';
 import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
 import { logAction } from '@/lib/activityTracking';
 import { parseGoogleDocLink, getGoogleDocMime } from '@/lib/googleLinks';
-import { uploadDocumentFile } from '@/services/documentUploadService';
+import { uploadDocumentFile, validateDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
 
 const DOC_CATEGORIES = [
   'blueprint', 'contract', 'permit', 'invoice', 'photo',
@@ -129,9 +130,24 @@ export default function Documents() {
   const [mutating, setMutating] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [fileError, setFileError] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
-  const fileInputRef = useRef(null);
+
+  // Validation runs on selection so the drop zone can show the state right
+  // away; the submit path still validates through uploadDocumentFile.
+  const pickFile = useCallback((nextFile) => {
+    setFile(nextFile);
+    if (!nextFile) {
+      setFileError(null);
+      return;
+    }
+    try {
+      validateDocumentFile(nextFile);
+      setFileError(null);
+    } catch (err) {
+      setFileError(err.message);
+    }
+  }, []);
   const queryClient = useQueryClient();
 
   const { data: projects = [] } = useQuery({
@@ -271,6 +287,7 @@ export default function Documents() {
     setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
     setSelectedAudience([]);
     setFile(null);
+    setFileError(null);
   };
 
   const closeUploadDialog = () => {
@@ -280,6 +297,7 @@ export default function Documents() {
     setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
     setSelectedAudience([]);
     setFile(null);
+    setFileError(null);
   };
 
   const handleSubmit = async (e) => {
@@ -745,11 +763,11 @@ export default function Documents() {
       <Dialog open={showUpload} onOpenChange={open => { if (!open) closeUploadDialog(); }}>
         <DialogContent className="max-h-[85vh] flex flex-col">
           <DialogHeader><DialogTitle className="font-heading">{t('addDocument')}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSubmit} className="flex-1 min-h-0 space-y-4 overflow-y-auto pr-1" dir={dir}>
+          <form onSubmit={handleSubmit} className="flex-1 min-h-0 space-y-4 overflow-y-auto pe-1" dir={dir}>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => { setAddMode('file'); setFile(null); }}
+                onClick={() => { setAddMode('file'); setFile(null); setFileError(null); }}
                 className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${addMode === 'file' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border text-muted-foreground hover:border-primary/60 hover:bg-muted/50'}`}
               >
                 <Upload className="w-4 h-4" /> {t('uploadFile')}
@@ -790,39 +808,24 @@ export default function Documents() {
             ) : (
               <div>
                 <Label>{t('file')}</Label>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
-                  onDragEnter={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
-                  onDragLeave={() => setIsDraggingFile(false)}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    setIsDraggingFile(false);
-                    const droppedFile = e.dataTransfer?.files?.[0];
-                    if (droppedFile) setFile(droppedFile);
-                  }}
-                  className={`flex w-full cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed px-3 py-4 text-center transition-colors ${isDraggingFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/60 hover:bg-muted/50'}`}
-                >
-                  <Upload className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Drag &amp; drop a file here, or click to browse</span>
-                  <span className="text-[11px] text-muted-foreground">JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - up to 50 MB</span>
-                  {file ? <span className="max-w-full truncate text-xs font-medium">{file.name}</span> : null}
-                </button>
-                <Input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,video/mp4,video/webm,video/quicktime,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  className="hidden"
-                  onChange={e => setFile(e.target.files?.[0] || null)}
+                <DocumentDropZone
+                  file={file}
+                  fileError={fileError}
+                  uploading={uploading}
+                  accept={DOCUMENT_FILE_ACCEPT}
+                  onFileSelect={pickFile}
+                  onFileRemove={() => { setFile(null); setFileError(null); }}
+                  id="document-file-input"
+                  aria-label={t('uploadFile')}
+                  aria-describedby="document-file-hint"
                 />
               </div>
             )}
             <div>
-              <Label>Project</Label>
+              <Label>{t('project')}</Label>
               <Select value={form.project_id || 'none'} onValueChange={value => setForm({...form, project_id: value === 'none' ? null : value})}>
-                <SelectTrigger><SelectValue placeholder="No project" /></SelectTrigger>
-                <SelectContent><SelectItem value="none">No project</SelectItem>{projects.map(project => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent>
+                <SelectTrigger><SelectValue placeholder={t('noProject')} /></SelectTrigger>
+                <SelectContent><SelectItem value="none">{t('noProject')}</SelectItem>{projects.map(project => <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <VisibilitySelect

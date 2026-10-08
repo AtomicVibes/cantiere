@@ -835,7 +835,12 @@ const resources = {
         timelineCreate: 'Timeline Entry Added',
         timelineUpdate: 'Timeline Entry Updated',
         timelineDelete: 'Timeline Entry Deleted'
-      }
+      },
+      dropFileHint: 'Drag & drop a file here, or click to browse',
+      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - up to 50 MB',
+      dropFileSelected: 'File selected. Drop another file to replace, or click to browse.',
+      invalidFile: 'This file type or size is not supported.',
+      noProject: 'No project',
     }
   },
   ar: {
@@ -1669,7 +1674,12 @@ const resources = {
         timelineCreate: 'تمت إضافة حدث',
         timelineUpdate: 'تم تحديث الحدث',
         timelineDelete: 'تم حذف الحدث'
-      }
+      },
+      dropFileHint: 'اسحب ملفًا وأفلته هنا، أو انقر للاستعراض',
+      dropFileTypes: 'JPG وPNG وWebP وGIF وPDF وMP4 وWebM وMOV وDOC وDOCX وXLS وXLSX - حتى 50 ميغابايت',
+      dropFileSelected: 'تم تحديد ملف. أسقط ملفًا آخر للاستبدال، أو انقر للاستعراض.',
+      invalidFile: 'نوع الملف أو حجمه غير مدعوم.',
+      noProject: 'بدون مشروع',
     }
   },
   fr: {
@@ -2504,7 +2514,12 @@ const resources = {
         timelineCreate: 'Entrée de chronologie ajoutée',
         timelineUpdate: 'Entrée de chronologie mise à jour',
         timelineDelete: 'Entrée de chronologie supprimée'
-      }
+      },
+      dropFileHint: 'Glissez-déposez un fichier ici, ou cliquez pour parcourir',
+      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - jusqu’à 50 Mo',
+      dropFileSelected: 'Fichier sélectionné. Déposez un autre fichier pour remplacer, ou cliquez pour parcourir.',
+      invalidFile: 'Ce type ou cette taille de fichier n’est pas pris en charge.',
+      noProject: 'Aucun projet',
     }
   },
   it: {
@@ -3339,7 +3354,12 @@ const resources = {
         timelineCreate: 'Voce cronologia aggiunta',
         timelineUpdate: 'Voce cronologia aggiornata',
         timelineDelete: 'Voce cronologia eliminata'
-      }
+      },
+      dropFileHint: 'Trascina e rilascia un file qui, o fai clic per sfogliare',
+      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - fino a 50 MB',
+      dropFileSelected: 'File selezionato. Trascina un altro file per sostituire, o fai clic per sfogliare.',
+      invalidFile: 'Questo tipo o dimensione di file non è supportato.',
+      noProject: 'Nessun progetto',
     }
   }
 };
