@@ -390,7 +390,10 @@ export default function IntegrationsPanel() {
           <Separator />
 
           <div className="space-y-2">
-            <p className="font-medium">{t('syncOptions')}</p>
+            <p className="font-medium flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 text-muted-foreground" aria-hidden />
+              {t('syncOptions')}
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <label className="flex items-center gap-2">
                 <input

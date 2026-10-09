@@ -10,12 +10,14 @@ import {
   ClipboardList,
   FileSpreadsheet,
   Flag,
+  Layers,
   Loader2,
   Play,
   RefreshCw,
   Terminal,
   Wrench,
   Zap,
+  ZapOff,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -36,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useDeveloperMode } from '@/hooks/useDeveloperMode';
 import { invokeEdgeFunction } from '@/lib/edgeFunctions';
 import { logAppError } from '@/lib/userErrors';
@@ -359,28 +362,47 @@ export default function DeveloperModePanel() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('devCapabilities')}</CardTitle>
-              <CardDescription>{t('devCapabilitiesDesc')}</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {capabilities.map(({ icon: Icon, title, desc }) => (
-                <div
-                  key={title}
-                  className="rounded-lg border border-border p-4 space-y-1"
-                  aria-disabled={!active}
-                >
-                  <p className="text-sm font-medium flex items-center gap-2">
-                    <Icon className="w-4 h-4 text-muted-foreground" aria-hidden />
-                    {title}
-                    {!active && <Badge variant="outline">{t('developerModeInactive')}</Badge>}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{desc}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <TooltipProvider>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-muted-foreground" aria-hidden />
+                  {t('devCapabilities')}
+                </CardTitle>
+                <CardDescription>{t('devCapabilitiesDesc')}</CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {capabilities.map(({ icon: Icon, title, desc }) => (
+                  <div
+                    key={title}
+                    className="rounded-lg border border-border p-4 space-y-1"
+                    aria-disabled={!active}
+                  >
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      <Icon className="w-4 h-4 text-muted-foreground" aria-hidden />
+                      {title}
+                      {!active && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span
+                              tabIndex={0}
+                              role="img"
+                              aria-label={t('developerModeInactive')}
+                              className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                            >
+                              <ZapOff className="w-3.5 h-3.5" aria-hidden />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>{t('developerModeInactive')}</TooltipContent>
+                        </Tooltip>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </TooltipProvider>
 
           <Card>
             <CardHeader>

@@ -14,8 +14,10 @@ import {
   Monitor,
   Moon,
   Palette,
+  Puzzle,
   Smartphone,
   Sun,
+  Terminal,
   User,
 } from 'lucide-react';
 
@@ -305,12 +307,34 @@ export default function Settings() {
             aria-label={t('settings', 'Settings')}
             className="flex-wrap h-auto md:flex-nowrap md:justify-start md:overflow-x-auto md:h-9 md:[&>[role=tab]]:text-xs md:[&>[role=tab]]:px-2.5"
           >
-            <TabsTrigger value="profile">{t('profileInformation')}</TabsTrigger>
-            <TabsTrigger value="appearance">{t('appearance')}</TabsTrigger>
-            <TabsTrigger value="notifications">{t('notificationPreferences')}</TabsTrigger>
-            {isSuperAdmin && <TabsTrigger value="integrations">{t('integrations')}</TabsTrigger>}
-            {isSuperAdmin && <TabsTrigger value="developer">{t('developerMode')}</TabsTrigger>}
-            <TabsTrigger value="about">{t('aboutTitle', 'About')}</TabsTrigger>
+            <TabsTrigger value="profile" className="gap-1.5">
+              <User className="w-4 h-4" aria-hidden />
+              {t('profileInformation')}
+            </TabsTrigger>
+            <TabsTrigger value="appearance" className="gap-1.5">
+              <Palette className="w-4 h-4" aria-hidden />
+              {t('appearance')}
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="gap-1.5">
+              <Bell className="w-4 h-4" aria-hidden />
+              {t('notificationPreferences')}
+            </TabsTrigger>
+            {isSuperAdmin && (
+              <TabsTrigger value="integrations" className="gap-1.5">
+                <Puzzle className="w-4 h-4" aria-hidden />
+                {t('integrations')}
+              </TabsTrigger>
+            )}
+            {isSuperAdmin && (
+              <TabsTrigger value="developer" className="gap-1.5">
+                <Terminal className="w-4 h-4" aria-hidden />
+                {t('developerMode')}
+              </TabsTrigger>
+            )}
+            <TabsTrigger value="about" className="gap-1.5">
+              <Info className="w-4 h-4" aria-hidden />
+              {t('aboutTitle', 'About')}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="profile" className="space-y-6 mt-6">
