@@ -16,6 +16,7 @@ import DatePicker from '@/components/ui/DatePicker';
 import EmptyState from '@/components/shared/EmptyState';
 import { computeScopeTotals, budgetScope, formatMoney, DEFAULT_CURRENCY, CURRENCY_OPTIONS } from '@/lib/budgetMath';
 import { toast } from 'sonner';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 const STATUSES = ['draft', 'active', 'paused', 'closed', 'archived'];
 
@@ -43,6 +44,9 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
   const [form, setForm] = React.useState(emptyBudget());
   const [overrideChecked, setOverrideChecked] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+
+  // Budgets stay open until explicitly closed; dirty closes confirm first.
+  const { handleOpenChange } = useUnsavedChanges(showForm, { form, overrideChecked }, setShowForm);
 
   const globals = (budgets || []).filter((b) => !b.parent_budget_id);
   const childrenOf = (id) => (budgets || []).filter((b) => b.parent_budget_id === id);
@@ -280,7 +284,7 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
         </div>
       )}
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      <Dialog open={showForm} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">
@@ -342,7 +346,7 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
               </label>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={saving}>{saving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}</Button>
             </DialogFooter>
           </form>

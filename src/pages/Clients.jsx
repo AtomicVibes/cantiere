@@ -25,6 +25,7 @@ import { handleMutationError } from '@/lib/rbac';
 import { createClient, deleteUser } from '@/services/inviteService';
 import { checkAccountIdentity, isDuplicateError, EMAIL_EXISTS_MESSAGE } from '@/services/accountService';
 import { isValidEmail, normalizeEmail } from '@/lib/validation';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 const emptyForm = { full_name: '', company_name: '', email: '', password: '', phone: '', address: '', vat_number: '', notes: '', business_activity: '', website: '' };
 
@@ -65,6 +66,14 @@ export default function Clients() {
   const [promoteTarget, setPromoteTarget] = useState(null);
   const [promoteRole, setPromoteRole] = useState('');
   const [viewClient, setViewClient] = useState(null);
+
+  // The client form stays open until explicitly closed; X / Cancel / Escape
+  // confirm first when the form holds unsaved input.
+  const { handleOpenChange } = useUnsavedChanges(showForm, form, (v) => {
+    setShowForm(v);
+    setFriendlyError('');
+    if (!v) setEditClient(null);
+  });
 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -393,7 +402,7 @@ queryClient.invalidateQueries({ queryKey: ['clients'] });
         )}
       </div>
 
-      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); setFriendlyError(''); if (!v) setEditClient(null); }}>
+      <Dialog open={showForm} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle className="font-heading">{editClient ? t('editClient') : t('addClient')}</DialogTitle></DialogHeader>
           {friendlyError && (
@@ -443,7 +452,7 @@ queryClient.invalidateQueries({ queryKey: ['clients'] });
               </div>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={saving || !form.full_name}>{saving ? t('saving') : t('save')}</Button>
             </DialogFooter>
           </form>

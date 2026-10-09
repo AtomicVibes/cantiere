@@ -27,6 +27,7 @@ import { supabase } from '@/services/supabase';
 import { logAppError } from '@/lib/userErrors';
 import VisibilitySelect from '@/components/documents/VisibilitySelect';
 import AudiencePicker from '@/components/documents/AudiencePicker';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 const STANDARD_STATUSES = ['draft', 'planning', 'in_progress', 'on_hold', 'completed'];
 const CUSTOM_STATUS_VALUE = '__custom__';
@@ -80,6 +81,8 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
   const [form, setForm] = useState(defaultForm);
   const [saving, setSaving] = useState(false);
   const [audienceMembers, setAudienceMembers] = useState([]);
+  // X / Cancel / Escape (and outside clicks) confirm before closing a dirty form.
+  const { markInitial, handleOpenChange } = useUnsavedChanges(open, form, onOpenChange);
   const isEditing = !!project;
   const isCustomStatus = form.status === CUSTOM_STATUS_VALUE;
   const effectiveStatus = isCustomStatus ? form.customStatus.trim() : form.status;
@@ -106,6 +109,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           visibility: project.visibility || 'private',
           audienceIds: [],
         });
+        markInitial();
         // Preserve the existing audience so saving without changes never
         // clears it; loaded under audience RLS (admins manage audience).
         if (project.id) {
@@ -119,10 +123,16 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
                 return;
               }
               setForm((prev) => ({ ...prev, audienceIds: (data ?? []).map((r) => r.user_id) }));
+              markInitial();
+            })
+            .catch((err) => {
+              logAppError('ProjectForm', err, { operation: 'load-audience' });
+              markInitial();
             });
         }
       } else {
         setForm(defaultForm);
+        markInitial();
       }
       supabase
         .from('profiles')
@@ -136,7 +146,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           setAudienceMembers(data ?? []);
         });
     }
-  }, [open, project]);
+  }, [open, project, markInitial]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -227,7 +237,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
   const set = (field) => (value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEditing ? t('editProject') : t('createProject')}</DialogTitle>
@@ -390,7 +400,7 @@ export default function ProjectFormDialog({ open, onOpenChange, project, clients
           )}
 
           <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
               {t('cancel')}
             </Button>
             <Button type="submit" disabled={saving}>

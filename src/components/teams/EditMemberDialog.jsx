@@ -21,6 +21,7 @@ import { handleMutationError } from '@/lib/rbac';
 import { checkAccountIdentity, isDuplicateError, USERNAME_TAKEN_MESSAGE } from '@/services/accountService';
 import { isValidUsername, normalizeUsername } from '@/lib/validation';
 import { useDirection } from '@/i18n/LanguageProvider';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { ChevronsUpDown, X } from 'lucide-react';
 
 const ROLE_RANK = { super_admin: 4, admin: 3, manager: 2, client: 1 };
@@ -44,6 +45,13 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
   const [selectedProjects, setSelectedProjects] = useState([]);
   const [saving, setSaving] = useState(false);
   const [projectPopoverOpen, setProjectPopoverOpen] = useState(false);
+
+  // Persist until explicitly closed; closing dirty asks for confirmation.
+  const { markInitial, handleOpenChange } = useUnsavedChanges(
+    open,
+    { form, selectedProjects },
+    onOpenChange
+  );
 
   const { data: roles = [] } = useQuery({
     queryKey: ['roles'],
@@ -78,14 +86,22 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
         status: member.status || 'active',
         role_id: member.role_id || '',
       });
+      markInitial();
     }
-  }, [member]);
+  }, [member, markInitial]);
+
+  // React Query hands out a fresh `[]` while this query is disabled or
+  // loading, and a fresh array after every refetch. Keying the effect on the
+  // array identity would call markInitial() on unrelated renders and silently
+  // clear the dirty flag, so baseline on the loaded content instead.
+  const assignedSignature = assignedProjectIds.join(',');
 
   useEffect(() => {
     if (assignedProjectIds.length > 0) {
       setSelectedProjects(assignedProjectIds);
     }
-  }, [assignedProjectIds]);
+    markInitial();
+  }, [assignedSignature, markInitial]);
 
   const availableRoles = roles.filter(r => {
     if (currentUserRole === 'super_admin') return true;
@@ -179,7 +195,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="font-heading">{t('editMember')}</DialogTitle>
@@ -301,7 +317,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
               {t('cancel')}
             </Button>
             <Button type="submit" disabled={saving || !form.full_name || !form.username}>

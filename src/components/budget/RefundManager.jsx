@@ -15,6 +15,7 @@ import DatePicker from '@/components/ui/DatePicker';
 import EmptyState from '@/components/shared/EmptyState';
 import { formatMoney, DEFAULT_CURRENCY } from '@/lib/budgetMath';
 import { toast } from 'sonner';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 function emptyRefund() {
   return {
@@ -29,6 +30,9 @@ export default function RefundManager({ refunds, expenses, projects, categories,
   const [showForm, setShowForm] = React.useState(false);
   const [form, setForm] = React.useState(emptyRefund());
   const [saving, setSaving] = React.useState(false);
+
+  // Refunds stay open until explicitly closed; dirty closes confirm first.
+  const { handleOpenChange } = useUnsavedChanges(showForm, form, setShowForm);
 
   const expenseById = React.useCallback(
     (id) => (expenses || []).find((e) => e.id === id),
@@ -126,7 +130,7 @@ export default function RefundManager({ refunds, expenses, projects, categories,
         </div>
       )}
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      <Dialog open={showForm} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">{t('refundNew', 'New refund')}</DialogTitle>
@@ -184,7 +188,7 @@ export default function RefundManager({ refunds, expenses, projects, categories,
             </div>
             <div><Label>{t('notes', 'Notes')}</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} maxLength={500} /></div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={saving}>{saving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}</Button>
             </DialogFooter>
           </form>

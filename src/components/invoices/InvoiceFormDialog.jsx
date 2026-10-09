@@ -27,6 +27,7 @@ import { logAppError } from '@/lib/userErrors';
 import VisibilitySelect from '@/components/documents/VisibilitySelect';
 import AudiencePicker from '@/components/documents/AudiencePicker';
 import { Plus, Trash2, Paperclip, Link2, Loader2, FileText, Eye, X, ExternalLink } from 'lucide-react';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 const NATURA_CODES = ['N1', 'N2.1', 'N2.2', 'N3', 'N4', 'N5', 'N6'];
 
@@ -74,6 +75,21 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
   const [previewing, setPreviewing] = useState(false);
   const fileInputRef = useRef(null);
   const detailInitRef = useRef(false);
+
+  // Unsaved-changes guard: any close path (outside click, X, Cancel, Escape)
+  // asks for confirmation while the form is dirty.
+  // `existing` is deliberately NOT part of the snapshot: deleting an existing
+  // attachment already hits storage + the DB immediately (handleRemoveExisting),
+  // so it is a finished operation, not an unsaved change, and including it
+  // produced a misleading "discard changes?" prompt.
+  const snapshot = {
+    form,
+    items,
+    pending: pending.map(p => `${p.type}:${p.name}`),
+    googleUrl,
+    seller,
+  };
+  const { markInitial, handleOpenChange } = useUnsavedChanges(open, snapshot, onOpenChange);
 
   const canEdit = PERMISSIONS.canEditInvoice.includes(role) || PERMISSIONS.canCreateInvoice.includes(role);
   const categoryOptions = [
@@ -129,6 +145,11 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
       setGoogleUrl('');
       setSeller(s => mergeProfiles({ ...emptySeller(), country: 'IT' }, s));
     }
+    // Baseline is (re)taken by useUnsavedChanges once this state settles:
+    // empty form for create, still-stale form for edit (the detail effect
+    // re-baselines as soon as the record lands). Taken unconditionally so a
+    // failed detail query never leaves the guard with no baseline at all.
+    markInitial();
     // Same audience source as the Create Project form.
     supabase
       .from('profiles')
@@ -141,12 +162,16 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
         }
         setAudienceMembers(data ?? []);
       });
-  }, [open, invoice?.id]);
+  }, [open, invoice?.id, markInitial]);
 
   useEffect(() => {
-    if (!detail || detailInitRef.current) return;
+    // `open` matters: React Query keeps `detail` cached, so reopening the
+    // same invoice does not change the query data. Without re-running this
+    // effect the form would keep whatever was typed last time and those edits
+    // would silently become the new dirty baseline.
+    if (!open || !detail || detailInitRef.current) return;
     detailInitRef.current = true;
-    setForm({
+    const loadedForm = {
       invoice_number: detail.invoice_number || '',
       invoice_date: detail.invoice_date || '',
       due_date: detail.due_date || '',
@@ -161,9 +186,12 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
       stamp_duty: detail.stamp_duty ?? '',
       visibility: detail.visibility || 'private',
       audienceIds: [],
-    });
+    };
+    setForm(loadedForm);
     // Preserve the existing audience so saving without changes never
     // clears it; loaded under audience RLS (admins manage audience).
+    // The audience lands asynchronously and re-baselines once more, so that
+    // loading an invoice is never reported as an unsaved change.
     supabase
       .from('invoice_audience')
       .select('user_id')
@@ -171,9 +199,11 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
       .then(({ data, error }) => {
         if (error) {
           logAppError('InvoiceForm', error, { operation: 'load-audience' });
+          markInitial();
           return;
         }
         setForm(prev => ({ ...prev, audienceIds: (data ?? []).map(r => r.user_id) }));
+        markInitial();
       });
     setItems((detail.items && detail.items.length ? detail.items : [emptyItem()]).map(i => ({
       id: i.id,
@@ -188,7 +218,11 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
     setPending([]);
     setGoogleUrl('');
     if (detail.seller_snapshot) setSeller(prev => mergeProfiles(prev, detail.seller_snapshot));
-  }, [detail]);
+    // Baseline the record that was just applied. The audience request above
+    // only re-baselines while the form still matches this one, so doing it
+    // here is what keeps an untouched invoice clean once the audience lands.
+    markInitial();
+  }, [open, detail, markInitial]);
 
   const filterableProjects = projects.filter(p => !form.client_id || !p.client_id || p.client_id === form.client_id);
 
@@ -449,7 +483,7 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
   const setSellerField = (key, value) => setSeller(prev => ({ ...prev, [key]: value }));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" dir={dir}>
         <DialogHeader>
           <DialogTitle className="font-heading">{invoice?.id ? t('editInvoice') : t('newInvoice')}</DialogTitle>
@@ -737,7 +771,7 @@ export default function InvoiceFormDialog({ open, onOpenChange, invoice, clients
         </div>
 
         <DialogFooter className="gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{t('cancel')}</Button>
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>{t('cancel')}</Button>
           <Button type="button" variant="secondary" className="gap-2" onClick={handlePreview} disabled={previewing || saving}>
             {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
             {t('previewPdf')}

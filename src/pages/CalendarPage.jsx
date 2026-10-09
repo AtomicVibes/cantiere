@@ -43,6 +43,7 @@ import {
   logAppError,
 } from '@/lib/userErrors';
 import { logAction } from '@/lib/activityTracking';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 import { ChevronLeft, ChevronRight, Plus, Clock, MapPin, Lock, Globe, Users, Folder, Trash2, Archive, Check, Bell } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isAfter, startOfDay } from 'date-fns';
 
@@ -92,6 +93,13 @@ export default function CalendarPage() {
   const [showTypeDialog, setShowTypeDialog] = useState(false);
   const [accentColor, setAccentColor] = useState(APP_ACCENT_FALLBACK);
   const queryClient = useQueryClient();
+
+  // The event form stays open until explicitly closed; dirty closes confirm.
+  const { handleOpenChange } = useUnsavedChanges(
+    showForm,
+    { form, selectedAudience },
+    (open) => { setShowForm(open); if (!open) setEditingEvent(null); }
+  );
 
   React.useEffect(() => {
     setAccentColor(getAppAccentColor());
@@ -838,7 +846,7 @@ export default function CalendarPage() {
       </div>
 
       {/* Add/Edit Event Dialog */}
-      <Dialog open={showForm} onOpenChange={(open) => { setShowForm(open); if (!open) setEditingEvent(null); }}>
+      <Dialog open={showForm} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-heading">{editingEvent ? (t('editEvent') || 'Edit Event') : (t('newEvent') || 'New Event')}</DialogTitle></DialogHeader>
           <form onSubmit={handleSave} className="space-y-4">
@@ -1073,7 +1081,7 @@ export default function CalendarPage() {
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel') || 'Cancel'}</Button>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>{t('cancel') || 'Cancel'}</Button>
               <Button type="submit" disabled={saving || !form.title || !form.date || !form.time || (form.visibility === 'selected' && selectedAudience.length === 0)}>
                 {saving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}
               </Button>

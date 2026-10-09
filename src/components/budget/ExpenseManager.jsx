@@ -21,6 +21,7 @@ import SubcategorySelect from '@/components/budget/SubcategorySelect';
 import { netExpense, refundedTotal, formatMoney, variance, DEFAULT_CURRENCY, CURRENCY_OPTIONS } from '@/lib/budgetMath';
 import { getBudgetCategoryIcon } from '@/lib/budgetCategoryIcons';
 import { toast } from 'sonner';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 const STATUSES = ['planned', 'pending', 'approved', 'paid', 'partially_paid', 'overdue', 'cancelled', 'refunded', 'partially_refunded'];
 const PAGE_SIZE = 50;
@@ -47,6 +48,9 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
   const [saving, setSaving] = React.useState(false);
   const [detail, setDetail] = React.useState(null);
   const [documents, setDocuments] = React.useState([]);
+
+  // Expenses stay open until explicitly closed; dirty closes confirm first.
+  const { handleOpenChange } = useUnsavedChanges(showForm, form, setShowForm);
 
   const categoryName = React.useCallback(
     (id) => {
@@ -323,7 +327,7 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
         </div>
       )}
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      <Dialog open={showForm} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-heading">{editing ? (t('expenseEdit', 'Edit expense')) : (t('expenseNew', 'New expense'))}</DialogTitle>
@@ -437,7 +441,7 @@ export default function ExpenseManager({ expenses, refunds, categories, budgets,
             </div>
             <div><Label>{t('notes', 'Notes')}</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2} maxLength={500} /></div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={saving}>{saving ? (t('saving') || 'Saving...') : (t('save') || 'Save')}</Button>
             </DialogFooter>
           </form>

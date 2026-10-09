@@ -34,6 +34,7 @@ import { isValidEmail, isValidUsername, isValidPassword, normalizeEmail, normali
 import { generatePassword } from '@/lib/passwordGenerator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AgentActivityDashboard from '@/components/teams/AgentActivityDashboard';
+import { useUnsavedChanges } from '@/hooks/useUnsavedChanges';
 
 const emptyMember = { full_name: '', username: '', email: '', phone: '', job_title: '', department: '', status: 'active' };
 
@@ -62,6 +63,14 @@ export default function Teams() {
   const [credentials, setCredentials] = useState(null);
   const [copied, setCopied] = useState(false);
   const queryClient = useQueryClient();
+
+  // The member form stays open until explicitly closed; X / Cancel / Escape
+  // confirm first while the form (or the generated password) is dirty.
+  const { handleOpenChange } = useUnsavedChanges(showForm, { form, password }, (v) => {
+    setShowForm(v);
+    setFriendlyError('');
+    if (!v) setForm(emptyMember);
+  });
 
   const openAddMember = () => {
     setForm(emptyMember);
@@ -338,7 +347,7 @@ export default function Teams() {
         </Tabs>
       </div>
 
-      <Dialog open={showForm} onOpenChange={(v) => { setShowForm(v); setFriendlyError(''); if (!v) setForm(emptyMember); }}>
+      <Dialog open={showForm} onOpenChange={handleOpenChange}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="font-heading">{t('addMember')}</DialogTitle>
@@ -430,7 +439,7 @@ export default function Teams() {
               </select>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>{t('cancel')}</Button>
+              <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>{t('cancel')}</Button>
               <Button type="submit" disabled={saving || !form.full_name || !form.email || !form.username}>
                 {saving ? t('creatingAccount') : t('createAccount')}
               </Button>
