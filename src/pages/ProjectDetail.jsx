@@ -41,6 +41,7 @@ import { useManagers } from '@/hooks/useManagers';
 import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
+import { refreshDocumentList } from '@/lib/documentListRefresh';
 import ProjectAssignmentDropdown from '@/components/projects/ProjectAssignmentDropdown';
 import DocumentPreview from '@/components/shared/DocumentPreview';
 import { DocumentDropZone } from '@/components/shared/DocumentDropZone';
@@ -327,6 +328,7 @@ export default function ProjectDetail() {
   const clientName = clients.find(c => c.id === project.client_id)?.company_name;
 
   const handleAddEntry = async () => {
+    if (entryUploading) return;
     if (!newEntry.title) return;
     if (entryFile && entryVisibility === 'selected' && entryAudience.length === 0) {
       toast.error(t('selectAudienceRequired'));
@@ -410,6 +412,9 @@ export default function ProjectDetail() {
           }
         }
         throw error;
+      }
+      if (uploadedDocument) {
+        await refreshDocumentList({ queryClient, userId, t, toast });
       }
     } finally {
       setEntryUploading(false);
@@ -717,7 +722,7 @@ export default function ProjectDetail() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-heading font-semibold">{t('projectTimeline')}</h3>
             {canAddEntry && (
-              <Button size="sm" variant="outline" onClick={() => setAddingEntry(!addingEntry)} className="gap-2">
+              <Button size="sm" variant="outline" onClick={() => setAddingEntry(!addingEntry)} className="gap-2" disabled={entryUploading}>
                 <Plus className="w-3.5 h-3.5" /> {t('addEntry')}
               </Button>
             )}
@@ -763,7 +768,7 @@ export default function ProjectDetail() {
                   {entryUploading && <Loader2 className="w-3.5 h-3.5 me-1 animate-spin" />}
                   {t('save')}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); setEntryAudience([]); setEntryVisibility('private'); }}>{t('cancel')}</Button>
+                <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); setEntryAudience([]); setEntryVisibility('private'); }} disabled={entryUploading}>{t('cancel')}</Button>
               </div>
             </div>
           )}

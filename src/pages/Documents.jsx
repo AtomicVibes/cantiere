@@ -32,6 +32,7 @@ import { supabase } from '@/services/supabase';
 import DocumentPreview from '@/components/shared/DocumentPreview';
 import { DocumentDropZone } from '@/components/shared/DocumentDropZone';
 import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
+import { refreshDocumentList } from '@/lib/documentListRefresh';
 import { logAction } from '@/lib/activityTracking';
 import { parseGoogleDocLink, getGoogleDocMime } from '@/lib/googleLinks';
 import { uploadDocumentFile, validateDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
@@ -302,6 +303,7 @@ export default function Documents() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (uploading) return;
     if (!canUpload) {
       toast.error(t('accessDenied'));
       return;
@@ -367,6 +369,8 @@ export default function Documents() {
       debugUpload('SUPABASE STORAGE UPLOAD RESULT', { uploaded: !!createdDocument?.storage_path });
       debugUpload('DATABASE INSERT RESULT', { saved: true, id: createdDocument?.id });
       debugUpload('UPLOAD COMPLETE');
+      await refreshDocumentList({ queryClient, userId: currentUser?.id, t, toast });
+      debugUpload('DOCUMENT LIST REFRESH COMPLETE');
       closeUploadDialog();
     } catch (error) {
       logDocumentError('Upload failed', error, { fileType: file?.type, fileSize: file?.size });
@@ -760,7 +764,7 @@ export default function Documents() {
         )}
       </div>
 
-      <Dialog open={showUpload} onOpenChange={open => { if (!open) closeUploadDialog(); }}>
+      <Dialog open={showUpload} onOpenChange={open => { if (!open && !uploading) closeUploadDialog(); }}>
         <DialogContent className="max-h-[85vh] flex flex-col">
           <DialogHeader><DialogTitle className="font-heading">{t('addDocument')}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="flex-1 min-h-0 space-y-4 overflow-y-auto pe-1" dir={dir}>
@@ -842,8 +846,11 @@ export default function Documents() {
               />
             )}
             <DialogFooter className="sticky bottom-0 bg-background pt-2">
-              <Button type="button" variant="outline" onClick={closeUploadDialog}>{t('cancel')}</Button>
-              <Button type="submit" disabled={uploading || !form.name}>{uploading ? t('uploading') : addMode === 'link' ? t('save') : t('upload')}</Button>
+              <Button type="button" variant="outline" onClick={closeUploadDialog} disabled={uploading}>{t('cancel')}</Button>
+              <Button type="submit" disabled={uploading || !form.name}>
+                {uploading && <Loader2 className="w-4 h-4 me-2 animate-spin" aria-hidden />}
+                {uploading ? t('uploading') : addMode === 'link' ? t('save') : t('upload')}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
