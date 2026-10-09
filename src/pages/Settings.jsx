@@ -301,7 +301,10 @@ export default function Settings() {
       <TopBar title={t('settings')} />
       <div className="p-6 max-w-3xl">
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList aria-label={t('settings', 'Settings')} className="flex-wrap h-auto">
+          <TabsList
+            aria-label={t('settings', 'Settings')}
+            className="flex-wrap h-auto md:flex-nowrap md:justify-start md:overflow-x-auto md:h-9 md:[&>[role=tab]]:text-xs md:[&>[role=tab]]:px-2.5"
+          >
             <TabsTrigger value="profile">{t('profileInformation')}</TabsTrigger>
             <TabsTrigger value="appearance">{t('appearance')}</TabsTrigger>
             <TabsTrigger value="notifications">{t('notificationPreferences')}</TabsTrigger>
