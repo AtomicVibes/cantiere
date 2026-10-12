@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from 'next-themes';
 import { useAuth } from '@/lib/AuthContext';
@@ -298,14 +298,24 @@ export default function Settings() {
         ? 'pushEnabledState'
         : 'pushDisabledState';
 
+  const tabsListRef = useRef(null);
+  const handleTabChange = () => {
+    requestAnimationFrame(() => {
+      tabsListRef.current
+        ?.querySelector('[role="tab"][data-state="active"]')
+        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+  };
+
   return (
     <div>
       <TopBar title={t('settings')} />
       <div className="p-6 max-w-3xl">
-        <Tabs defaultValue="profile" className="w-full">
+        <Tabs defaultValue="profile" className="w-full" onValueChange={handleTabChange}>
           <TabsList
+            ref={tabsListRef}
             aria-label={t('settings', 'Settings')}
-            className="flex-wrap h-auto md:flex-nowrap md:justify-start md:overflow-x-auto md:h-9 md:[&>[role=tab]]:text-xs md:[&>[role=tab]]:px-2.5"
+            className="flex-nowrap justify-start overflow-x-auto max-w-full [&::-webkit-scrollbar]:hidden [scrollbar-width:none] [&>[role=tab]]:shrink-0 md:[&>[role=tab]]:text-xs md:[&>[role=tab]]:px-2.5"
           >
             <TabsTrigger value="profile" className="gap-1.5">
               <User className="w-4 h-4" aria-hidden />
