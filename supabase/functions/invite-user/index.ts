@@ -27,6 +27,14 @@ const DEFAULT_ROLE_PREFERENCE = ['manager', 'user', 'member'];
 // existing Edit Member flow (profiles update guarded by RLS + rank rules).
 const ELEVATED_ROLES = ['super_admin', 'admin'];
 
+// Same rank table the UI uses (EditMemberDialog.ROLE_RANK); roles not listed
+// (project_manager, secretary) and missing roles rank 0.
+const ROLE_RANK: Record<string, number> = { super_admin: 4, admin: 3, manager: 2, client: 1 };
+
+function roleRank(name?: string | null) {
+  return name ? ROLE_RANK[name] ?? 0 : 0;
+}
+
 function respond(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -190,7 +198,8 @@ serve(async (req) => {
       return respond({ error: 'Email address is required.', detail: 'Missing email field' }, 400);
     }
 
-    if (!EMAIL_REGEX.test(String(email).trim())) {
+    const cleanEmail = String(email ?? '').trim().toLowerCase();
+    if (!EMAIL_REGEX.test(cleanEmail)) {
       return respond({ error: 'Please enter a valid email address.', detail: 'Invalid email format' }, 400);
     }
 
@@ -205,7 +214,7 @@ serve(async (req) => {
     }
 
     // Server-side uniqueness pre-check (case-insensitive).
-    const availability = await identityAvailability(email, cleanUsername);
+    const availability = await identityAvailability(cleanEmail, cleanUsername);
     if (availability.email_available === false) {
       return respond({ error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }, 409);
     }
@@ -251,16 +260,39 @@ serve(async (req) => {
       return respond({ error: 'Your profile was not found.', detail: profileError?.message }, 400);
     }
 
-    if (!['super_admin', 'admin'].includes(profile.roles.name)) {
+    // PostgREST answers a to-one embed as an object, but the generated types
+    // can infer an array: accept both shapes before making the decision.
+    const callerRole = Array.isArray(profile.roles) ? profile.roles[0]?.name : profile.roles?.name;
+    if (!['super_admin', 'admin'].includes(callerRole)) {
       return respond(
-        { error: 'You do not have permission to invite users.', detail: `User role '${profile.roles.name}' is not allowed. Required: super_admin or admin.` },
+        { error: 'You do not have permission to invite users.', detail: `User role '${callerRole}' is not allowed. Required: super_admin or admin.` },
         400
       );
     }
 
+    // Role-assignment guard: super_admin is never assignable through this
+    // endpoint, and only a role strictly below the caller's own rank can be
+    // requested. A missing/malformed role_id keeps its existing fallback to
+    // the default User role (resolveRoleId).
+    if (role_id) {
+      const requestedRoleName = await roleName(role_id);
+      if (requestedRoleName === 'super_admin') {
+        return respond(
+          { error: 'You do not have permission to assign this role.', detail: 'The super administrator role cannot be assigned.' },
+          403
+        );
+      }
+      if (requestedRoleName && roleRank(requestedRoleName) >= roleRank(callerRole)) {
+        return respond(
+          { error: 'You do not have permission to assign this role.', detail: `Role '${requestedRoleName}' is not below your own role.` },
+          403
+        );
+      }
+    }
+
     if (isDirect) {
       const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email: String(email).trim(),
+        email: cleanEmail,
         password,
         email_confirm: true,
         user_metadata: userMetadata,
@@ -272,11 +304,11 @@ serve(async (req) => {
           code: (createError as { code?: string }).code ?? null,
           message: createError.message ?? null,
         });
-        const duplicate = await duplicateResponse(String(email).trim(), cleanUsername, isDuplicateAuthError(createError.message)
+        const duplicate = await duplicateResponse(cleanEmail, cleanUsername, isDuplicateAuthError(createError.message)
           ? { error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }
           : null);
         if (duplicate) return duplicate;
-        const diagnostics = await creationDiagnostics(String(email).trim(), cleanUsername, roleId);
+        const diagnostics = await creationDiagnostics(cleanEmail, cleanUsername, roleId);
         console.error('[invite-user] creation diagnostics:', diagnostics);
         return respond({
           error: `Failed to create user. ${createError.message}`,
@@ -306,7 +338,7 @@ serve(async (req) => {
     }
 
     const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      String(email).trim(),
+      cleanEmail,
       {
         data: userMetadata,
         redirectTo: `${supabaseUrl}/auth/v1/callback`,
@@ -315,7 +347,7 @@ serve(async (req) => {
 
     if (inviteError) {
       console.error('DEBUG - Admin API Error:', inviteError.status ?? '', inviteError.message ?? '');
-      const duplicate = await duplicateResponse(String(email).trim(), cleanUsername, isDuplicateAuthError(inviteError.message)
+      const duplicate = await duplicateResponse(cleanEmail, cleanUsername, isDuplicateAuthError(inviteError.message)
         ? { error: EMAIL_EXISTS_MESSAGE, detail: 'duplicate_email' }
         : null);
       if (duplicate) return duplicate;

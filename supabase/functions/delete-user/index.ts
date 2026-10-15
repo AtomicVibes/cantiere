@@ -12,6 +12,25 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Accounts that may never delete anyone, whatever their role. Taken from the
+// verified JWT (never from the request body); override with the
+// DELETE_BLOCKED_EMAILS env var (comma-separated).
+const DEFAULT_DELETE_BLOCKED_EMAILS = ['amministrazionegeombelluscio@gmail.com'];
+const deleteBlockedEmails = (() => {
+  const fromEnv = Deno.env.get('DELETE_BLOCKED_EMAILS');
+  if (!fromEnv) return DEFAULT_DELETE_BLOCKED_EMAILS;
+  const parsed = fromEnv.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return parsed.length ? parsed : DEFAULT_DELETE_BLOCKED_EMAILS;
+})();
+
+// Same rank table the UI uses (EditMemberDialog.ROLE_RANK); roles not listed
+// (project_manager, secretary) and missing roles rank 0.
+const ROLE_RANK: Record<string, number> = { super_admin: 4, admin: 3, manager: 2, client: 1 };
+
+function roleRank(name?: string | null) {
+  return name ? ROLE_RANK[name] ?? 0 : 0;
+}
+
 function respond(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -56,6 +75,14 @@ serve(async (req) => {
       return error('Session expired. Please log in again.', userError?.message || 'Invalid token');
     }
 
+    // Hard-blocked accounts are refused before any lookup or deletion.
+    // Denial is logged with the user id only - never the email.
+    const callerEmail = (user.email ?? '').trim().toLowerCase();
+    if (deleteBlockedEmails.includes(callerEmail)) {
+      console.error('[delete-user] delete request denied for blocked account', { user_id: user.id });
+      return error('Forbidden', 'This account is not allowed to delete users.', 403);
+    }
+
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('role_id, roles!inner(name)')
@@ -85,7 +112,7 @@ serve(async (req) => {
 
     const { data: targetProfile, error: targetProfileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, email, full_name, role_id')
+      .select('id, email, full_name, role_id, roles(name)')
       .eq('id', user_id)
       .maybeSingle();
 
@@ -95,6 +122,22 @@ serve(async (req) => {
 
     if (!targetProfile) {
       return respond({ success: true, note: 'User was already removed or never existed.' });
+    }
+
+    // PostgREST answers a to-one embed as an object, but the generated types
+    // can infer an array: accept both shapes before making the decision.
+    const targetRoleName = Array.isArray(targetProfile.roles)
+      ? targetProfile.roles[0]?.name
+      : targetProfile.roles?.name;
+
+    // A super_admin is never deletable, whatever the caller's role.
+    if (targetRoleName === 'super_admin') {
+      return error('You do not have permission to delete users.', 'This account cannot be removed.', 403);
+    }
+
+    // Rank check: equal or higher rank than the caller can never be deleted.
+    if (roleRank(targetRoleName) >= roleRank(profile.roles?.name)) {
+      return error('You do not have permission to delete users.', 'Target user has equal or higher privileges.', 403);
     }
 
     const { error: deleteProfileError } = await supabaseAdmin

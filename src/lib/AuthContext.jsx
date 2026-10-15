@@ -125,7 +125,9 @@ export const AuthProvider = ({ children }) => {
       if (cancelled) return;
       await setSession(session);
 
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+      // INITIAL_SESSION also fires with a null session (e.g. a failed or
+      // in-flight auth callback); only bounce away once there is a session.
+      if (event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && session)) {
         const path = window.location.pathname;
         if (path === '/login' || path === '/auth/callback') {
           window.location.href = '/dashboard';

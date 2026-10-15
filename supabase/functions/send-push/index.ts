@@ -54,6 +54,23 @@ function safeMessage(err: unknown, maxLength = 160): string {
   return `status ${err.statusCode}: ${(err.body || err.message).toString().slice(0, maxLength)}`;
 }
 
+// Constant-time secret comparison: SHA-256 both values (so length is not
+// leaked) and XOR-compare the digests without early exit.
+async function constantTimeEquals(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [digestA, digestB] = await Promise.all([
+    crypto.subtle.digest('SHA-256', enc.encode(a)),
+    crypto.subtle.digest('SHA-256', enc.encode(b)),
+  ]);
+  const bytesA = new Uint8Array(digestA);
+  const bytesB = new Uint8Array(digestB);
+  let diff = 0;
+  for (let i = 0; i < bytesA.length; i++) {
+    diff |= bytesA[i] ^ bytesB[i];
+  }
+  return diff === 0;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -99,8 +116,14 @@ serve(async (req) => {
   //      that user's own id.
   //    - Service-role tokens are NOT trusted here: the old embedded
   //      key leaked and must stay useless for this endpoint.
+  // Fail closed: without the internal token the "internal" caller path must
+  // be unavailable, never an empty-string match.
+  if (!internalPushToken) {
+    return respond({ error: 'Server misconfigured: INTERNAL_PUSH_TOKEN not set' }, 500);
+  }
+
   const xPushToken = req.headers.get('x-push-token');
-  if (xPushToken && internalPushToken && xPushToken === internalPushToken) {
+  if (xPushToken && (await constantTimeEquals(xPushToken, internalPushToken))) {
     caller = 'internal';
   } else {
     const authHeader = req.headers.get('Authorization');

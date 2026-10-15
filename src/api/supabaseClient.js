@@ -9,4 +9,10 @@ if (!supabaseAnonKey) throw new Error('Missing VITE_SUPABASE_ANON_KEY');
 const globalKey = '__geometra_supabase__';
 export const supabase =
   globalThis[globalKey] ??
-  (globalThis[globalKey] = createClient(supabaseUrl, supabaseAnonKey));
+  (globalThis[globalKey] = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      flowType: 'pkce',
+      persistSession: true,
+      detectSessionInUrl: true
+    }
+  }));

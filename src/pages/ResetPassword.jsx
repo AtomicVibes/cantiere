@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { resetPassword } from "@/services/authService";
+import { isValidPassword } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +17,10 @@ export default function ResetPassword() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isValidPassword(newPassword)) {
+      toast.error("Password must be at least 8 characters and include both a letter and a number.");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       toast.error("Passwords do not match.");
       return;

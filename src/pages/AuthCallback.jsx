@@ -8,10 +8,31 @@ export default function AuthCallback() {
   useEffect(() => {
     let cancelled = false;
 
+    // The client runs flowType 'pkce', but admin invite links
+    // (auth.admin.inviteUserByEmail does not support PKCE) still arrive as
+    // implicit tokens in the URL hash. Exchange them here so invite
+    // acceptance keeps working; OAuth and password-recovery returns use the
+    // normal PKCE code exchange handled by the client itself.
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
+    const hasImplicitTokens = Boolean(accessToken && refreshToken);
+    if (hasImplicitTokens) {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ error }) => {
+          if (error && !cancelled) {
+            console.error('Auth callback session exchange failed', error.message);
+          }
+        });
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (cancelled) return;
       if (session?.user) {
         navigate('/dashboard', { replace: true });
+      } else if (!hasImplicitTokens) {
+        // Nothing to exchange and no session: don't leave the user spinning.
+        navigate('/login', { replace: true });
       }
     });
 

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signUpWithEmail, signInWithGoogle } from "@/services/authService";
-import { isValidEmail, normalizeEmail } from "@/lib/validation";
+import { isValidEmail, normalizeEmail, isValidPassword } from "@/lib/validation";
 import { EMAIL_EXISTS_MESSAGE } from "@/services/accountService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,10 @@ export default function Register() {
     e.preventDefault();
     if (!isValidEmail(email)) {
       toast.error("Please enter a valid email address.");
+      return;
+    }
+    if (!isValidPassword(password)) {
+      toast.error("Password must be at least 8 characters and include both a letter and a number.");
       return;
     }
     if (password !== confirmPassword) {

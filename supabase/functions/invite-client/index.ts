@@ -18,6 +18,14 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Same rank table the UI uses (EditMemberDialog.ROLE_RANK); roles not listed
+// (project_manager, secretary) and missing roles rank 0.
+const ROLE_RANK: Record<string, number> = { super_admin: 4, admin: 3, manager: 2, client: 1 };
+
+function roleRank(name?: string | null) {
+  return name ? ROLE_RANK[name] ?? 0 : 0;
+}
+
 function respond(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -51,8 +59,6 @@ serve(async (req) => {
     } catch {
       return respond({ error: 'Invalid request body.', detail: 'Failed to parse JSON' }, 400);
     }
-    console.log('invite-client body:', JSON.stringify(body));
-
     const { email, full_name, phone, mode } = body;
 
     if (!email) {
@@ -97,6 +103,27 @@ serve(async (req) => {
         { error: 'You do not have permission to invite clients.', detail: `User role '${profile.roles.name}' is not allowed. Required: super_admin or admin.` },
         400
       );
+    }
+
+    // Role-assignment guard: this endpoint may only ever assign a role that
+    // is not elevated AND is strictly below the caller's own rank. The
+    // hardcoded CLIENT_ROLE_ID must resolve to such a role.
+    {
+      const { data: clientRoleRow, error: clientRoleError } = await supabaseAdmin
+        .from('roles')
+        .select('name')
+        .eq('id', CLIENT_ROLE_ID)
+        .maybeSingle();
+      const clientRoleName = clientRoleRow?.name ?? null;
+      if (clientRoleError || !clientRoleName) {
+        return respond({ error: 'Unable to resolve the client role.', detail: clientRoleError?.message || 'No matching role row found' }, 500);
+      }
+      if (clientRoleName === 'super_admin' || roleRank(clientRoleName) >= roleRank(profile.roles.name)) {
+        return respond(
+          { error: 'You do not have permission to invite clients.', detail: `Configured client role '${clientRoleName}' is not assignable by your role.` },
+          403
+        );
+      }
     }
 
     // Case-insensitive duplicate pre-check — never adopt an existing user.
