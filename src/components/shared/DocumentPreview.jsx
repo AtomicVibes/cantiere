@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FileText, Play, X, ExternalLink } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
-const getFileName = (document) => document?.name || document?.file_name || 'Document';
+const getFileName = (document, t) => document?.name || document?.file_name || (typeof t === 'function' ? t('document') : 'Document');
 
 const isPdfDocument = (document) => {
   if (!document) return false;
@@ -14,10 +15,11 @@ const isPdfDocument = (document) => {
 };
 
 export default function DocumentPreview({ document, compact = false, showLabel = false }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   if (!document?.file_url) return <FileText className="w-8 h-8 text-muted-foreground" />;
 
-  const label = getFileName(document);
+  const label = getFileName(document, t);
   const mimeType = document.mime_type || '';
   const isImage = mimeType.startsWith('image/');
   const isVideo = mimeType.startsWith('video/');
@@ -53,10 +55,10 @@ export default function DocumentPreview({ document, compact = false, showLabel =
         type="button"
         onClick={() => (canPreviewInline ? setOpen(true) : window.open(fileUrl, '_blank', 'noopener,noreferrer'))}
         className={showLabel ? 'inline-flex items-center gap-2 text-sm text-primary hover:underline' : 'block'}
-        title={isPdf ? 'Preview PDF' : 'Open document'}
+        title={isPdf ? t('previewPdf') : t('openDocument')}
       >
         {buttonContent}
-        {showLabel && <span>Preview</span>}
+        {showLabel && <span>{t('preview')}</span>}
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className={isPdf ? 'max-w-4xl w-full' : 'max-w-4xl flex items-center justify-center'}>
@@ -64,7 +66,7 @@ export default function DocumentPreview({ document, compact = false, showLabel =
           {fullPreview}
           {isPdf && (
             <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-              <ExternalLink className="w-3 h-3" /> Open in new tab
+              <ExternalLink className="w-3 h-3" /> {t('openInNewTab')}
             </a>
           )}
         </DialogContent>

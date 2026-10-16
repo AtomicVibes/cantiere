@@ -246,7 +246,7 @@ export default function BudgetManager({ budgets, expenses, refunds, projects, on
               </Button>
             ) : (
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => handleStatus(budget, 'active')}>
-                <RotateCcw className="w-3 h-3" /> {t('restore') || 'Restore'}
+                <RotateCcw className="w-3 h-3" /> {t('unarchive')}
               </Button>
             )}
             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive" onClick={() => handleDelete(budget)}>

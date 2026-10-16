@@ -105,7 +105,7 @@ export default function Documents() {
         toast.info(t('timelineAlreadySubmitted') || 'This document is already on the project timeline.');
       } else {
         logDocumentError('Submit to timeline failed', err, { documentId: doc.id });
-        toast.error(getDocumentUserFriendlyError(err, t('timelineSubmitError') || 'We couldn\'t add this item to the project timeline. Please try again.'));
+        toast.error(getDocumentUserFriendlyError(err, t('timelineSubmitError') || 'We couldn\'t add this item to the project timeline. Please try again.', t('errors.permissionDenied'), t));
       }
     } finally {
       setSubmittingId(null);
@@ -185,7 +185,7 @@ export default function Documents() {
   const saveAccess = async () => {
     if (!accessDocument) return;
     if (accessVisibility === 'selected' && accessAudience.length === 0) {
-      toast.error('Please select at least one audience member.');
+      toast.error(t('selectAudienceRequired'));
       return;
     }
     setAccessSaving(true);
@@ -201,7 +201,7 @@ export default function Documents() {
           visibility: accessVisibility,
           selectedUserIds: accessAudience,
         });
-        toast.error(getDocumentUserFriendlyError(error));
+        toast.error(getDocumentUserFriendlyError(error, t('documentAccessUpdateError', 'Unable to update document access. Please try again.'), t('documentAccessPermissionError', "You don't have permission to change access for this document."), t));
         return;
       }
       console.info('[Documents] update_document_access success', { documentId: data?.id, visibility: data?.visibility });
@@ -212,10 +212,10 @@ export default function Documents() {
       });
       setAccessDocument(null);
       queryClient.invalidateQueries({ queryKey: ['documents', currentUser?.id] });
-      toast.success('Document access updated.');
+      toast.success(t('documentAccessUpdated'));
     } catch (error) {
       logDocumentError('Failed to update document access', error, { documentId: accessDocument.id });
-      toast.error(getDocumentUserFriendlyError(error));
+      toast.error(getDocumentUserFriendlyError(error, t('documentAccessUpdateError', 'Unable to update document access. Please try again.'), t('documentAccessPermissionError', "You don't have permission to change access for this document."), t));
     } finally {
       setAccessSaving(false);
     }
@@ -233,7 +233,7 @@ export default function Documents() {
   // authorised role). Only the signed URL ever reaches the browser.
   const handleDownload = async (doc) => {
     if (!doc?.storage_path) {
-      toast.error('This document has no stored file to download.');
+      toast.error(t('documentNoFile'));
       return;
     }
     const fileName = doc.file_name || doc.name || 'document';
@@ -246,8 +246,9 @@ export default function Documents() {
         logDocumentError('Signed URL for download failed', error, { documentId: doc.id, visibility: doc.visibility });
         toast.error(getDocumentUserFriendlyError(
           error,
-          'Unable to download this document. Please try again.',
-          "You don't have permission to download this document."
+          t('documentDownloadError'),
+          t('documentDownloadPermissionError'),
+          t
         ));
         return;
       }
@@ -273,8 +274,9 @@ export default function Documents() {
       logDocumentError('Download failed', error, { documentId: doc.id });
       toast.error(getDocumentUserFriendlyError(
         error,
-        'Unable to download this document. Please try again.',
-        "You don't have permission to download this document."
+        t('documentDownloadError'),
+        t('documentDownloadPermissionError'),
+        t
       ));
     } finally {
       setDownloadingId(null);
@@ -309,11 +311,11 @@ export default function Documents() {
       return;
     }
     if (!form.name) {
-      toast.error('Please provide a document name.');
+      toast.error(t('documentNameRequired'));
       return;
     }
     if (form.visibility === 'selected' && selectedAudience.length === 0) {
-      toast.error('Please select at least one audience member.');
+      toast.error(t('selectAudienceRequired'));
       return;
     }
     setUploading(true);
@@ -341,12 +343,12 @@ export default function Documents() {
         });
         debugUpload('LINK COMPLETE');
         closeUploadDialog();
-        toast.success('Google document linked.');
+        toast.success(t('googleDocumentLinked'));
         return;
       }
 
       if (!file) {
-        toast.error('Please select a file.');
+        toast.error(t('selectFileRequired'));
         return;
       }
 
@@ -376,8 +378,9 @@ export default function Documents() {
       logDocumentError('Upload failed', error, { fileType: file?.type, fileSize: file?.size });
       toast.error(getDocumentUserFriendlyError(
         error,
-        addMode === 'link' ? 'Unable to link the document. Please try again.' : 'Unable to upload document. Please try again.',
-        "You don't have permission to upload this document."
+        addMode === 'link' ? t('documentLinkError') : t('documentUploadError'),
+        t('documentUploadPermissionError'),
+        t
       ));
     } finally {
       setUploading(false);
@@ -423,8 +426,8 @@ export default function Documents() {
     if (idsArr.length === 0) return;
 
     const action = archived ? 'archive' : 'restore';
-    const doneLabel = archived ? 'Archived' : 'Restored';
-    const permissionMessage = `You don't have permission to ${action} this document.`;
+    const doneLabel = archived ? t('archived') : t('restored');
+    const permissionMessage = archived ? t('documentArchivePermissionError') : t('documentRestorePermissionError');
 
     setMutating(true);
     try {
@@ -469,20 +472,20 @@ export default function Documents() {
       }
 
       if (updatedIds.length === idsArr.length) {
-        toast.success(`${doneLabel} ${updatedIds.length} document${updatedIds.length !== 1 ? 's' : ''}`);
+        toast.success(`${doneLabel} ${updatedIds.length} ${updatedIds.length !== 1 ? t('documents') : t('document')}`);
       } else if (updatedIds.length > 0) {
         const details = [];
-        if (denied.length > 0) details.push(`${denied.length} could not be updated`);
-        if (missing.length > 0) details.push(`${missing.length} no longer exists`);
-        toast.warning(`${doneLabel} ${updatedIds.length} of ${idsArr.length} documents. ${details.join(' and ')}.`);
+        if (denied.length > 0) details.push(`${denied.length} ${t('couldNotBeUpdated')}`);
+        if (missing.length > 0) details.push(`${missing.length} ${t('noLongerExists')}`);
+        toast.warning(`${doneLabel} ${updatedIds.length}/${idsArr.length} ${idsArr.length !== 1 ? t('documents') : t('document')}. ${details.join(` ${t('and')} `)}.`);
       } else if (denied.length > 0) {
-        toast.error(getDocumentUserFriendlyError(denied[0].error, permissionMessage, permissionMessage));
+        toast.error(getDocumentUserFriendlyError(denied[0].error, permissionMessage, permissionMessage, t));
       } else {
-        toast.warning('This document is no longer available. The list has been refreshed.');
+        toast.warning(t('documentNoLongerAvailable'));
       }
     } catch (error) {
       logDocumentError(`${action} failed`, error);
-      toast.error(getDocumentUserFriendlyError(error, `Unable to ${action} this document. Please try again.`, permissionMessage));
+      toast.error(getDocumentUserFriendlyError(error, archived ? t('documentArchiveError') : t('documentRestoreError'), permissionMessage, t));
     } finally {
       setMutating(false);
     }
@@ -574,22 +577,22 @@ export default function Documents() {
       setDeleteTarget(null);
 
       if (deleteFailures.length === 0) {
-        toast.success(`Deleted ${deletedIds.length} document${deletedIds.length !== 1 ? 's' : ''}`);
+        toast.success(`${t('deleted')} ${deletedIds.length} ${deletedIds.length !== 1 ? t('documents') : t('document')}`);
       } else if (deletedIds.length > 0) {
-        const details = [`${deleteFailures.length} could not be deleted`];
-        if (storageBlocked.length > 0) details.push(`${storageBlocked.length} file${storageBlocked.length !== 1 ? 's' : ''} could not be removed from storage`);
-        toast.warning(`Deleted ${deletedIds.length} of ${ids.length} document${ids.length !== 1 ? 's' : ''}. ${details.join(' and ')}.`);
+        const details = [`${deleteFailures.length} ${t('couldNotBeDeleted')}`];
+        if (storageBlocked.length > 0) details.push(`${storageBlocked.length} ${storageBlocked.length !== 1 ? t('filesCouldNotBeRemoved') : t('fileCouldNotBeRemoved')}`);
+        toast.warning(`${t('deleted')} ${deletedIds.length}/${ids.length} ${ids.length !== 1 ? t('documents') : t('document')}. ${details.join(` ${t('and')} `)}.`);
       } else if (storageBlocked.length === ids.length) {
-        toast.error('The stored file could not be removed from storage, so the document was not deleted. Please try again.');
+        toast.error(t('documentStorageDeleteBlocked'));
       } else {
         const firstError = deleteFailures[0]?.error;
         toast.error(firstError?.code === 'DELETE_NOT_APPLIED'
-          ? 'The document was not deleted. It may have already been removed, or you may not have permission to delete it.'
-          : (firstError?.message || 'Failed to delete the document. Please try again.'));
+          ? t('documentDeleteNotApplied')
+          : (firstError?.message || t('documentDeleteError')));
       }
     } catch (err) {
       logDocumentError('Delete failed', err);
-      toast.error(err.message || 'Failed to delete the document. Please try again.');
+      toast.error(err.message || t('documentDeleteError'));
     } finally {
       setMutating(false);
     }
@@ -628,13 +631,13 @@ export default function Documents() {
               onClick={() => handleViewChange('active')}
               className={`px-4 py-1.5 text-sm rounded-md transition-colors ${view === 'active' ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
             >
-              Active
+              {t('active')}
             </button>
             <button
               onClick={() => handleViewChange('archived')}
               className={`px-4 py-1.5 text-sm rounded-md transition-colors ${view === 'archived' ? 'bg-primary/10 text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
             >
-              Archived
+              {t('archived')}
             </button>
           </div>
         )}
@@ -643,30 +646,30 @@ export default function Documents() {
           <div className="flex items-center gap-3 flex-wrap">
             <label className="flex items-center gap-2 text-sm cursor-pointer">
               <Checkbox checked={allVisibleSelected} onCheckedChange={toggleSelectAll} />
-              Select All
+              {t('selectAll')}
             </label>
             <div className="flex items-center gap-2 ml-auto">
               {view === 'active' ? (
                 <>
                   <Button variant="outline" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => executeArchive([...selectedIds])}>
-                    <Archive className="w-3.5 h-3.5" /> Archive Selected
+                    <Archive className="w-3.5 h-3.5" /> {t('archiveSelected')}
                   </Button>
                   <Button variant="outline" size="sm" className="gap-2" disabled={mutating} onClick={() => executeArchive(filtered.map(d => d.id))}>
-                    <Archive className="w-3.5 h-3.5" /> Archive All
+                    <Archive className="w-3.5 h-3.5" /> {t('archiveAll')}
                   </Button>
                 </>
               ) : (
                 <>
                   <Button variant="outline" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => executeRestore([...selectedIds])}>
-                    <RotateCcw className="w-3.5 h-3.5" /> Restore Selected
+                    <RotateCcw className="w-3.5 h-3.5" /> {t('restoreSelected')}
                   </Button>
                   <Button variant="outline" size="sm" className="gap-2" disabled={mutating} onClick={() => executeRestore(filtered.map(d => d.id))}>
-                    <RotateCcw className="w-3.5 h-3.5" /> Restore All
+                    <RotateCcw className="w-3.5 h-3.5" /> {t('restoreAll')}
                   </Button>
                 </>
               )}
               <Button variant="destructive" size="sm" className="gap-2" disabled={mutating || selectedIds.size === 0} onClick={() => handleBulkDeleteConfirm('selected')}>
-                <Trash2 className="w-3.5 h-3.5" /> Delete Selected
+                <Trash2 className="w-3.5 h-3.5" /> {t('deleteSelected')}
               </Button>
               {mutating && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
             </div>
@@ -674,7 +677,7 @@ export default function Documents() {
         )}
 
         {filtered.length === 0 ? (
-          <EmptyState icon={FileText} title={t('noDocuments')} description={view === 'archived' ? 'No archived documents' : t('uploadFirstDocument')} actionLabel={canUpload && view === 'active' ? t('uploadDocument') : undefined} onAction={canUpload && view === 'active' ? openUploadDialog : undefined} />
+          <EmptyState icon={FileText} title={t('noDocuments')} description={view === 'archived' ? t('noArchivedDocuments') : t('uploadFirstDocument')} actionLabel={canUpload && view === 'active' ? t('uploadDocument') : undefined} onAction={canUpload && view === 'active' ? openUploadDialog : undefined} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map(doc => (
@@ -689,13 +692,13 @@ export default function Documents() {
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
                     {doc.storage_path && (
-                      <button onClick={() => handleDownload(doc)} disabled={downloadingId === doc.id} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Download">
+                      <button onClick={() => handleDownload(doc)} disabled={downloadingId === doc.id} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title={t('download')}>
                         {downloadingId === doc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                       </button>
                     )}
                     {doc.file_url && (
                       <a href={doc.file_url} target="_blank" rel="noopener noreferrer">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Open document">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" title={t('openDocument')}>
                           <ExternalLink className="w-3.5 h-3.5" />
                         </Button>
                       </a>
@@ -713,17 +716,17 @@ export default function Documents() {
                     )}
                     {isSuperAdmin && (
                       view === 'active' ? (
-                        <button onClick={() => executeArchive(doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Archive">
+                        <button onClick={() => executeArchive(doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title={t('archive')}>
                           <Archive className="w-3.5 h-3.5" />
                         </button>
                       ) : (
-                        <button onClick={() => executeRestore(doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title="Restore">
+                        <button onClick={() => executeRestore(doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40" title={t('restore')}>
                           <RotateCcw className="w-3.5 h-3.5" />
                         </button>
                       )
                     )}
                     {canDelete && (
-                      <button onClick={() => handleBulkDeleteConfirm('single', doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40" title="Delete">
+                      <button onClick={() => handleBulkDeleteConfirm('single', doc.id)} disabled={mutating} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40" title={t('delete')}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     )}
@@ -740,21 +743,21 @@ export default function Documents() {
                   {doc.visibility && <VisibilityBadge value={doc.visibility} />}
                   <span>{doc.created_at ? format(new Date(doc.created_at), 'MMM d, yyyy') : ''}</span>
                 </div>
-                {doc.project_id && <p className="text-xs text-primary mt-1">{projects.find(project => project.id === doc.project_id)?.name || 'Project assigned'}</p>}
+                {doc.project_id && <p className="text-xs text-primary mt-1">{projects.find(project => project.id === doc.project_id)?.name || t('projectAssigned')}</p>}
                 {doc.user_id === currentUser?.id && (
                   <div className="flex gap-2 mt-2">
                     <Button type="button" size="sm" variant="outline" onClick={async () => {
                       const { data: audience, error } = await supabase.from('document_audience').select('user_id').eq('document_id', doc.id);
                       if (error) {
                         logDocumentError('Loading document audience failed', error, { documentId: doc.id });
-                        toast.error(getDocumentUserFriendlyError(error, 'Unable to load document access. Please try again.'));
+                        toast.error(getDocumentUserFriendlyError(error, t('documentAccessLoadError', 'Unable to load document access. Please try again.'), t('documentAccessPermissionError', "You don't have permission to change access for this document."), t));
                         return;
                       }
                       setAccessDocument(doc);
                       setAccessVisibility(doc.visibility || 'private');
                       setAccessAudience((audience || []).map(item => item.user_id));
-                    }}>Edit access</Button>
-                    {doc.project_id && <Button type="button" size="sm" variant="ghost" onClick={() => removeProject(doc)}>Remove project</Button>}
+                    }}>{t('editAccess')}</Button>
+                    {doc.project_id && <Button type="button" size="sm" variant="ghost" onClick={() => removeProject(doc)}>{t('removeProject')}</Button>}
                   </div>
                 )}
                 {doc.notes && <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{doc.notes}</p>}
@@ -874,27 +877,27 @@ export default function Documents() {
               />
             )}
           </div>
-          <DialogFooter className="sticky bottom-0 bg-background pt-2"><Button variant="outline" disabled={accessSaving} onClick={() => setAccessDocument(null)}>Cancel</Button><Button disabled={accessSaving} onClick={saveAccess}>{accessSaving ? 'Saving...' : 'Save access'}</Button></DialogFooter>
+          <DialogFooter className="sticky bottom-0 bg-background pt-2"><Button variant="outline" disabled={accessSaving} onClick={() => setAccessDocument(null)}>{t('cancel')}</Button><Button disabled={accessSaving} onClick={saveAccess}>{accessSaving ? t('saving') : t('saveAccess')}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
       <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Permanent Deletion</AlertDialogTitle>
+            <AlertDialogTitle>{t('documentDeleteConfirmTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              This action is permanent and will delete everything permanently. Do you still wish to proceed?
+              {t('documentDeleteConfirmDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={mutating}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={mutating}>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={executeBulkDelete}
               disabled={mutating}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {mutating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Confirm Delete
+              {t('confirmDelete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

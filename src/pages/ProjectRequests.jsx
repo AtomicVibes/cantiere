@@ -302,7 +302,7 @@ export default function ProjectRequests({ embedded = false }) {
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <ClipboardList className="w-12 h-12 mb-3" />
-            <p className="text-sm">{view === 'archived' ? 'No archived requests' : t('noRequests')}</p>
+            <p className="text-sm">{view === 'archived' ? t('noArchivedRequests') : t('noRequests')}</p>
           </div>
         ) : (
           <div className="space-y-3">

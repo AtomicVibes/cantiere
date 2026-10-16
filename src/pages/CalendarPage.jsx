@@ -772,9 +772,9 @@ export default function CalendarPage() {
                       style={{ backgroundColor: cardStyle.solid }}
                     />
                     <div className="absolute top-3 right-3">
-                      {isPublic && <Globe className="w-4 h-4 text-primary" title={t('public') || 'Public'} />}
-                      {isSelectedAudience && <Users className="w-4 h-4 text-muted-foreground" title={t('selectedAudience') || 'Selected Audience'} />}
-                      {isPrivate && <Lock className="w-4 h-4 text-muted-foreground" title={t('private') || 'Private'} />}
+                      {isPublic && <Globe className="w-4 h-4 text-primary" title={t('visibility.public', 'Public')} />}
+                      {isSelectedAudience && <Users className="w-4 h-4 text-muted-foreground" title={t('visibility.selected', 'Selected Audience')} />}
+                      {isPrivate && <Lock className="w-4 h-4 text-muted-foreground" title={t('visibility.private', 'Private')} />}
                     </div>
 
                     <div className="flex items-start justify-between gap-2 pr-6 ps-2">
@@ -1019,7 +1019,7 @@ export default function CalendarPage() {
               <div className="space-y-2 p-3 rounded-lg border border-border bg-card">
                 <div className="flex justify-between items-center">
                   <Label className="text-xs font-semibold">{t('selectAudience') || 'Select Audience'} *</Label>
-                  <span className="text-xs text-primary font-medium">{selectedAudience.length} {t('selected') || 'selected'}</span>
+                  <span className="text-xs text-primary font-medium">{selectedAudience.length} {t('selectedUsers', 'selected')}</span>
                 </div>
                 <Input
                   placeholder={t('searchTeamMembers') || 'Search team members...'}
@@ -1061,7 +1061,7 @@ export default function CalendarPage() {
                   )}
                 </div>
                 {form.visibility === 'selected' && selectedAudience.length === 0 && (
-                  <p className="text-[10px] text-destructive font-medium">{t('audienceRequired') || 'Please select at least one audience member.'}</p>
+                  <p className="text-[10px] text-destructive font-medium">{t('selectAudienceRequired', 'Please select at least one audience member.')}</p>
                 )}
               </div>
             )}

@@ -66,7 +66,7 @@ export function useInvoiceFormFields() {
       { key: 'project_id', label: t('project'), type: 'select', required: false },
       { key: 'amount', label: `${t('amount')} (€)`, type: 'number', required: false },
       { key: 'tax', label: `${t('tax')} (€)`, type: 'number', required: false },
-      { key: 'total', label: `${t('total')} (€)`, type: 'number', required: false },
+      { key: 'total', label: `${t('grandTotal')} (€)`, type: 'number', required: false },
       { key: 'category', label: t('category'), type: 'select', required: false },
       { key: 'issue_date', label: t('issueDate'), type: 'date', required: false },
       { key: 'due_date', label: t('dueDate'), type: 'date', required: false },

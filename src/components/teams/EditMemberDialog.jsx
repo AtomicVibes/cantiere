@@ -165,7 +165,7 @@ export default function EditMemberDialog({ member, open, onOpenChange }) {
         const currentTargetRank = currentMemberRole ? ROLE_RANK[currentMemberRole.name] ?? 0 : 0;
 
         if (currentUserRole !== 'super_admin' && (targetRoleRank >= RANK.SUPER_ADMIN || currentTargetRank >= RANK.SUPER_ADMIN)) {
-          toast.error('You do not have permission to modify this role.');
+          toast.error(t('errors.permissionDenied'));
           setSaving(false);
           return;
         }

@@ -210,6 +210,18 @@ describe('wiring contracts (source-level)', () => {
     }
   });
 
+  it('Add Member renders the translated invite/account messages', () => {
+    const src = read('src/pages/Teams.jsx');
+    assert.ok(src.includes("t('inviteSent')"), 'invite toast must be translated');
+    assert.ok(
+      src.includes("t('accountCreatedShort', { email: trimmedEmail })"),
+      'account-created toast must interpolate the email'
+    );
+    const i18n = read('src/i18n.js');
+    assert.equal(count(i18n, 'inviteSent:'), 4, 'inviteSent in all locales');
+    assert.equal(count(i18n, 'accountCreatedShort:'), 4, 'accountCreatedShort in all locales');
+    assert.ok(i18n.includes('Account created ({{email}})'), 'placeholder must be present');
+  });
 });
 
 describe('serialisation contract (executed)', () => {

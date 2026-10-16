@@ -24,7 +24,7 @@ export default function Login() {
     if (location.state?.message === "email-exists") {
       toast.info(EMAIL_EXISTS_MESSAGE);
     } else if (location.search?.includes("message=check-email")) {
-      toast.success("Check your email for the confirmation link.");
+      toast.success(t('checkEmailMessage'));
     }
   }, [location]);
 

@@ -391,10 +391,10 @@ export default function Notifications() {
               <p className="text-sm font-medium">Couldn't load your notifications</p>
               <p className="text-sm text-muted-foreground">{notificationsError.message}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => refetchNotifications()}>Try again</Button>
+            <Button variant="outline" size="sm" onClick={() => refetchNotifications()}>{t('retry')}</Button>
           </div>
         ) : currentNotifications.length === 0 ? (
-          <EmptyState icon={Bell} title="No notifications" description={view === 'archived' ? 'No archived notifications' : "You're all caught up!"} />
+          <EmptyState icon={Bell} title={t('noNotifications')} description={view === 'archived' ? t('noArchivedNotifications') : t('allCaughtUp')} />
         ) : (
           <>
             <div className="space-y-2">

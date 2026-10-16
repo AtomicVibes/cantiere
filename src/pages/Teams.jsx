@@ -196,7 +196,7 @@ export default function Teams() {
       };
       queryClient.setQueryData(['teamMembers'], (prev = []) => [newMember, ...prev]);
 
-      toast.success(isInviteMode ? 'Invite sent!' : t('accountCreatedShort', `Account created (${trimmedEmail})`));
+      toast.success(isInviteMode ? t('inviteSent') : t('accountCreatedShort', { email: trimmedEmail }));
 
       queryClient.invalidateQueries({ queryKey: ['teamMembers'] });
       queryClient.invalidateQueries({ queryKey: ['teamMemberCount'] });

@@ -142,7 +142,7 @@ export default function CategoryManager({ categories, onChanged, onAudit }) {
             <Archive className="w-3.5 h-3.5" />
           </Button>
         ) : (
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { stop(e); handleArchive(cat, true); }} aria-label={`${t('restore') || 'Restore'}: ${cat.name}`}>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { stop(e); handleArchive(cat, true); }} aria-label={`${t('unarchive')}: ${cat.name}`}>
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
         )}

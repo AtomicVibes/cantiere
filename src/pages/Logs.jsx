@@ -331,7 +331,7 @@ export default function Logs() {
 
   return (
     <div>
-      <TopBar title="Audit Logs" />
+      <TopBar title={t('logs.auditLogs')} />
       <div className="p-6 space-y-6">
         {/* Search bar */}
         <div className="relative max-w-sm">
@@ -475,7 +475,7 @@ export default function Logs() {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : visibleLogs.length === 0 ? (
-          <EmptyState icon={ScrollText} title="Audit Logs" description={view === 'archived' ? 'No archived logs' : 'No audit logs recorded yet'} />
+          <EmptyState icon={ScrollText} title={t('logs.auditLogs')} description={view === 'archived' ? t('noArchivedLogs') : t('logsEmpty')} />
         ) : (
           <>
             <div className="bg-card rounded-xl border border-border overflow-hidden">
@@ -483,13 +483,13 @@ export default function Logs() {
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     {isSuperAdmin && <TableHead className="w-10" />}
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>Feature</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead className="hidden sm:table-cell">Table</TableHead>
-                    <TableHead className="hidden md:table-cell">Record</TableHead>
-                    <TableHead className="hidden lg:table-cell">User</TableHead>
-                    <TableHead className="hidden lg:table-cell">Message</TableHead>
+                    <TableHead>{t('logs.time')}</TableHead>
+                    <TableHead>{t('logs.feature')}</TableHead>
+                    <TableHead>{t('logs.action')}</TableHead>
+                    <TableHead className="hidden sm:table-cell">{t('logs.table')}</TableHead>
+                    <TableHead className="hidden md:table-cell">{t('logs.record')}</TableHead>
+                    <TableHead className="hidden lg:table-cell">{t('logs.user')}</TableHead>
+                    <TableHead className="hidden lg:table-cell">{t('logs.message')}</TableHead>
                     {isSuperAdmin && <TableHead className="w-24" />}
                   </TableRow>
                 </TableHeader>

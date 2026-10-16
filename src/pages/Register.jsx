@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from "react-router-dom";
 import { signUpWithEmail, signInWithGoogle } from "@/services/authService";
 import { isValidEmail, normalizeEmail, isValidPassword } from "@/lib/validation";
@@ -12,6 +13,7 @@ import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
 
 export default function Register() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -24,15 +26,15 @@ export default function Register() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isValidEmail(email)) {
-      toast.error("Please enter a valid email address.");
+      toast.error(t('invalidEmail'));
       return;
     }
     if (!isValidPassword(password)) {
-      toast.error("Password must be at least 8 characters and include both a letter and a number.");
+      toast.error(t('invalidPassword'));
       return;
     }
     if (password !== confirmPassword) {
-      toast.error("Passwords do not match.");
+      toast.error(t('passwordsDoNotMatch'));
       return;
     }
     setLoading(true);
@@ -48,7 +50,7 @@ export default function Register() {
       ) {
         toast.error(EMAIL_EXISTS_MESSAGE);
       } else {
-        toast.error(error.message || "Failed to create account.");
+        toast.error(error.message || t('createAccountFailed'));
       }
     } else {
       navigate("/login?message=check-email");
@@ -61,13 +63,13 @@ export default function Register() {
 
   return (
     <AuthLayout
-      title="Create your account"
-      subtitle="Sign up to get started"
+      title={t('createYourAccount')}
+      subtitle={t('signUpToGetStarted')}
       footer={
         <>
-          Already have an account?{" "}
+          {t('alreadyHaveAccount')}{" "}
           <Link to="/login" className="text-primary font-medium hover:underline">
-            Log in
+            {t('logIn')}
           </Link>
         </>
       }
@@ -78,7 +80,7 @@ export default function Register() {
         onClick={handleGoogle}
       >
         <GoogleIcon className="w-5 h-5 mr-2" />
-        Continue with Google
+        {t('continueWithGoogle')}
       </Button>
 
       <div className="relative mb-6">
@@ -86,13 +88,13 @@ export default function Register() {
           <div className="w-full border-t border-border" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-card px-3 text-muted-foreground">or</span>
+          <span className="bg-card px-3 text-muted-foreground">{t('or')}</span>
         </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t('email')}</Label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
             <Input
@@ -100,7 +102,7 @@ export default function Register() {
               type="email"
               autoComplete="email"
               autoFocus
-              placeholder="you@example.com"
+              placeholder={t('emailPlaceholder')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="pl-10 h-12"
@@ -109,13 +111,13 @@ export default function Register() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="fullName">Full Name</Label>
+          <Label htmlFor="fullName">{t('fullName')}</Label>
           <div className="relative">
             <Input
               id="fullName"
               type="text"
               autoComplete="name"
-              placeholder="John Doe"
+              placeholder={t('fullNamePlaceholder')}
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               className="h-12"
@@ -124,7 +126,7 @@ export default function Register() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t('password')}</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
             <Input
@@ -141,7 +143,7 @@ export default function Register() {
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-label={showPassword ? t('hidePassword') : t('showPassword')}
               aria-pressed={showPassword}
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -149,7 +151,7 @@ export default function Register() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="confirm">Confirm Password</Label>
+          <Label htmlFor="confirm">{t('confirmPassword')}</Label>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
             <Input
@@ -166,7 +168,7 @@ export default function Register() {
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              aria-label={showConfirmPassword ? t('hidePassword') : t('showPassword')}
               aria-pressed={showConfirmPassword}
             >
               {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -177,10 +179,10 @@ export default function Register() {
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Creating account...
+              {t('creatingAccount')}
             </>
           ) : (
-            "Create account"
+            t('createAccount')
           )}
         </Button>
       </form>

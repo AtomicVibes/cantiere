@@ -1,8 +1,10 @@
 export function getDocumentUserFriendlyError(
   error,
   fallback = 'Unable to update document access. Please try again.',
-  permissionMessage = "You don't have permission to change access for this document."
+  permissionMessage = "You don't have permission to change access for this document.",
+  t
 ) {
+  const tr = typeof t === 'function' ? t : (key, defaultValue) => defaultValue;
   const code = error?.code;
   const statusCode = String(error?.statusCode || error?.status || '');
   const message = String(error?.message || '').toLowerCase();
@@ -18,16 +20,16 @@ export function getDocumentUserFriendlyError(
     return permissionMessage;
   }
   if (message.includes('selected visibility') || message.includes('audience')) {
-    return 'Please select at least one person.';
+    return tr('selectAudienceRequired', 'Please select at least one person.');
   }
   if (message.includes('google document link')) {
-    return 'This Google link is not valid. Paste a link to a Google Docs, Sheets or Slides document.';
+    return tr('googleLinkInvalid', 'This Google link is not valid. Paste a link to a Google Docs, Sheets or Slides document.');
   }
   if (message.includes('not found') || code === 'PGRST116' || statusCode === '404') {
-    return 'This document could not be found.';
+    return tr('documentNotFound', 'This document could not be found.');
   }
   if (message.includes('network') || message.includes('fetch')) {
-    return 'Unable to update document access. Please check your connection and try again.';
+    return tr('documentAccessNetworkError', 'Unable to update document access. Please check your connection and try again.');
   }
   return fallback;
 }

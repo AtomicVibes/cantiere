@@ -23,7 +23,7 @@ export default function ForgotPassword() {
     if (result) {
       setSent(true);
     } else {
-      toast.error("Failed to send reset link. Please try again.");
+      toast.error(t('resetLinkSendFailed'));
     }
   };
 

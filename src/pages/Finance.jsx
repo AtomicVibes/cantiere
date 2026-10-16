@@ -97,7 +97,7 @@ export default function Finance() {
       );
     } catch (err) {
       console.error('[finance] failed to generate PDF', err);
-      toast.error('Failed to generate the PDF. Please try again.');
+      toast.error(t('previewFailed'));
     }
   };
 
@@ -285,7 +285,7 @@ export default function Finance() {
         )}
 
         {filtered.length === 0 ? (
-          <EmptyState icon={Receipt} title={t('noDocuments')} description={view === 'archived' ? 'No archived invoices' : 'Create your first invoice'} actionLabel={canCreate && view === 'active' ? t('newInvoice') : undefined} onAction={canCreate && view === 'active' ? () => setShowForm(true) : undefined} />
+          <EmptyState icon={Receipt} title={t('noInvoices')} description={view === 'archived' ? t('noArchivedInvoices') : t('createFirstInvoice')} actionLabel={canCreate && view === 'active' ? t('newInvoice') : undefined} onAction={canCreate && view === 'active' ? () => setShowForm(true) : undefined} />
         ) : (
           <div className="bg-card rounded-xl border border-border overflow-hidden">
             <Table>
