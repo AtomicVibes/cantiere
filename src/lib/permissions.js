@@ -22,6 +22,7 @@ export const PERMISSIONS = {
   canUploadDocument: ['super_admin', 'admin', 'manager'],
   canDeleteDocument: ['super_admin'],
   canAddTimelineEntry: ['super_admin', 'admin', 'manager'],
+  canEditTimelineEntry: ['super_admin', 'admin'],
   canManageSettings: ['super_admin', 'admin'],
   canManageNotifications: ['super_admin', 'admin', 'manager'],
   canViewFinance: ['super_admin', 'admin', 'manager'],

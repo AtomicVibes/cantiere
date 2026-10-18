@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import DatePicker from '@/components/ui/DatePicker';
 import { Textarea } from '@/components/ui/textarea';
 import { format } from 'date-fns';
@@ -53,6 +54,9 @@ export default function ProjectDetail() {
   const { role: userRole } = useUserRole();
   const canEdit = PERMISSIONS.canEditProject.includes(userRole);
   const canAddEntry = PERMISSIONS.canAddTimelineEntry.includes(userRole);
+  const canEditTimelineEntry = PERMISSIONS.canEditTimelineEntry.includes(userRole);
+  const canEditDocument = useCallback((entry) => !!entry?.document && entry.document.user_id === userId, [userId]);
+  const canEditEntry = useCallback((entry) => canEditTimelineEntry || canEditDocument(entry), [canEditTimelineEntry, canEditDocument]);
   const { id } = useParams();
   const { isSuperAdmin: isSuperAdminLive } = useIsSuperAdmin();
   const navigate = useNavigate();
@@ -65,6 +69,9 @@ export default function ProjectDetail() {
   const [entryUploading, setEntryUploading] = useState(false);
   const [entryVisibility, setEntryVisibility] = useState('private');
   const [entryAudience, setEntryAudience] = useState([]);
+  const [entryAudienceOriginal, setEntryAudienceOriginal] = useState([]);
+  const [editingEntry, setEditingEntry] = useState(null);
+  const [entryFileName, setEntryFileName] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState(null);
   const [entryDeleting, setEntryDeleting] = useState(false);
@@ -88,6 +95,55 @@ export default function ProjectDetail() {
       setEntryFileError(err.message);
     }
   }, []);
+
+  const resetEntryForm = () => {
+    setNewEntry({ title: '', description: '', date: '' });
+    setEntryFile(null);
+    setEntryFileError(null);
+    setEntryAudience([]);
+    setEntryAudienceOriginal([]);
+    setEntryVisibility('private');
+    setEntryFileName('');
+    setEditingEntry(null);
+    setAddingEntry(false);
+  };
+
+  const openEditEntry = async (entry) => {
+    if (entryUploading || !entry) return;
+    setAddingEntry(false);
+    setEntryFile(null);
+    setEntryFileError(null);
+    setNewEntry({
+      title: entry.title || '',
+      description: entry.description || '',
+      date: entry.date || '',
+    });
+    setEntryVisibility(entry.document?.visibility || 'private');
+    setEntryFileName(entry.document?.file_name || '');
+    setEntryAudience([]);
+    setEntryAudienceOriginal([]);
+    setEditingEntry(entry);
+    if (entry.document && canEditDocument(entry)) {
+      try {
+        const { data, error } = await supabase
+          .from('document_audience')
+          .select('user_id')
+          .eq('document_id', entry.document.id);
+        if (error) throw error;
+        const ids = (data || []).map(row => row.user_id);
+        setEntryAudience(ids);
+        setEntryAudienceOriginal(ids);
+      } catch (err) {
+        logDocumentError('Loading timeline entry audience failed', err, { documentId: entry.document.id });
+        toast.error(getDocumentUserFriendlyError(
+          err,
+          t('documentAccessLoadError', 'Unable to load document access. Please try again.'),
+          t('documentAccessPermissionError', "You don't have permission to change access for this document."),
+          t
+        ));
+      }
+    }
+  };
 
   React.useEffect(() => {
     setPendingManagerId(null);
@@ -283,6 +339,8 @@ export default function ProjectDetail() {
       setNewEntry({ title: '', description: '', date: '' });
       setEntryFile(null);
       setEntryAudience([]);
+      setEntryAudienceOriginal([]);
+      setEntryFileName('');
       setEntryVisibility('private');
       setAddingEntry(false);
     },
@@ -326,6 +384,15 @@ export default function ProjectDetail() {
   }
 
   const clientName = clients.find(c => c.id === project.client_id)?.company_name;
+
+  const entryFormInvalid = editingEntry
+    ? (canEditTimelineEntry && !newEntry.title.trim())
+      || (canEditDocument(editingEntry) && !(entryFileName || '').trim())
+    : !newEntry.title;
+
+  const showVisibilityControls = addingEntry
+    ? !!entryFile
+    : !!editingEntry?.document && canEditDocument(editingEntry);
 
   const handleAddEntry = async () => {
     if (entryUploading) return;
@@ -416,6 +483,117 @@ export default function ProjectDetail() {
       if (uploadedDocument) {
         await refreshDocumentList({ queryClient, userId, t, toast });
       }
+    } finally {
+      setEntryUploading(false);
+    }
+  };
+
+  const handleUpdateEntry = async () => {
+    const entry = editingEntry;
+    if (!entry || entryUploading) return;
+    const docEditable = canEditDocument(entry);
+    if (canEditTimelineEntry && !newEntry.title.trim()) return;
+    const nextFileName = (entryFileName || '').trim();
+    if (docEditable && entry.document && !nextFileName) {
+      toast.error(t('documentNameRequired'));
+      return;
+    }
+    if (docEditable && entryVisibility === 'selected' && entryAudience.length === 0) {
+      toast.error(t('selectAudienceRequired'));
+      return;
+    }
+    setEntryUploading(true);
+    try {
+      if (canEditTimelineEntry) {
+        try {
+          const { data: updatedRows, error } = await supabase
+            .from('project_timeline')
+            .update({
+              title: newEntry.title,
+              description: newEntry.description || null,
+              date: newEntry.date || null,
+            })
+            .eq('id', entry.id)
+            .select('id');
+          if (error) throw error;
+          if (!updatedRows?.length) {
+            toast.error(t('errors.permissionDenied'));
+            return;
+          }
+        } catch (err) {
+          logAppError('ProjectDetail', err, { operation: 'update-timeline-entry' });
+          toast.error(getDocumentUserFriendlyError(err, t('entryUpdateError'), t('errors.permissionDenied'), t));
+          return;
+        }
+      }
+
+      if (docEditable && entry.document) {
+        const visibilityChanged = entryVisibility !== (entry.document.visibility || 'private');
+        const audienceChanged = [...entryAudience].sort().join(',')
+          !== [...entryAudienceOriginal].sort().join(',');
+        const fileNameChanged = nextFileName !== entry.document.file_name;
+
+        if (visibilityChanged || (entryVisibility === 'selected' && audienceChanged)) {
+          const { error } = await supabase.rpc('update_document_access', {
+            p_document_id: entry.document.id,
+            p_visibility: entryVisibility,
+            p_audience_user_ids: entryAudience,
+          });
+          if (error) {
+            logDocumentError('update_document_access failed for timeline entry', error, {
+              documentId: entry.document.id,
+              visibility: entryVisibility,
+              selectedUserIds: entryAudience,
+            });
+            queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+            toast.error(getDocumentUserFriendlyError(error, t('entryUpdateError'), t('errors.permissionDenied'), t));
+            return;
+          }
+        }
+
+        if (fileNameChanged) {
+          let renameError = null;
+          let renameRows = null;
+          try {
+            const result = await supabase
+              .from('documents')
+              .update({ file_name: nextFileName })
+              .eq('id', entry.document.id)
+              .select('id');
+            renameError = result.error;
+            renameRows = result.data;
+          } catch (err) {
+            renameError = err;
+          }
+          if (renameError) {
+            logDocumentError('Timeline entry document rename failed', renameError, { documentId: entry.document.id });
+            queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+            toast.error(getDocumentUserFriendlyError(renameError, t('entryUpdateError'), t('errors.permissionDenied'), t));
+            return;
+          }
+          if (!renameRows?.length) {
+            queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+            toast.error(t('errors.permissionDenied'));
+            return;
+          }
+        }
+
+        if (visibilityChanged || audienceChanged || fileNameChanged) {
+          logAction('DOCUMENT_UPDATED', {
+            entityType: 'documents',
+            entityId: entry.document.id,
+            metadata: { file_name: nextFileName, visibility: entryVisibility },
+          });
+        }
+      }
+
+      toast.success(t('timelineEntryUpdated'));
+      queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
+      if (docEditable && entry.document) {
+        await refreshDocumentList({ queryClient, userId, t, toast });
+      }
+      resetEntryForm();
     } finally {
       setEntryUploading(false);
     }
@@ -722,29 +900,79 @@ export default function ProjectDetail() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-heading font-semibold">{t('projectTimeline')}</h3>
             {canAddEntry && (
-              <Button size="sm" variant="outline" onClick={() => setAddingEntry(!addingEntry)} className="gap-2" disabled={entryUploading}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (editingEntry) {
+                    resetEntryForm();
+                    setAddingEntry(true);
+                  } else {
+                    setAddingEntry(!addingEntry);
+                  }
+                }}
+                className="gap-2"
+                disabled={entryUploading}
+              >
                 <Plus className="w-3.5 h-3.5" /> {t('addEntry')}
               </Button>
             )}
           </div>
 
-          {addingEntry && (
+          {(addingEntry || editingEntry) && (
             <div className="bg-card rounded-xl border border-border p-4 space-y-3 mb-4">
-              <Input placeholder={t('entryTitle')} value={newEntry.title} onChange={e => setNewEntry({...newEntry, title: e.target.value})} />
-              <Textarea placeholder={t('description')} value={newEntry.description} onChange={e => setNewEntry({...newEntry, description: e.target.value})} rows={2} />
-              <DatePicker value={newEntry.date} onChange={v => setNewEntry({...newEntry, date: v})} />
-              <DocumentDropZone
-                file={entryFile}
-                fileError={entryFileError}
-                uploading={entryUploading}
-                accept={DOCUMENT_FILE_ACCEPT}
-                onFileSelect={pickEntryFile}
-                onFileRemove={() => { setEntryFile(null); setEntryFileError(null); }}
-                id="entry-file-input"
-                aria-label={t('attachDocument')}
+              <h4 className="font-medium text-sm flex items-center gap-2">
+                {editingEntry ? (
+                  <Pencil className="w-3.5 h-3.5 text-muted-foreground" aria-hidden />
+                ) : (
+                  <Plus className="w-3.5 h-3.5 text-muted-foreground" aria-hidden />
+                )}
+                {editingEntry ? t('editEntry') : t('addEntry')}
+              </h4>
+              <Input
+                placeholder={t('entryTitle')}
+                value={newEntry.title}
+                onChange={e => setNewEntry({...newEntry, title: e.target.value})}
+                disabled={!!editingEntry && !canEditTimelineEntry}
               />
+              <Textarea
+                placeholder={t('description')}
+                value={newEntry.description}
+                onChange={e => setNewEntry({...newEntry, description: e.target.value})}
+                rows={2}
+                disabled={!!editingEntry && !canEditTimelineEntry}
+              />
+              <DatePicker
+                value={newEntry.date}
+                onChange={v => setNewEntry({...newEntry, date: v})}
+                disabled={!!editingEntry && !canEditTimelineEntry}
+              />
+              {addingEntry ? (
+                <DocumentDropZone
+                  file={entryFile}
+                  fileError={entryFileError}
+                  uploading={entryUploading}
+                  accept={DOCUMENT_FILE_ACCEPT}
+                  onFileSelect={pickEntryFile}
+                  onFileRemove={() => { setEntryFile(null); setEntryFileError(null); }}
+                  id="entry-file-input"
+                  aria-label={t('attachDocument')}
+                />
+              ) : (
+                editingEntry?.document && canEditDocument(editingEntry) && (
+                  <div>
+                    <Label htmlFor="entry-file-name">{t('name')}</Label>
+                    <Input
+                      id="entry-file-name"
+                      value={entryFileName}
+                      onChange={e => setEntryFileName(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                )
+              )}
               {entryFileError ? <p className="text-xs text-destructive" role="alert">{t('invalidFile')}</p> : null}
-              {entryFile && (
+              {showVisibilityControls && (
                 <div className="space-y-2">
                   <div>
                     <VisibilitySelect
@@ -753,6 +981,11 @@ export default function ProjectDetail() {
                       onValueChange={value => { setEntryVisibility(value); if (value !== 'selected') setEntryAudience([]); }}
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {entryVisibility === 'private' && t('visibilityPrivateHint')}
+                    {entryVisibility === 'public' && t('visibilityPublicHint')}
+                    {entryVisibility === 'selected' && t('visibilitySelectedHint')}
+                  </p>
                   {entryVisibility === 'selected' && (
                     <AudiencePicker
                       idPrefix="entry-audience"
@@ -764,11 +997,11 @@ export default function ProjectDetail() {
                 </div>
               )}
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleAddEntry} disabled={!newEntry.title || entryUploading}>
+                <Button size="sm" onClick={editingEntry ? handleUpdateEntry : handleAddEntry} disabled={entryUploading || entryFormInvalid}>
                   {entryUploading && <Loader2 className="w-3.5 h-3.5 me-1 animate-spin" />}
                   {t('save')}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => { setAddingEntry(false); setEntryFile(null); setEntryAudience([]); setEntryVisibility('private'); }} disabled={entryUploading}>{t('cancel')}</Button>
+                <Button size="sm" variant="outline" onClick={resetEntryForm} disabled={entryUploading}>{t('cancel')}</Button>
               </div>
             </div>
           )}
@@ -800,6 +1033,20 @@ export default function ProjectDetail() {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <StatusBadge status={entry.status} />
+                        {canEditEntry(entry) && (
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                            title={t('editEntry')}
+                            aria-label={`${t('editEntry')}: ${entry.title}`}
+                            onClick={() => openEditEntry(entry)}
+                            disabled={entryUploading}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         {(isSuperAdminLive || isAdmin) && (
                           <Button
                             type="button"
@@ -821,6 +1068,9 @@ export default function ProjectDetail() {
                         <Calendar className="w-3 h-3" />
                         {entry.date ? format(new Date(entry.date), 'MMM d, yyyy') : entry.created_at ? format(new Date(entry.created_at), 'MMM d, yyyy') : t('noDate')}
                       </span>
+                      {entry.document?.visibility && (
+                        <VisibilityBadge value={entry.document.visibility} />
+                      )}
                       {entry.submitted_by && (
                         <span className="flex items-center gap-1">
                           <UserIcon className="w-3 h-3" />
