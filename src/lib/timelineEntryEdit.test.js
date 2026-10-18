@@ -9,7 +9,10 @@
 //      editable columns - never project, owner, uploader or timestamps
 //   5. visibility changes persist through the owner-checked RPC and the
 //      database CHECK constraint; invalid values are rejected server-side
-//   6. metadata edits never touch the storage object or re-upload the file
+//   6. metadata edits never touch the storage object; replacements upload a
+//      fresh object first, switch the row only after the upload succeeds,
+//      roll back only the new object on failure and delete the old object
+//      last, reporting cleanup problems without risking data loss
 //   7. new uploads still persist the selected visibility with a secure
 //      'private' default
 //   8. archive/restore/preview/download/delete behaviour is untouched
@@ -22,6 +25,13 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import i18n from '../i18n.js';
+import {
+  normalizeDocumentFileName,
+  getFileExtension,
+  documentNotesChanged,
+  normalizeDocumentNotes,
+  formatFileSizeLabel,
+} from './entryDocument.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..', '..');
@@ -35,6 +45,13 @@ const NEW_KEYS = [
   'visibilityPrivateHint',
   'visibilityPublicHint',
   'visibilitySelectedHint',
+  'replaceDocument',
+  'replaceDocumentHint',
+  'documentDescription',
+  'documentReplaced',
+  'documentReplaceFailed',
+  'documentReplaceCleanupFailed',
+  'invalidFileName',
 ];
 
 const detail = read('src/pages/ProjectDetail.jsx');
@@ -50,6 +67,58 @@ const sliceBetween = (source, startMarker, endMarker) => {
 const updateSrc = sliceBetween(detail, 'const handleUpdateEntry', '// Remove a timeline submission');
 const addSrc = sliceBetween(detail, 'const handleAddEntry', 'const handleUpdateEntry');
 const openEditSrc = sliceBetween(detail, 'const openEditEntry', 'React.useEffect(() => {');
+
+describe('filename and description helpers', () => {
+  it('preserves the original extension by default', () => {
+    assert.equal(normalizeDocumentFileName('report', 'old.pdf'), 'report.pdf');
+    assert.equal(normalizeDocumentFileName('report.pdf', 'old.docx'), 'report.pdf');
+    assert.equal(normalizeDocumentFileName('report.', 'old.pdf'), 'report.pdf');
+    assert.equal(normalizeDocumentFileName('  report  ', 'old.pdf'), 'report.pdf');
+    assert.equal(normalizeDocumentFileName('تقرير', 'old.pdf'), 'تقرير.pdf');
+  });
+
+  it('keeps names that already carry their own extension', () => {
+    assert.equal(normalizeDocumentFileName('photo.png', 'old.pdf'), 'photo.png');
+    assert.equal(normalizeDocumentFileName('archive.v2', 'old.pdf'), 'archive.v2');
+    assert.equal(normalizeDocumentFileName('report', 'old'), 'report');
+  });
+
+  it('rejects empty, traversal and unsafe names', () => {
+    const cases = ['', '   ', '.', '..', '...', '../secret', 'a/b', 'a\\b', 'a\u0000b', 'a\nb'];
+    for (const bad of cases) {
+      assert.throws(
+        () => normalizeDocumentFileName(bad, 'old.pdf'),
+        (err) => err?.code === 'INVALID_FILE_NAME',
+        `rejects ${JSON.stringify(bad)}`
+      );
+    }
+  });
+
+  it('extracts extensions only from real trailing segments', () => {
+    assert.equal(getFileExtension('a.b.pdf'), '.pdf');
+    assert.equal(getFileExtension('.hidden'), '');
+    assert.equal(getFileExtension('trailing.'), '');
+    assert.equal(getFileExtension(null), '');
+  });
+
+  it('detects description changes and normalizes cleared values', () => {
+    assert.equal(documentNotesChanged('a', 'a'), false);
+    assert.equal(documentNotesChanged(' a ', 'a'), false);
+    assert.equal(documentNotesChanged('a', ''), true, 'intentional clearing counts as a change');
+    assert.equal(documentNotesChanged(null, 'x'), true);
+    assert.equal(documentNotesChanged(null, null), false);
+    assert.equal(normalizeDocumentNotes('  x  '), 'x');
+    assert.equal(normalizeDocumentNotes(''), null, 'cleared description persists as NULL');
+    assert.equal(normalizeDocumentNotes(undefined), null);
+  });
+
+  it('formats file sizes for the dialog metadata line', () => {
+    assert.equal(formatFileSizeLabel(0), '');
+    assert.equal(formatFileSizeLabel(null), '');
+    assert.equal(formatFileSizeLabel(2048), '2 KB');
+    assert.equal(formatFileSizeLabel(1048576), '1.0 MB');
+  });
+});
 
 describe('edit action is exposed to authorized users only', () => {
   it('renders a pen icon button with translated tooltip and accessible name', () => {
@@ -148,7 +217,8 @@ describe('saving updates existing records without touching the file', () => {
     assert.ok(!/\.insert\(/.test(updateSrc), 'no raw insert in the edit path');
     assert.ok(updateSrc.includes("from('project_timeline')\n            .update({") || updateSrc.includes(".update({\n              title: newEntry.title"), 'timeline row updated in place');
     assert.ok(updateSrc.includes(".eq('id', entry.id)"), 'scoped to the edited entry id');
-    assert.ok(updateSrc.includes('.update({ file_name: nextFileName })'), 'document display name updated in place');
+    assert.ok(updateSrc.includes("const metadataPayload = fileNameChanged ? { file_name: nextFileName } : {}"), 'document display name updated in place');
+    assert.ok(updateSrc.includes('.update(metadataPayload)'), 'document metadata updated in place');
     assert.ok(updateSrc.includes('.eq(\'id\', entry.document.id)'), 'document scoped to the attached document id');
   });
 
@@ -160,16 +230,19 @@ describe('saving updates existing records without touching the file', () => {
     for (const forbidden of ['project_id', 'submitted_by', 'document_id', 'status', 'user_id', 'storage_path', 'created_at']) {
       assert.ok(!timelinePayload.includes(forbidden), `timeline payload never sends ${forbidden}`);
     }
-    assert.ok(updateSrc.includes('.update({ file_name: nextFileName })'), 'document update only changes file_name');
-    assert.ok(!/update\(\{[^}]*storage_path/.test(updateSrc), 'storage_path never sent');
+    assert.ok(updateSrc.includes("const metadataPayload = fileNameChanged ? { file_name: nextFileName } : {}"), 'metadata update only carries the display fields');
+    const storageAssignments = updateSrc.match(/storage_path:/g) || [];
+    assert.equal(storageAssignments.length, 1, 'storage_path is assigned only by the replacement payload');
+    assert.ok(updateSrc.includes('storage_path: newStoragePath'), 'and only to the freshly uploaded path');
+    assert.ok(!/metadataPayload[^}]*storage_path/.test(updateSrc), 'rename/description never send storage_path');
     assert.ok(!/update\(\{[^}]*user_id/.test(updateSrc), 'ownership never sent');
   });
 
-  it('never re-uploads or replaces the stored file', () => {
-    assert.ok(!updateSrc.includes('uploadDocumentFile'), 'no upload call in the edit path');
-    assert.ok(!updateSrc.includes("storage.from('documents')"), 'no storage write or removal in the edit path');
-    assert.ok(!updateSrc.includes('Core.UploadFile') && !updateSrc.includes('DeleteFile'), 'no storage integration calls');
-    assert.ok(!updateSrc.includes('DocumentDropZone'), 'no file reselection required when editing metadata');
+  it('storage writes only happen through the guarded replacement flow', () => {
+    assert.ok(!updateSrc.includes('uploadDocumentFile'), 'creation upload helper never reused in the edit path');
+    assert.ok(!updateSrc.includes("storage.from('documents')"), 'no direct storage call; the shared integration is used');
+    assert.ok(updateSrc.includes('Core.UploadFile({ file: entryFile })'), 'replacement uploads through the shared integration');
+    assert.ok(!updateSrc.includes('DocumentDropZone'), 'file selection stays in the UI layer');
   });
 
   it('prevents duplicate submissions and keeps input on failure', () => {
@@ -255,6 +328,96 @@ describe('audit conventions remain in effect', () => {
   });
 });
 
+describe('rename and description edits', () => {
+  it('normalizes the display name, preserving the extension', () => {
+    assert.ok(updateSrc.includes('normalizeDocumentFileName(nextFileName, entry.document.file_name)'), 'display name normalized against the original');
+    assert.ok(updateSrc.includes("toast.error(t('invalidFileName'))"), 'unsafe names rejected with a translated message');
+    assert.ok(updateSrc.includes("toast.error(t('documentNameRequired'))"), 'empty names still rejected');
+  });
+
+  it('openEditEntry preloads the stored description', () => {
+    assert.ok(openEditSrc.includes("setEntryNotes(entry.document?.notes || '')"), 'description prepopulated');
+    assert.ok(openEditSrc.includes('setReplacingEntry(false)'), 'replacement picker reset per entry');
+  });
+
+  it('description changes are detected and intentional clearing persists', () => {
+    assert.ok(updateSrc.includes('documentNotesChanged(entry.document.notes, entryNotes)'), 'change detection against the stored value');
+    assert.ok(updateSrc.includes('if (notesChanged) replacePayload.notes = normalizeDocumentNotes(entryNotes)'), 'notes written with the replacement only when changed');
+    assert.ok(updateSrc.includes('if (notesChanged) metadataPayload.notes = normalizeDocumentNotes(entryNotes)'), 'notes written with the rename only when changed');
+    assert.ok(!updateSrc.includes('notes: entryNotes'), 'never overwrites with the raw input');
+    assert.ok(updateSrc.includes('normalizeDocumentNotes(entryNotes)'), 'cleared descriptions persist as NULL');
+  });
+
+  it('the document UI offers rename, description and replace distinctly', () => {
+    assert.ok(detail.includes('id="entry-file-name"'), 'rename input present');
+    assert.ok(detail.includes('id="entry-document-notes"'), 'description input present');
+    assert.ok(detail.includes("t('replaceDocument')"), 'replace action translated');
+    assert.ok(detail.includes("t('documentDescription')"), 'description label translated');
+    assert.ok(detail.includes('DocumentDropZone'), 'shared upload component reused');
+  });
+});
+
+describe('document replacement preserves the original on failure', () => {
+  const uploadAt = updateSrc.indexOf('Core.UploadFile({ file: entryFile })');
+  const switchAt = updateSrc.indexOf('.update(replacePayload)');
+  const oldDeleteAt = updateSrc.indexOf('DeleteFile({ filePath: previousStoragePath })');
+  const failureAt = updateSrc.indexOf('if (replaceError || !replaceRows?.length)');
+  const successAt = updateSrc.indexOf('toast.success(documentReplaced');
+
+  it('is gated on ownership and guards against duplicate submissions', () => {
+    assert.ok(updateSrc.includes('const hasReplacementFile = docEditable && !!entry.document && !!entryFile'), 'owner + attached document required');
+    assert.ok(/if \(!entry \|\| entryUploading\) return;/.test(updateSrc), 'busy guard prevents concurrent saves');
+    assert.ok(updateSrc.includes('validateDocumentFile(entryFile)'), 'type/size validated before any upload');
+    assert.ok(detail.includes('disabled={entryUploading || entryFormInvalid}'), 'save disabled while a replacement is in flight');
+  });
+
+  it('uploads a fresh object before switching the row, and cleans the old object last', () => {
+    assert.ok(uploadAt > -1, 'replacement upload present');
+    assert.ok(switchAt > uploadAt, 'row switches only after the upload succeeded');
+    assert.ok(oldDeleteAt > switchAt, 'original object removed only after the row switched');
+    assert.ok(successAt > oldDeleteAt, 'success reported after cleanup');
+  });
+
+  it('upload failure stops before any row change and keeps the original', () => {
+    const uploadCatch = updateSrc.slice(uploadAt, updateSrc.indexOf('const newStoragePath'));
+    assert.ok(/catch \(uploadError\) \{[\s\S]*documentReplaceFailed[\s\S]*\n\s*return;/.test(uploadCatch), 'translated failure and early return');
+    assert.ok(!uploadCatch.includes('.update('), 'no row change after a failed upload');
+  });
+
+  it('row-switch failure removes only the unreferenced new object', () => {
+    const failureBlock = updateSrc.slice(failureAt, updateSrc.indexOf('documentReplaced = true'));
+    assert.ok(failureBlock.includes('DeleteFile({ filePath: newStoragePath })'), 'new object rolled back');
+    assert.ok(!failureBlock.includes('previousStoragePath'), 'original object never touched on failure');
+    assert.ok(/\n\s*return;/.test(failureBlock), 'failure stops before success reporting');
+    assert.ok(failureBlock.includes("toast.error(t('errors.permissionDenied'))") && failureBlock.includes('documentReplaceFailed'), 'permission and generic failures both surfaced');
+  });
+
+  it('old-object cleanup failure is reported but never fails the save', () => {
+    const cleanupBlock = updateSrc.slice(updateSrc.indexOf('documentReplaced = true'), updateSrc.indexOf('} else if (fileNameChanged'));
+    assert.ok(cleanupBlock.includes('previousStoragePath && previousStoragePath !== newStoragePath'), 'cleanup scoped to a distinct old object');
+    assert.ok(cleanupBlock.includes("code === 'STORAGE_DELETE_NOT_APPLIED'"), 'already-absent object tolerated');
+    assert.ok(cleanupBlock.includes("toast.warning(t('documentReplaceCleanupFailed'))"), 'cleanup issue reported');
+    assert.ok(!cleanupBlock.includes('return;'), 'cleanup failure never aborts the confirmed save');
+  });
+
+  it('external-link documents switch cleanly to a stored file', () => {
+    assert.ok(updateSrc.includes('external_url: null'), 'external url cleared on replace');
+    assert.ok(updateSrc.includes('external_provider: null'), 'external provider cleared on replace');
+  });
+
+  it('an external link becomes a stored document with the internal default type', () => {
+    assert.ok(
+      /if \(entry\.document\.external_provider\) replacePayload\.type = 'other';/.test(updateSrc),
+      "external rows fall back to the repository's internal default type"
+    );
+    assert.ok(!/(?<![\w])type:/.test(updateSrc), 'type is never sent unconditionally in any payload literal');
+    assert.ok(!updateSrc.includes('metadataPayload.type'), 'metadata-only edits never touch the type');
+    const documentsMigration = read('supabase/migrations/20260917000003_create_documents_metadata.sql');
+    assert.ok(documentsMigration.includes("type text not null default 'other'"), "database column default matches 'other'");
+    assert.ok(read('src/services/documentUploadService.js').includes("type = 'other'"), "upload helper default matches 'other'");
+  });
+});
+
 describe('translations in en, fr, it and ar', () => {
   it('every new key resolves in all four locales', async () => {
     for (const lng of LANGS) {
@@ -290,6 +453,17 @@ describe('translations in en, fr, it and ar', () => {
     assert.ok(i18nSource.includes("editEntry: 'تعديل القيد'"), 'Arabic translation present');
     assert.ok(i18nSource.includes("editEntry: \"Modifier l'entrée\""), 'French translation present');
     assert.ok(i18nSource.includes("editEntry: 'Modifica voce'"), 'Italian translation present');
+  });
+
+  it('invalidFileName refers to slashes and control characters correctly', async () => {
+    await i18n.changeLanguage('it');
+    const itValue = i18n.getResource('it', 'translation', 'invalidFileName');
+    assert.ok(itValue.includes('barre oblique'), 'Italian names slashes');
+    assert.ok(!itValue.includes('barre di ritorno'), 'Italian no longer says carriage returns');
+    await i18n.changeLanguage('ar');
+    const arValue = i18n.getResource('ar', 'translation', 'invalidFileName');
+    assert.ok(arValue.includes('رموز تحكم'), 'Arabic uses the standard term for control characters');
+    assert.ok(!arValue.includes('أحكام تحكم'), 'Arabic old wording removed');
   });
 
   it('the touched screens keep every literal key available', () => {

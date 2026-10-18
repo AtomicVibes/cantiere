@@ -43,6 +43,10 @@ import { PERMISSIONS } from '@/lib/permissions';
 import { handleMutationError } from '@/lib/rbac';
 import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
 import { refreshDocumentList } from '@/lib/documentListRefresh';
+import { base44 } from '@/api/base44Client';
+import {
+  normalizeDocumentFileName, documentNotesChanged, normalizeDocumentNotes, formatFileSizeLabel,
+} from '@/lib/entryDocument';
 import ProjectAssignmentDropdown from '@/components/projects/ProjectAssignmentDropdown';
 import DocumentPreview from '@/components/shared/DocumentPreview';
 import { DocumentDropZone } from '@/components/shared/DocumentDropZone';
@@ -72,6 +76,8 @@ export default function ProjectDetail() {
   const [entryAudienceOriginal, setEntryAudienceOriginal] = useState([]);
   const [editingEntry, setEditingEntry] = useState(null);
   const [entryFileName, setEntryFileName] = useState('');
+  const [entryNotes, setEntryNotes] = useState('');
+  const [replacingEntry, setReplacingEntry] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [entryToDelete, setEntryToDelete] = useState(null);
   const [entryDeleting, setEntryDeleting] = useState(false);
@@ -104,6 +110,8 @@ export default function ProjectDetail() {
     setEntryAudienceOriginal([]);
     setEntryVisibility('private');
     setEntryFileName('');
+    setEntryNotes('');
+    setReplacingEntry(false);
     setEditingEntry(null);
     setAddingEntry(false);
   };
@@ -120,8 +128,10 @@ export default function ProjectDetail() {
     });
     setEntryVisibility(entry.document?.visibility || 'private');
     setEntryFileName(entry.document?.file_name || '');
+    setEntryNotes(entry.document?.notes || '');
     setEntryAudience([]);
     setEntryAudienceOriginal([]);
+    setReplacingEntry(false);
     setEditingEntry(entry);
     if (entry.document && canEditDocument(entry)) {
       try {
@@ -492,17 +502,39 @@ export default function ProjectDetail() {
     const entry = editingEntry;
     if (!entry || entryUploading) return;
     const docEditable = canEditDocument(entry);
+    const hasReplacementFile = docEditable && !!entry.document && !!entryFile;
     if (canEditTimelineEntry && !newEntry.title.trim()) return;
-    const nextFileName = (entryFileName || '').trim();
-    if (docEditable && entry.document && !nextFileName) {
-      toast.error(t('documentNameRequired'));
-      return;
+    let nextFileName = (entryFileName || '').trim();
+    if (docEditable && entry.document) {
+      if (hasReplacementFile) {
+        try {
+          validateDocumentFile(entryFile);
+        } catch (validationError) {
+          setEntryFileError(validationError.message);
+          logDocumentError('Timeline entry replacement file rejected', validationError, { documentId: entry.document.id });
+          toast.error(getDocumentUserFriendlyError(validationError, t('invalidFile'), t('errors.permissionDenied'), t));
+          return;
+        }
+        if (!nextFileName) nextFileName = entryFile.name || '';
+      }
+      if (!nextFileName) {
+        toast.error(t('documentNameRequired'));
+        return;
+      }
+      try {
+        nextFileName = normalizeDocumentFileName(nextFileName, entry.document.file_name);
+      } catch (nameError) {
+        toast.error(t('invalidFileName'));
+        return;
+      }
     }
+    const notesChanged = docEditable && !!entry.document && documentNotesChanged(entry.document.notes, entryNotes);
     if (docEditable && entryVisibility === 'selected' && entryAudience.length === 0) {
       toast.error(t('selectAudienceRequired'));
       return;
     }
     setEntryUploading(true);
+    let documentReplaced = false;
     try {
       if (canEditTimelineEntry) {
         try {
@@ -551,43 +583,128 @@ export default function ProjectDetail() {
           }
         }
 
-        if (fileNameChanged) {
-          let renameError = null;
-          let renameRows = null;
+        // Replacement: upload a brand-new object first (fresh unique path, the
+        // original stays untouched), switch the row only after the upload
+        // succeeded, roll back only the new object if the row switch fails,
+        // and delete the original object last, after the row points elsewhere.
+        if (hasReplacementFile) {
+          let uploaded;
+          try {
+            uploaded = await base44.integrations.Core.UploadFile({ file: entryFile });
+          } catch (uploadError) {
+            logDocumentError('Timeline entry document replacement upload failed', uploadError, { documentId: entry.document.id });
+            queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+            toast.error(getDocumentUserFriendlyError(uploadError, t('documentReplaceFailed'), t('errors.permissionDenied'), t));
+            return;
+          }
+          const newStoragePath = uploaded?.file_url || null;
+          if (!newStoragePath) {
+            queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+            toast.error(t('documentReplaceFailed'));
+            return;
+          }
+          const replacePayload = {
+            storage_path: newStoragePath,
+            file_name: nextFileName,
+            mime_type: entryFile.type || 'application/octet-stream',
+            file_size: entryFile.size || 0,
+            external_url: null,
+            external_provider: null,
+          };
+          if (entry.document.external_provider) replacePayload.type = 'other';
+          if (notesChanged) replacePayload.notes = normalizeDocumentNotes(entryNotes);
+          let replaceError = null;
+          let replaceRows = null;
           try {
             const result = await supabase
               .from('documents')
-              .update({ file_name: nextFileName })
+              .update(replacePayload)
               .eq('id', entry.document.id)
               .select('id');
-            renameError = result.error;
-            renameRows = result.data;
+            replaceError = result.error;
+            replaceRows = result.data;
           } catch (err) {
-            renameError = err;
+            replaceError = err;
           }
-          if (renameError) {
-            logDocumentError('Timeline entry document rename failed', renameError, { documentId: entry.document.id });
+          if (replaceError || !replaceRows?.length) {
+            if (replaceError) {
+              logDocumentError('Timeline entry document replacement failed', replaceError, { documentId: entry.document.id });
+            }
+            try {
+              await base44.integrations.Core.DeleteFile({ filePath: newStoragePath });
+            } catch (cleanupError) {
+              logDocumentError('Replacement file cleanup failed', cleanupError, { documentId: entry.document.id, storagePath: newStoragePath });
+            }
             queryClient.invalidateQueries({ queryKey: ['timeline', id] });
-            toast.error(getDocumentUserFriendlyError(renameError, t('entryUpdateError'), t('errors.permissionDenied'), t));
+            if (replaceError) {
+              toast.error(getDocumentUserFriendlyError(replaceError, t('documentReplaceFailed'), t('errors.permissionDenied'), t));
+            } else {
+              toast.error(t('errors.permissionDenied'));
+            }
             return;
           }
-          if (!renameRows?.length) {
+          documentReplaced = true;
+          // The row now references the new object; the old object is
+          // unreferenced by this document and can be removed. Any cleanup
+          // failure is reported but never fails the confirmed replacement.
+          const previousStoragePath = entry.document.storage_path;
+          if (previousStoragePath && previousStoragePath !== newStoragePath) {
+            try {
+              await base44.integrations.Core.DeleteFile({ filePath: previousStoragePath });
+            } catch (cleanupError) {
+              if (cleanupError?.code === 'STORAGE_DELETE_NOT_APPLIED') {
+                logDocumentError('Replaced document object already absent', cleanupError, { documentId: entry.document.id });
+              } else {
+                logDocumentError('Old document object cleanup failed', cleanupError, { documentId: entry.document.id, storagePath: previousStoragePath });
+                toast.warning(t('documentReplaceCleanupFailed'));
+              }
+            }
+          }
+        } else if (fileNameChanged || notesChanged) {
+          // Rename and/or description without a new upload: only the display
+          // metadata changes, never storage_path.
+          const metadataPayload = fileNameChanged ? { file_name: nextFileName } : {};
+          if (notesChanged) metadataPayload.notes = normalizeDocumentNotes(entryNotes);
+          let metadataError = null;
+          let metadataRows = null;
+          try {
+            const result = await supabase
+              .from('documents')
+              .update(metadataPayload)
+              .eq('id', entry.document.id)
+              .select('id');
+            metadataError = result.error;
+            metadataRows = result.data;
+          } catch (err) {
+            metadataError = err;
+          }
+          if (metadataError) {
+            logDocumentError('Timeline entry document metadata update failed', metadataError, { documentId: entry.document.id });
+            queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+            toast.error(getDocumentUserFriendlyError(metadataError, t('entryUpdateError'), t('errors.permissionDenied'), t));
+            return;
+          }
+          if (!metadataRows?.length) {
             queryClient.invalidateQueries({ queryKey: ['timeline', id] });
             toast.error(t('errors.permissionDenied'));
             return;
           }
         }
 
-        if (visibilityChanged || audienceChanged || fileNameChanged) {
+        if (visibilityChanged || audienceChanged || fileNameChanged || notesChanged || documentReplaced) {
           logAction('DOCUMENT_UPDATED', {
             entityType: 'documents',
             entityId: entry.document.id,
-            metadata: { file_name: nextFileName, visibility: entryVisibility },
+            metadata: {
+              file_name: nextFileName,
+              visibility: entryVisibility,
+              ...(documentReplaced ? { replaced: true } : {}),
+            },
           });
         }
       }
 
-      toast.success(t('timelineEntryUpdated'));
+      toast.success(documentReplaced ? t('documentReplaced') : t('timelineEntryUpdated'));
       queryClient.invalidateQueries({ queryKey: ['timeline', id] });
       queryClient.invalidateQueries({ queryKey: ['project', id] });
       if (docEditable && entry.document) {
@@ -960,14 +1077,78 @@ export default function ProjectDetail() {
                 />
               ) : (
                 editingEntry?.document && canEditDocument(editingEntry) && (
-                  <div>
-                    <Label htmlFor="entry-file-name">{t('name')}</Label>
-                    <Input
-                      id="entry-file-name"
-                      value={entryFileName}
-                      onChange={e => setEntryFileName(e.target.value)}
-                      autoComplete="off"
-                    />
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="entry-file-name">{t('name')}</Label>
+                      <Input
+                        id="entry-file-name"
+                        value={entryFileName}
+                        onChange={e => setEntryFileName(e.target.value)}
+                        autoComplete="off"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {[formatFileSizeLabel(editingEntry.document.file_size), editingEntry.document.mime_type]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="entry-document-notes">{t('documentDescription')}</Label>
+                      <Textarea
+                        id="entry-document-notes"
+                        value={entryNotes}
+                        onChange={e => setEntryNotes(e.target.value)}
+                        rows={2}
+                        placeholder={t('documentDescription')}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      {!replacingEntry && !entryFile ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setReplacingEntry(true)}
+                            disabled={entryUploading}
+                          >
+                            {t('replaceDocument')}
+                          </Button>
+                          <span className="text-xs text-muted-foreground">{t('replaceDocumentHint')}</span>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <DocumentDropZone
+                            file={entryFile}
+                            fileError={entryFileError}
+                            uploading={entryUploading}
+                            accept={DOCUMENT_FILE_ACCEPT}
+                            onFileSelect={(nextFile) => {
+                              pickEntryFile(nextFile);
+                              if (nextFile) setEntryFileName(nextFile.name || '');
+                            }}
+                            onFileRemove={() => {
+                              setEntryFile(null);
+                              setEntryFileError(null);
+                              setEntryFileName(editingEntry.document?.file_name || '');
+                            }}
+                            id="entry-replace-input"
+                            aria-label={t('replaceDocument')}
+                          />
+                          {!entryFile && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setReplacingEntry(false)}
+                              disabled={entryUploading}
+                            >
+                              {t('cancel')}
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )
               )}
