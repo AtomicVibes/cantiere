@@ -34,6 +34,32 @@ export function getDocumentUserFriendlyError(
   return fallback;
 }
 
+// Maps the machine-readable codes thrown by validateDocumentFile to translated
+// user-facing messages. The service stays i18n-free (it throws codes with
+// English defaults); every call site routes through this helper so ZIP and
+// size-limit errors are localized too.
+export function getDocumentFileValidationError(
+  error,
+  t,
+  fallback = 'Unable to upload document. Please try again.',
+) {
+  const tr = typeof t === 'function' ? t : (key, defaultValue) => defaultValue;
+  switch (error?.code) {
+    case 'ARCHIVE_UNSUPPORTED':
+      return tr('zipFileUnsupported', 'This archive is not supported.');
+    case 'ARCHIVE_TOO_LARGE':
+      return tr('zipFileTooLarge', 'This archive is too large. The maximum size is 50 MB.');
+    case 'UNSUPPORTED_FILE_TYPE':
+      return tr('documentFileTypeUnsupported', 'Unsupported file type. Use JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, or ZIP.');
+    case 'FILE_TOO_LARGE':
+      return tr('documentFileTooLarge', 'File is too large. The maximum size is 50 MB.');
+    case 'FILE_REQUIRED':
+      return tr('selectFileRequired', 'Please select a file.');
+    default:
+      return error?.message || tr('documentUploadError', fallback);
+  }
+}
+
 export function logDocumentError(context, error, details = {}) {
   console.error(`[Documents] ${context}`, {
     code: error?.code,
