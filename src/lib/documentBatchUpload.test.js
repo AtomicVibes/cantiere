@@ -162,6 +162,31 @@ describe('ZIP archive validation', () => {
       );
     }
   });
+
+  it('accepts archives with uppercase or mixed-case MIME types', () => {
+    for (const file of [
+      makeFile('plans.zip', 'APPLICATION/ZIP'),
+      makeFile('plans.zip', 'Application/Zip'),
+      makeFile('plans.zip', 'APPLICATION/X-ZIP-COMPRESSED'),
+      makeFile('plans.7z', 'APPLICATION/X-7Z-COMPRESSED'),
+      makeFile('plans.7z', 'Application/7z'),
+      makeFile('plans.rar', 'APPLICATION/X-RAR-COMPRESSED'),
+      makeFile('plans.rar', 'Application/Rar'),
+      makeFile('plans.zip', 'APPLICATION/OCTET-STREAM'),
+    ]) {
+      assert.doesNotThrow(() => validateDocumentFile(file), `accepts ${file.name} with ${file.type} MIME`);
+      assert.equal(isArchiveFile(file), true, `isArchiveFile ${file.name}`);
+    }
+  });
+
+  it('rejects non-archive MIME types even in uppercase when paired with archive extension', () => {
+    for (const file of [makeFile('evil.zip', 'APPLICATION/X-MSDOWNLOAD'), makeFile('evil.7z', 'APPLICATION/X-MSDOWNLOAD'), makeFile('evil.rar', 'APPLICATION/X-MSDOWNLOAD')]) {
+      assert.throws(
+        () => validateDocumentFile(file),
+        (error) => error.code === 'ARCHIVE_UNSUPPORTED',
+      );
+    }
+  });
 });
 
 describe('7z and RAR archive validation', () => {

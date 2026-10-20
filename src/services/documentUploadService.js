@@ -55,6 +55,7 @@ export const DOCUMENT_FILE_ACCEPT = [
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   ...ARCHIVE_MIME_TYPES,
+  '.zip', '.7z', '.7zip', '.rar',
 ].join(',');
 
 export function hasArchiveExtension(name) {
@@ -72,7 +73,7 @@ export function isZipArchive(file) {
 export function isArchiveFile(file) {
   if (!file) return false;
   const name = (file.name || '').toLowerCase();
-  return hasArchiveExtension(name) || ARCHIVE_MIME_TYPES.has(file.type || '');
+  return hasArchiveExtension(name) || ARCHIVE_MIME_TYPES.has((file.type || '').toLowerCase());
 }
 
 function fileValidationError(message, code) {
@@ -84,7 +85,7 @@ function fileValidationError(message, code) {
 export function validateDocumentFile(file) {
   if (!file) throw fileValidationError('A file is required', 'FILE_REQUIRED');
   const name = (file.name || '').toLowerCase();
-  const mime = file.type || '';
+  const mime = (file.type || '').toLowerCase();
   const looksLikeArchive = isArchiveFile(file);
 
   // An archive filename paired with a recognized non-archive MIME type is a
