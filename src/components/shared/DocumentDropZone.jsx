@@ -1,20 +1,24 @@
-import { useCallback, useRef, useState } from 'react';
+﻿import { useCallback, useRef, useState } from 'react';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 export function DocumentDropZone({
+  files,
   file,
   fileError,
+  fileErrors,
   uploading,
   disabled,
   accept,
   maxSize,
   onFileSelect,
   onFileRemove,
+  onFilesSelect,
   onDragOver,
   onDragLeave,
   onDrop,
   showRemoveButton = true,
+  multiple = false,
   className = '',
   id,
   'aria-label': ariaLabel,
@@ -51,12 +55,18 @@ export function DocumentDropZone({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    const droppedFile = e.dataTransfer?.files?.[0];
-    if (droppedFile) {
-      onFileSelect?.(droppedFile);
-      onDrop?.(droppedFile);
+    const droppedFiles = e.dataTransfer?.files;
+    if (droppedFiles && droppedFiles.length > 0) {
+      if (multiple && onFilesSelect) {
+        onFilesSelect(Array.from(droppedFiles));
+        onDrop?.(Array.from(droppedFiles));
+      } else {
+        const droppedFile = droppedFiles[0];
+        onFileSelect?.(droppedFile);
+        onDrop?.(droppedFile);
+      }
     }
-  }, [onFileSelect, onDrop]);
+  }, [onFileSelect, onFilesSelect, onDrop, multiple]);
 
   const handleClick = useCallback(() => {
     if (!disabled) {
@@ -72,19 +82,32 @@ export function DocumentDropZone({
   }, [disabled]);
 
   const handleFileInputChange = useCallback((e) => {
-    const selectedFile = e.target.files?.[0] || null;
-    onFileSelect?.(selectedFile);
+    const selectedFiles = e.target.files;
+    if (selectedFiles && selectedFiles.length > 0) {
+      if (multiple && onFilesSelect) {
+        onFilesSelect(Array.from(selectedFiles));
+      } else {
+        onFileSelect?.(selectedFiles[0] || null);
+      }
+    }
     e.target.value = '';
-  }, [onFileSelect]);
+  }, [onFileSelect, onFilesSelect, multiple]);
 
-  const handleRemove = useCallback((e) => {
+  const handleRemove = useCallback((e, idx) => {
     e.preventDefault();
     e.stopPropagation();
-    onFileRemove?.();
-  }, [onFileRemove]);
+    if (multiple && onFileRemove) {
+      onFileRemove(idx);
+    } else if (onFileRemove) {
+      onFileRemove();
+    } else if (onFileSelect) {
+      onFileSelect(null);
+    }
+  }, [onFileRemove, onFileSelect, multiple]);
 
+  const filesList = multiple ? (files || []) : (file ? [file] : []);
   const isError = !!fileError;
-  const isFileSelected = !!file;
+  const isFileSelected = multiple ? filesList.length > 0 : !!file;
 
   const baseStyles = `
     flex flex-col items-center justify-center gap-2 rounded-lg border-2
@@ -121,8 +144,8 @@ export function DocumentDropZone({
   };
 
   const instructionText = isFileSelected
-    ? t('dropFileSelected', { defaultValue: 'File selected. Drop another file to replace, or click to browse.' })
-    : t('dropFileHint', { defaultValue: 'Drag & drop a file here, or click to browse' });
+    ? (multiple ? t('dropFileMultipleSelected', { count: filesList.length, defaultValue: filesList.length + ' files selected' }) : t('dropFileSelected', { defaultValue: 'File selected. Drop another file to replace, or click to browse.' }))
+    : (multiple ? t('dropFilesHint', { defaultValue: 'Drag & drop files here, or click to browse' }) : t('dropFileHint', { defaultValue: 'Drag & drop a file here, or click to browse' }));
 
   return (
     <div
@@ -155,7 +178,7 @@ export function DocumentDropZone({
           </p>
           {!isFileSelected && (
             <p className="text-[11px] text-muted-foreground mt-1">
-              {t('dropFileTypes', { defaultValue: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - up to 50 MB' })}
+              {t('dropFileTypes', { defaultValue: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, ZIP, 7Z, 7ZIP, RAR - up to 50 MB' })}
             </p>
           )}
           {uploading && (
@@ -166,18 +189,43 @@ export function DocumentDropZone({
           )}
           {isError && (
             <p className="text-xs font-medium text-destructive mt-2" role="alert">
-              {t('invalidFile', { defaultValue: 'This file type or size is not supported.' })}
+              {fileError || t('invalidFile', { defaultValue: 'This file type or size is not supported.' })}
             </p>
           )}
-          {isFileSelected && (
+          {isFileSelected && multiple && filesList.map((f, idx) => {
+            const errorForFile = Array.isArray(fileErrors) ? fileErrors.find((entry) => entry.index === idx) : null;
+            return (
+              <div key={`${f.name}-${idx}`} className="flex items-center gap-2 mt-2 text-xs">
+                <span className="max-w-[200px] truncate font-medium text-foreground">
+                  {f.name}
+                </span>
+                {errorForFile && (
+                  <span className="text-destructive truncate max-w-[160px]" role="alert">
+                    {errorForFile.message}
+                  </span>
+                )}
+                {showRemoveButton && !disabled && !uploading && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleRemove(e, idx)}
+                    className="flex items-center justify-center gap-1 px-2 py-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    aria-label={t('removeFile', { defaultValue: 'Remove file' })}
+                  >
+                    <X className="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {isFileSelected && !multiple && (
             <div className="flex items-center gap-2 mt-2 text-xs">
               <span className="max-w-[200px] truncate font-medium text-foreground">
-                {file.name}
+                {file?.name}
               </span>
               {showRemoveButton && !disabled && !uploading && (
                 <button
                   type="button"
-                  onClick={handleRemove}
+                  onClick={(e) => handleRemove(e)}
                   className="flex items-center justify-center gap-1 px-2 py-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                   aria-label={t('removeFile', { defaultValue: 'Remove file' })}
                 >
@@ -192,6 +240,7 @@ export function DocumentDropZone({
         ref={fileInputRef}
         type="file"
         accept={accept}
+        multiple={multiple}
         className="hidden"
         onChange={handleFileInputChange}
         disabled={disabled || uploading}

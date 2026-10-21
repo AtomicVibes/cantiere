@@ -31,16 +31,20 @@ import { handleMutationError } from '@/lib/rbac';
 import { supabase } from '@/services/supabase';
 import DocumentPreview from '@/components/shared/DocumentPreview';
 import { DocumentDropZone } from '@/components/shared/DocumentDropZone';
-import { getDocumentUserFriendlyError, logDocumentError } from '@/lib/document-errors';
+import { getDocumentUserFriendlyError, getDocumentFileValidationError, logDocumentError } from '@/lib/document-errors';
 import { refreshDocumentList } from '@/lib/documentListRefresh';
 import { logAction } from '@/lib/activityTracking';
 import { parseGoogleDocLink, getGoogleDocMime } from '@/lib/googleLinks';
-import { uploadDocumentFile, validateDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
+import { uploadDocumentsBatch, validateDocumentFile, DOCUMENT_FILE_ACCEPT } from '@/services/documentUploadService';
 
 const DOC_CATEGORIES = [
   'blueprint', 'contract', 'permit', 'invoice', 'photo',
   'video', 'audio_note', 'cad_file', 'report', 'word', 'excel', 'google', 'other',
 ];
+
+const FILE_VALIDATION_ERROR_CODES = new Set([
+  'ARCHIVE_UNSUPPORTED', 'ARCHIVE_TOO_LARGE', 'UNSUPPORTED_FILE_TYPE', 'FILE_TOO_LARGE', 'FILE_REQUIRED',
+]);
 
 export default function Documents() {
   const { t } = useTranslation();
@@ -116,6 +120,9 @@ export default function Documents() {
   const [showUpload, setShowUpload] = useState(false);
   const [form, setForm] = useState({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
   const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [fileErrors, setFileErrors] = useState([]);
+  const [batchResults, setBatchResults] = useState(null);
   const [addMode, setAddMode] = useState('file');
   const [externalUrl, setExternalUrl] = useState('');
   const [selectedAudience, setSelectedAudience] = useState([]);
@@ -148,6 +155,31 @@ export default function Documents() {
     } catch (err) {
       setFileError(err.message);
     }
+  }, []);
+
+  // Multi-file selection: every file is validated up front and rejected files
+  // stay visible with their reason instead of being silently discarded.
+  const pickFiles = useCallback((nextFiles) => {
+    const filesArray = Array.isArray(nextFiles) ? nextFiles : [];
+    setFiles(filesArray);
+    const errors = [];
+    filesArray.forEach((f, idx) => {
+      try {
+        validateDocumentFile(f);
+      } catch (err) {
+        errors.push({ index: idx, name: f.name, message: err.message });
+      }
+    });
+    setFileErrors(errors);
+    setFile(null);
+    setFileError(null);
+    setBatchResults(null);
+  }, []);
+
+  const removeFileFromSelection = useCallback((idx) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
+    setFileErrors(prev => prev.filter(e => e.index !== idx).map((e, newIdx) => ({ ...e, index: newIdx })));
+    setBatchResults(null);
   }, []);
   const queryClient = useQueryClient();
 
@@ -283,24 +315,100 @@ export default function Documents() {
     }
   };
 
+  const resetUploadState = () => {
+    setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
+    setSelectedAudience([]);
+    setFile(null);
+    setFiles([]);
+    setFileErrors([]);
+    setFileError(null);
+    setBatchResults(null);
+  };
+
   const openUploadDialog = () => {
     setShowUpload(true);
     setAddMode('file');
     setExternalUrl('');
-    setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
-    setSelectedAudience([]);
-    setFile(null);
-    setFileError(null);
+    resetUploadState();
   };
 
   const closeUploadDialog = () => {
     setShowUpload(false);
     setAddMode('file');
     setExternalUrl('');
-    setForm({ name: '', type: 'other', notes: '', project_id: null, visibility: 'private' });
-    setSelectedAudience([]);
-    setFile(null);
-    setFileError(null);
+    resetUploadState();
+  };
+
+  const resultErrorMessage = (entry) => {
+    if (entry?.error && FILE_VALIDATION_ERROR_CODES.has(entry.error.code)) {
+      return getDocumentFileValidationError(entry.error, t);
+    }
+    return getDocumentUserFriendlyError(entry?.error, t('uploadFailed'), t('documentUploadPermissionError'), t);
+  };
+
+  // Retry only the files that actually failed to upload. Each retry goes
+  // through uploadDocumentFile again, which mints a fresh UUID storage path,
+  // so a retried file can never duplicate an already-succeeded record.
+  const retryFailedFiles = async () => {
+    if (!batchResults || uploading) return;
+    const failedEntries = batchResults.results.filter(entry => entry.status === 'failed');
+    if (failedEntries.length === 0) return;
+    const failedIndices = failedEntries.map(entry => entry.index);
+    setUploading(true);
+    try {
+      setBatchResults(prev => prev && {
+        ...prev,
+        results: prev.results.map(entry => (
+          entry.status === 'failed'
+            ? { ...entry, status: 'pending', error: null }
+            : entry
+        )),
+      });
+      const { results: retryResults } = await uploadDocumentsBatch({
+        files: failedIndices.map(index => batchResults.results[index].file),
+        name: form.name,
+        project_id: form.project_id || null,
+        visibility: form.visibility,
+        notes: form.notes,
+        type: form.type,
+        audience_user_ids: selectedAudience,
+        onFileStatus: (index, status, error) => {
+          const originalIndex = failedIndices[index];
+          setBatchResults(prev => prev && {
+            ...prev,
+            results: prev.results.map(entry => (
+              entry.index === originalIndex ? { ...entry, status, error } : entry
+            )),
+          });
+        },
+      });
+      setBatchResults(prev => {
+        if (!prev) return prev;
+        const retryByIndex = new Map(retryResults.map((result, i) => [failedIndices[i], result]));
+        const merged = prev.results.map(entry => {
+          if (!retryByIndex.has(entry.index)) return entry;
+          const retried = retryByIndex.get(entry.index);
+          return { ...entry, status: retried.status, document: retried.document, error: retried.error };
+        });
+        const successCount = merged.filter(entry => entry.status === 'succeeded').length;
+        return { results: merged, successCount, failedCount: merged.length - successCount };
+      });
+      await refreshDocumentList({ queryClient, userId: currentUser?.id, t, toast });
+      const retriedSuccess = retryResults.filter(result => result.status === 'succeeded').length;
+      const retriedFailed = retryResults.length - retriedSuccess;
+      if (retriedFailed === 0) {
+        toast.success(t('batchAllSuccess', { count: retriedSuccess }));
+      } else if (retriedSuccess > 0) {
+        toast.warning(t('batchPartialSuccess', { success: retriedSuccess, total: retryResults.length }));
+      } else {
+        toast.error(t('uploadFailed'));
+      }
+    } catch (error) {
+      logDocumentError('Retry failed', error);
+      toast.error(getDocumentUserFriendlyError(error, t('documentUploadError'), t('documentUploadPermissionError'), t));
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -318,64 +426,70 @@ export default function Documents() {
       toast.error(t('selectAudienceRequired'));
       return;
     }
-    setUploading(true);
-    try {
-      const debugUpload = (message, details = {}) => {
-        if (import.meta.env.DEV) console.info(`[Documents] ${message}`, details);
-      };
 
-      if (addMode === 'link') {
-        const parsed = parseGoogleDocLink(externalUrl);
-        if (!parsed) {
-          toast.error(t('invalidGoogleLink'));
-          return;
-        }
-        debugUpload('LINK START', { url: externalUrl.trim() });
-        await createMutation.mutateAsync({
-          ...form,
-          external_url: externalUrl.trim(),
-          external_provider: 'google',
-          mime_type: getGoogleDocMime(parsed.subtype),
-          file_size: 0,
-          project_id: form.project_id || null,
-          visibility: form.visibility,
-          audience_user_ids: selectedAudience,
-        });
-        debugUpload('LINK COMPLETE');
-        closeUploadDialog();
-        toast.success(t('googleDocumentLinked'));
+    if (addMode === 'link') {
+      const parsed = parseGoogleDocLink(externalUrl);
+      if (!parsed) {
+        toast.error(t('invalidGoogleLink'));
         return;
       }
-
-      if (!file) {
-        toast.error(t('selectFileRequired'));
-        return;
-      }
-
-      debugUpload('UPLOAD START');
-      debugUpload('FILE SELECTED', {
-        name: file.name,
-        type: file.type,
-        size: file.size,
+      await createMutation.mutateAsync({
+        ...form,
+        external_url: externalUrl.trim(),
+        external_provider: 'google',
+        mime_type: getGoogleDocMime(parsed.subtype),
+        file_size: 0,
+        project_id: form.project_id || null,
+        visibility: form.visibility,
+        audience_user_ids: selectedAudience,
       });
-      debugUpload('SUPABASE STORAGE UPLOAD START');
-      const createdDocument = await uploadDocumentFile({
-        file,
+      closeUploadDialog();
+      toast.success(t('googleDocumentLinked'));
+      return;
+    }
+
+    const filesToUpload = files.length > 0 ? files : (file ? [file] : []);
+    if (filesToUpload.length === 0) {
+      toast.error(t('selectFileRequired'));
+      return;
+    }
+
+    setUploading(true);
+    setBatchResults({
+      results: filesToUpload.map((f, i) => ({ index: i, file: f, status: 'pending', document: null, error: null })),
+      successCount: 0,
+      failedCount: 0,
+    });
+    try {
+      const { results, successCount, failedCount } = await uploadDocumentsBatch({
+        files: filesToUpload,
         name: form.name,
         project_id: form.project_id || null,
         visibility: form.visibility,
         notes: form.notes,
         type: form.type,
         audience_user_ids: selectedAudience,
+        onFileStatus: (index, status, error) => {
+          setBatchResults(prev => prev && {
+            ...prev,
+            results: prev.results.map(entry => (
+              entry.index === index ? { ...entry, status, error } : entry
+            )),
+          });
+        },
       });
-      debugUpload('SUPABASE STORAGE UPLOAD RESULT', { uploaded: !!createdDocument?.storage_path });
-      debugUpload('DATABASE INSERT RESULT', { saved: true, id: createdDocument?.id });
-      debugUpload('UPLOAD COMPLETE');
+      setBatchResults({ results, successCount, failedCount });
       await refreshDocumentList({ queryClient, userId: currentUser?.id, t, toast });
-      debugUpload('DOCUMENT LIST REFRESH COMPLETE');
-      closeUploadDialog();
+      if (failedCount === 0) {
+        closeUploadDialog();
+        toast.success(t('batchAllSuccess', { count: successCount }));
+      } else if (successCount > 0) {
+        toast.warning(t('batchPartialSuccess', { success: successCount, total: filesToUpload.length }));
+      } else {
+        toast.error(t('uploadFailed'));
+      }
     } catch (error) {
-      logDocumentError('Upload failed', error, { fileType: file?.type, fileSize: file?.size });
+      logDocumentError('Upload failed', error);
       toast.error(getDocumentUserFriendlyError(
         error,
         addMode === 'link' ? t('documentLinkError') : t('documentUploadError'),
@@ -516,8 +630,8 @@ export default function Documents() {
     setMutating(true);
     try {
       // The database row is the source of truth: only a DELETE that actually returned
-      // the row counts as deleted. The stored object is removed first, while the
-      // metadata row still exists, so a storage removal that the policies refuse
+      // the row counts as deleted. The stored object is removed first, while the metadata
+      // row still exists, so a storage removal that the policies refuse
       // aborts the deletion instead of leaving a metadata row whose attached file
       // is still present. A missing object (STORAGE_DELETE_NOT_APPLIED) is not an
       // error - it lets orphaned metadata rows be cleaned up truthfully below.
@@ -599,6 +713,10 @@ export default function Documents() {
   };
 
   const getTypeLabel = (type) => docTypeOptions.find(t => t.value === type)?.label || type;
+
+  const completedUploadCount = batchResults
+    ? batchResults.results.filter(entry => entry.status === 'succeeded' || entry.status === 'failed').length
+    : 0;
 
   return (
     <div>
@@ -774,7 +892,7 @@ export default function Documents() {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => { setAddMode('file'); setFile(null); setFileError(null); }}
+                onClick={() => { setAddMode('file'); resetUploadState(); }}
                 className={`flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${addMode === 'file' ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border text-muted-foreground hover:border-primary/60 hover:bg-muted/50'}`}
               >
                 <Upload className="w-4 h-4" /> {t('uploadFile')}
@@ -813,19 +931,35 @@ export default function Documents() {
                 <p className="text-xs text-muted-foreground">{t('googleLinkNote')}</p>
               </div>
             ) : (
-              <div>
+              <div className="space-y-2">
                 <Label>{t('file')}</Label>
                 <DocumentDropZone
+                  files={files}
                   file={file}
-                  fileError={fileError}
+                  fileError={fileError || (fileErrors.length > 0 ? fileErrors[0].message : null)}
+                  fileErrors={fileErrors}
                   uploading={uploading}
                   accept={DOCUMENT_FILE_ACCEPT}
+                  multiple={true}
+                  onFilesSelect={pickFiles}
                   onFileSelect={pickFile}
-                  onFileRemove={() => { setFile(null); setFileError(null); }}
+                  onFileRemove={(idx) => {
+                    if (typeof idx === 'number') {
+                      removeFileFromSelection(idx);
+                    } else {
+                      setFile(null);
+                      setFileError(null);
+                    }
+                  }}
                   id="document-file-input"
                   aria-label={t('uploadFile')}
                   aria-describedby="document-file-hint"
                 />
+                {files.length > 1 && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('batchSettingsApplyToAll', { count: files.length, defaultValue: 'These settings apply to all {{count}} files.' })}
+                  </p>
+                )}
               </div>
             )}
             <div>
@@ -847,6 +981,31 @@ export default function Documents() {
                 selectedIds={selectedAudience}
                 onToggle={(id) => setSelectedAudience(previous => previous.includes(id) ? previous.filter(memberId => memberId !== id) : [...previous, id])}
               />
+            )}
+            {batchResults && (
+              <div className="text-xs space-y-1 mb-2" role="status" aria-live="polite">
+                {uploading && batchResults.results.length > 0 && (
+                  <div className="text-primary">
+                    {t('uploadInProgress', { current: completedUploadCount, total: batchResults.results.length, defaultValue: 'Uploading... {{current}} of {{total}}' })}
+                  </div>
+                )}
+                {!uploading && batchResults.failedCount > 0 && (
+                  <div className="text-destructive">
+                    {t('batchSomeFailed', { failed: batchResults.failedCount, defaultValue: '{{failed}} files failed to upload' })}
+                  </div>
+                )}
+                {batchResults.results.filter(entry => entry.status === 'failed' || entry.status === 'invalid').map(entry => (
+                  <div key={entry.index} className="flex justify-between items-center gap-2">
+                    <span className="truncate max-w-[200px]">{entry.file.name}</span>
+                    <span className="text-destructive text-end">{resultErrorMessage(entry)}</span>
+                  </div>
+                ))}
+                {!uploading && batchResults.failedCount > 0 && (
+                  <Button type="button" size="sm" variant="outline" onClick={retryFailedFiles} className="gap-1.5">
+                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" /> {t('retryUpload')}
+                  </Button>
+                )}
+              </div>
             )}
             <DialogFooter className="sticky bottom-0 bg-background pt-2">
               <Button type="button" variant="outline" onClick={closeUploadDialog} disabled={uploading}>{t('cancel')}</Button>

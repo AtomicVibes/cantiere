@@ -1067,7 +1067,7 @@ const resources = {
       accountCreatedShort: 'Account created ({{email}})',
       inviteSent: 'Invite sent!',
       dropFileHint: 'Drag & drop a file here, or click to browse',
-      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - up to 50 MB',
+      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, ZIP, 7Z, 7ZIP, RAR - up to 50 MB',
       dropFileSelected: 'File selected. Drop another file to replace, or click to browse.',
       invalidFile: 'This file type or size is not supported.',
       openDocument: 'Open document',
@@ -1077,6 +1077,10 @@ const resources = {
       noProject: 'No project',
       projectAssigned: 'Project assigned',
       removeProject: 'Remove project',
+      zipFileUnsupported: 'This archive is not supported.',
+      zipFileTooLarge: 'This archive is too large. The maximum size is 50 MB.',
+      documentFileTypeUnsupported: 'Unsupported file type. Use JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, ZIP, 7Z, 7ZIP, or RAR.',
+      documentFileTooLarge: 'File is too large. The maximum size is 50 MB.',
     }
   },
   ar: {
@@ -2143,7 +2147,7 @@ const resources = {
       sageLastSyncedAt: 'آخر مزامنة',
       inviteSent: 'تم إرسال الدعوة',
       dropFileHint: 'اسحب ملفًا وأفلته هنا، أو انقر للاستعراض',
-      dropFileTypes: 'JPG وPNG وWebP وGIF وPDF وMP4 وWebM وMOV وDOC وDOCX وXLS وXLSX - حتى 50 ميغابايت',
+      dropFileTypes: 'JPG وPNG وWebP وGIF وPDF وMP4 وWebM وMOV وDOC وDOCX وXLS وXLSX وZIP و7Z و7ZIP وRAR - حتى 50 ميغابايت',
       dropFileSelected: 'تم تحديد ملف. أسقط ملفًا آخر للاستبدال، أو انقر للاستعراض.',
       invalidFile: 'نوع الملف أو حجمه غير مدعوم.',
       openDocument: 'فتح المستند',
@@ -2153,6 +2157,10 @@ const resources = {
       noProject: 'بدون مشروع',
       projectAssigned: 'مشروع مُسند',
       removeProject: 'إزالة المشروع',
+      zipFileUnsupported: 'هذا الأرشيف غير مدعوم.',
+      zipFileTooLarge: 'هذا الأرشيف كبير جدًا. الحد الأقصى للحجم هو 50 ميغابايت.',
+      documentFileTypeUnsupported: 'نوع الملف غير مدعوم. استخدم JPG أو PNG أو WebP أو GIF أو PDF أو MP4 أو WebM أو MOV أو DOC أو DOCX أو XLS أو XLSX أو ZIP أو 7Z أو 7ZIP أو RAR.',
+      documentFileTooLarge: 'الملف كبير جدًا. الحد الأقصى للحجم هو 50 ميغابايت.',
     }
   },
   fr: {
@@ -3219,7 +3227,7 @@ const resources = {
       sageLastSyncedAt: 'Dernière synchronisation',
       inviteSent: 'Invitation envoyée !',
       dropFileHint: 'Glissez-déposez un fichier ici, ou cliquez pour parcourir',
-      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - jusqu’à 50 Mo',
+      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, ZIP, 7Z, 7ZIP, RAR - jusqu’à 50 Mo',
       dropFileSelected: 'Fichier sélectionné. Déposez un autre fichier pour remplacer, ou cliquez pour parcourir.',
       invalidFile: 'Ce type ou cette taille de fichier n’est pas pris en charge.',
       openDocument: 'Ouvrir le document',
@@ -3229,6 +3237,10 @@ const resources = {
       noProject: 'Aucun projet',
       projectAssigned: 'Projet assigné',
       removeProject: 'Retirer le projet',
+      zipFileUnsupported: 'Cette archive n\'est pas prise en charge.',
+      zipFileTooLarge: 'Cette archive est trop volumineuse. La taille maximale est de 50 Mo.',
+      documentFileTypeUnsupported: 'Type de fichier non pris en charge. Utilisez JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, ZIP, 7Z, 7ZIP ou RAR.',
+      documentFileTooLarge: 'Fichier trop volumineux. La taille maximale est de 50 Mo.',
     }
   },
   it: {
@@ -4295,7 +4307,7 @@ const resources = {
       sageLastSyncedAt: 'Ultima sincronizzazione',
       inviteSent: 'Invito inviato!',
       dropFileHint: 'Trascina e rilascia un file qui, o fai clic per sfogliare',
-      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX - fino a 50 MB',
+      dropFileTypes: 'JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, ZIP, 7Z, 7ZIP, RAR - fino a 50 MB',
       dropFileSelected: 'File selezionato. Trascina un altro file per sostituire, o fai clic per sfogliare.',
       invalidFile: 'Questo tipo o dimensione di file non è supportato.',
       openDocument: 'Apri documento',
@@ -4305,6 +4317,10 @@ const resources = {
       noProject: 'Nessun progetto',
       projectAssigned: 'Progetto assegnato',
       removeProject: 'Rimuovi progetto',
+      zipFileUnsupported: 'Questo archivio non è supportato.',
+      zipFileTooLarge: 'Questo archivio è troppo grande. La dimensione massima è 50 MB.',
+      documentFileTypeUnsupported: 'Tipo di file non supportato. Usa JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, ZIP, 7Z, 7ZIP o RAR.',
+      documentFileTooLarge: 'File troppo grande. La dimensione massima è 50 MB.',
     }
   }
 };
