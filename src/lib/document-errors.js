@@ -50,7 +50,7 @@ export function getDocumentFileValidationError(
     case 'ARCHIVE_TOO_LARGE':
       return tr('zipFileTooLarge', 'This archive is too large. The maximum size is 50 MB.');
     case 'UNSUPPORTED_FILE_TYPE':
-      return tr('documentFileTypeUnsupported', 'Unsupported file type. Use JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, or ZIP.');
+      return tr('documentFileTypeUnsupported', 'Unsupported file type. Use JPG, PNG, WebP, GIF, PDF, MP4, WebM, MOV, DOC, DOCX, XLS, XLSX, ZIP, 7Z, 7ZIP, or RAR.');
     case 'FILE_TOO_LARGE':
       return tr('documentFileTooLarge', 'File is too large. The maximum size is 50 MB.');
     case 'FILE_REQUIRED':

@@ -149,6 +149,28 @@ describe('ZIP archive validation', () => {
     }
   });
 
+  it('accepts .zip with application/x-zip-compressed MIME (browser-reported)', () => {
+    const file = makeFile('plans.zip', 'application/x-zip-compressed');
+    assert.doesNotThrow(() => validateDocumentFile(file));
+    assert.equal(isZipArchive(file), true);
+    assert.equal(isArchiveFile(file), true);
+  });
+
+  it('UNSUPPORTED_FILE_TYPE error message lists every supported archive type', () => {
+    let caught;
+    try {
+      validateDocumentFile(makeFile('notes.txt', 'text/plain'));
+    } catch (err) {
+      caught = err;
+    }
+    assert.equal(caught.code, 'UNSUPPORTED_FILE_TYPE');
+    const message = String(caught.message);
+    assert.match(message, /ZIP/);
+    assert.match(message, /7Z/);
+    assert.match(message, /7ZIP/);
+    assert.match(message, /RAR/);
+  });
+
   it('rejects oversized files and oversized archives with distinct codes', () => {
     const big = MAX_DOCUMENT_SIZE + 1;
     assert.throws(
@@ -382,6 +404,28 @@ describe('batch upload', () => {
     assert.equal(results[0].error.statusCode, 500);
     assert.equal(state.deletes.length, 0, 'nothing was stored, so nothing needs cleanup');
     assert.equal(state.documents.length, 0);
+  });
+
+  it('reports a storage failure distinctly from a validation failure', async () => {
+    // Validation failures are marked 'invalid' before reaching storage.
+    const validationFiles = [makeFile('notes.txt', 'text/plain')];
+    const validationResult = await uploadDocumentsBatch({ files: validationFiles, name: 'Batch' });
+    assert.equal(validationResult.results[0].status, 'invalid');
+    assert.equal(validationResult.results[0].error.code, 'UNSUPPORTED_FILE_TYPE');
+    assert.equal(state.uploads.length, 0, 'validation failure never reaches storage');
+
+    // Storage failures are marked 'failed' after reaching upload, with a
+    // statusCode rather than a validation error code.
+    resetMock();
+    globalThis.__base44Mock.uploadFile = async () => {
+      throw Object.assign(new Error('storage unavailable'), { statusCode: 500 });
+    };
+    const storageFiles = [makeFile('a.png')];
+    const storageResult = await uploadDocumentsBatch({ files: storageFiles, name: 'Batch' });
+    assert.equal(storageResult.results[0].status, 'failed');
+    assert.equal(storageResult.results[0].error.statusCode, 500);
+    assert.notEqual(storageResult.results[0].error.code, 'UNSUPPORTED_FILE_TYPE');
+    assert.equal(state.documents.length, 0, 'storage failure leaves no document record');
   });
 
   it('keeps unauthorized uploads blocked', async () => {
